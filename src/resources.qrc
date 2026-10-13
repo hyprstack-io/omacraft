@@ -1,0 +1,31 @@
+<RCC>
+    <qresource prefix="/">
+        <file alias="Main.qml">Main.qml</file>
+        <file alias="PluginsPage.qml">PluginsPage.qml</file>
+        <file alias="AnimationsPage.qml">AnimationsPage.qml</file>
+        <file alias="DockPage.qml">DockPage.qml</file>
+        <file alias="BarPage.qml">BarPage.qml</file>
+        <file alias="AsciiPage.qml">AsciiPage.qml</file>
+        <file alias="HyprCraftPage.qml">HyprCraftPage.qml</file>
+        <file alias="IsoPage.qml">IsoPage.qml</file>
+        <file alias="AccentButton.qml">AccentButton.qml</file>
+        <file alias="Card.qml">Card.qml</file>
+        <file alias="Chip.qml">Chip.qml</file>
+        <file alias="Confirm.qml">Confirm.qml</file>
+        <file alias="MessageBar.qml">MessageBar.qml</file>
+        <file alias="NotInstalled.qml">NotInstalled.qml</file>
+        <file alias="PageHeader.qml">PageHeader.qml</file>
+        <file alias="SectionLabel.qml">SectionLabel.qml</file>
+        <file alias="SliderRow.qml">SliderRow.qml</file>
+        <file alias="StatePill.qml">StatePill.qml</file>
+        <file alias="SwitchRow.qml">SwitchRow.qml</file>
+        <file alias="Field.qml">Field.qml</file>
+        <file alias="KeyCap.qml">KeyCap.qml</file>
+        <file alias="HomeGroup.qml">HomeGroup.qml</file>
+        <file alias="FlashPanel.qml">FlashPanel.qml</file>
+        <file alias="EditorPanel.qml">EditorPanel.qml</file>
+        <file alias="OptionsSection.qml">OptionsSection.qml</file>
+        <file alias="build.sh">build.sh</file>
+        <file alias="flash.sh">flash.sh</file>
+    </qresource>
+</RCC>

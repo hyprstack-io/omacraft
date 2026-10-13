@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=OMAcraft
+Comment=Install, enable and set up your Omarchy plugins, HyprCraft and the ISO builder in one place
+Exec=omacraft %U
+Icon=omacraft
+Terminal=false
+Categories=Settings;DesktopSettings;Utility;
+Keywords=omarchy;plugins;bar;omabar16;dock;animations;ascii;plymouth;hyprcraft;iso;archiso;
+StartupWMClass=omacraft

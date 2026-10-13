@@ -1,0 +1,37 @@
+pkgname=omacraft
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='One home for the skll Omarchy plugins, HyprCraft and the hyprbuildz ISO builder'
+arch=('x86_64')
+license=('MIT')
+depends=('qt6-base' 'qt6-declarative' 'qt6-wayland' 'qt6-webengine' 'xdg-desktop-portal'
+         'python' 'archiso' 'polkit' 'util-linux' 'coreutils' 'pacman')
+optdepends=('nodejs: omascii, the boot screen designer'
+            'libnotify: a notification when a HyprCraft export is saved')
+makedepends=('gcc' 'make')
+options=('!debug')
+source=()
+sha256sums=()
+
+build() {
+  cd "$startdir/.."
+  ./bin/build
+}
+
+package() {
+  cd "$startdir/.."
+  install -Dm755 build/omacraft "$pkgdir/usr/bin/omacraft"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 "$startdir/omacraft.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/omacraft.svg"
+  install -Dm644 "$startdir/omacraft.desktop" "$pkgdir/usr/share/applications/omacraft.desktop"
+
+  # A copy of HyprCraft's built web app, for when the project or its plugin
+  # isn't on the machine. OMAcraft prefers the live plugin's build.
+  local hyprcraft="${HYPRCRAFT_APP:-$HOME/Projects/HyprCraft/omarchy-plugin/app}"
+  if [[ -f $hyprcraft/index.html ]]; then
+    install -dm755 "$pkgdir/usr/share/omacraft/hyprcraft"
+    cp -r --no-preserve=ownership "$hyprcraft/." "$pkgdir/usr/share/omacraft/hyprcraft/"
+  else
+    echo "No HyprCraft build at $hyprcraft; the package won't carry one." >&2
+  fi
+}
