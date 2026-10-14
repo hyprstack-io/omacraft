@@ -14,6 +14,7 @@ private slots:
     void expandsHomeAndQuotes();
     void readsBarSections();
     void installsByLinkingTheSource();
+    void flagsAFolderThatReusesAPluginId();
     void removingALinkKeepsTheCode();
     void removingAFolderSetsItAsideAndInstallBringsItBack();
     void installReplacesABrokenLinkButNotAFolder();

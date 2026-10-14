@@ -38,12 +38,28 @@ Plugins::Plugins(const QString &home, bool runCommands, QObject *parent)
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, [this] { m_debounce.start(); });
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, [this] { m_debounce.start(); });
 
+    m_reloadDebounce.setSingleShot(true);
+    m_reloadDebounce.setInterval(400);
+    connect(&m_reloadDebounce, &QTimer::timeout, this, [this] {
+        Proc::run(this, "omarchy-shell", {"shell", "rescanPlugins"});
+    });
+    connect(&m_sourceWatch, &QProcess::readyReadStandardOutput, this, [this] {
+        m_sourceWatch.readAllStandardOutput();
+        m_reloadDebounce.start();
+    });
 
     loadSources();
     readShellConfig();
     rebuild();
     if (m_runCommands)
         refresh();
+}
+
+Plugins::~Plugins() {
+    if (m_sourceWatch.state() != QProcess::NotRunning) {
+        m_sourceWatch.kill();
+        m_sourceWatch.waitForFinished(1000);
+    }
 }
 
 QList<Plugins::Definition> Plugins::definitions() {
@@ -120,8 +136,24 @@ QString Plugins::barIn(const QJsonObject &shell) {
     return id.isEmpty() ? "omarchy.bar" : id;
 }
 
+QHash<QString, QStringList> Plugins::duplicatesIn(const QString &pluginsDir) {
+    QHash<QString, QStringList> duplicates;
+    const auto names = QDir(pluginsDir).entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+    for (const auto &name : names) {
+        // Hidden folders are backups and clone staging; the shell skips them.
+        if (name.startsWith('.'))
+            continue;
+        const auto id = readJsonObject(pluginsDir + "/" + name + "/manifest.json").value("id").toString();
+        if (!id.isEmpty() && id != name)
+            duplicates[id] << name;
+    }
+    return duplicates;
+}
+
 void Plugins::rebuild() {
     QVariantList list;
+    QStringList linkedSources;
+    const auto duplicates = duplicatesIn(m_pluginsDir);
     for (const auto &definition : definitions()) {
         const QString path = installPath(definition.id);
         const QFileInfo info(path);
@@ -131,6 +163,9 @@ void Plugins::rebuild() {
         const QString source = sourcePath(definition.id);
         const QString dir = pluginDir(definition.id);
         const auto manifest = readJsonObject(dir + "/manifest.json");
+        const QStringList others = duplicates.value(definition.id);
+        if (installed && linked)
+            linkedSources << QFileInfo(path).canonicalFilePath();
 
         QJsonObject shellEntry;
         for (const auto &value : m_shellList)
@@ -148,7 +183,9 @@ void Plugins::rebuild() {
         const bool enabled = isBar ? barInUse : shellEntry.value("enabled").toBool();
 
         QString state;
-        if (!installed)
+        if (!others.isEmpty())
+            state = "Also installed as " + others.join(", ");
+        else if (!installed)
             state = linked ? "Broken link" : "Not installed";
         else if (!m_shellRunning)
             state = "Installed";
@@ -180,11 +217,30 @@ void Plugins::rebuild() {
         item["section"] = barWidget ? sectionIn(m_shellConfig, definition.id) : QString();
         item["defaultSection"] = manifest.value("barWidget").toObject().value("defaultSection").toString();
         item["dir"] = dir;
+        item["duplicates"] = others;
         item["state"] = state;
         list << item;
     }
     m_plugins = list;
+    if (m_runCommands)
+        watchSources(linkedSources);
     emit changed();
+}
+
+void Plugins::watchSources(const QStringList &dirs) {
+    if (dirs == m_watchedSources && (dirs.isEmpty() || m_sourceWatch.state() != QProcess::NotRunning))
+        return;
+    if (m_sourceWatch.state() != QProcess::NotRunning) {
+        m_sourceWatch.kill();
+        m_sourceWatch.waitForFinished(1000);
+    }
+    m_watchedSources = dirs;
+    if (dirs.isEmpty() || Proc::which("inotifywait").isEmpty())
+        return;
+    // The same events the shell watches its own plugins folder for.
+    m_sourceWatch.start("inotifywait",
+                        QStringList{"-m", "-r", "-q", "-e", "close_write,create,delete,move",
+                                    "--exclude", "/\\.git(/|$)", "--format", "%w%f"} + dirs);
 }
 
 QVariantMap Plugins::plugin(const QString &id) const {

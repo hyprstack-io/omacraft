@@ -118,6 +118,25 @@ void OmacraftTests::installsByLinkingTheSource()
     QCOMPARE(plugins.error(), QString());
 }
 
+void OmacraftTests::flagsAFolderThatReusesAPluginId()
+{
+    QTemporaryDir home;
+    const QString source = home.path() + "/Projects/omascii";
+    writeManifest(source, "omacraft.omascii");
+    const QString dir = home.path() + "/.config/omarchy/plugins";
+    QDir().mkpath(dir);
+    QVERIFY(QFile::link(source, dir + "/omacraft.omascii"));
+    QVERIFY(QFile::link(source, dir + "/skll.omascii"));
+    writeManifest(dir + "/.skll.omascii.bak", "omacraft.omascii");
+
+    QCOMPARE(Plugins::duplicatesIn(dir).value("omacraft.omascii"), QStringList{"skll.omascii"});
+    Plugins plugins(home.path(), false);
+    const auto item = plugins.plugin("omacraft.omascii");
+    QCOMPARE(item.value("duplicates").toStringList(), QStringList{"skll.omascii"});
+    QCOMPARE(item.value("state").toString(), QString("Also installed as skll.omascii"));
+    QVERIFY(plugins.plugin("omacraft.burn").value("duplicates").toStringList().isEmpty());
+}
+
 void OmacraftTests::removingALinkKeepsTheCode()
 {
     QTemporaryDir home;

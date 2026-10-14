@@ -148,6 +148,7 @@ Item {
                                     text: card.modelData.state
                                     on: card.modelData.enabled
                                     warn: card.modelData.state === "Broken link" || card.modelData.state === "Not found by the shell"
+                                          || card.modelData.duplicates.length > 0
                                 }
                             }
 

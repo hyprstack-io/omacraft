@@ -3,7 +3,9 @@
 #include <QFileSystemWatcher>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QHash>
 #include <QObject>
+#include <QProcess>
 #include <QStringList>
 #include <QTimer>
 #include <QVariantList>
@@ -33,6 +35,7 @@ public:
     // home is the user's home folder; tests pass a temp directory and set
     // runCommands to false so nothing reaches the real shell.
     explicit Plugins(const QString &home = {}, bool runCommands = true, QObject *parent = nullptr);
+    ~Plugins() override;
 
     static QList<Definition> definitions();
 
@@ -70,6 +73,10 @@ public:
     static QString sectionIn(const QJsonObject &shell, const QString &id);
     // The id of the bar in use, "omarchy.bar" when shell.json names none.
     static QString barIn(const QJsonObject &shell);
+    // Folders in pluginsDir whose manifest names another folder's id, by that
+    // id. The shell keys plugins by manifest id, so one of these silently
+    // replaces the folder that carries the id as its name.
+    static QHash<QString, QStringList> duplicatesIn(const QString &pluginsDir);
 
 signals:
     void changed();
@@ -93,6 +100,10 @@ private:
     void setError(const QString &message);
     void setNotice(const QString &message);
     void watch();
+    // The shell's own watcher doesn't follow links, so edits to a linked
+    // plugin's code never reach it. Watch those folders here and ask the
+    // shell to rescan when they change.
+    void watchSources(const QStringList &dirs);
 
     QString m_home;
     bool m_runCommands;
@@ -112,4 +123,7 @@ private:
 
     QFileSystemWatcher m_watcher;
     QTimer m_debounce;
+    QProcess m_sourceWatch;
+    QStringList m_watchedSources;
+    QTimer m_reloadDebounce;
 };
