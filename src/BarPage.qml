@@ -148,6 +148,10 @@ Item {
                                 implicitWidth: glyph.implicitWidth + 18
                                 implicitHeight: 26
                                 radius: page.st.shape === "round" ? 13 : page.st.shape === "block" ? (page.st.radius || 3) : 3
+                                topLeftRadius: page.st.shape === "leaf" ? 13 : page.st.shape === "tab" ? 9 : radius
+                                bottomRightRadius: page.st.shape === "leaf" ? 13 : page.st.shape === "tab" ? 0 : radius
+                                topRightRadius: page.st.shape === "leaf" ? 2 : page.st.shape === "tab" ? 9 : radius
+                                bottomLeftRadius: page.st.shape === "leaf" ? 2 : page.st.shape === "tab" ? 0 : radius
                                 readonly property color fill: Qt.color(page.moduleColor(modelData.id, laneSketch.modelData.id, index))
                                 color: page.st.solid ? fill : Qt.rgba(fill.r, fill.g, fill.b, Math.max(0.2, page.st.tint || 0.3))
                                 Label {
@@ -455,15 +459,21 @@ Item {
                             SectionLabel { text: "Segments" }
                             RowLayout {
                                 spacing: 6
-                                Label { Layout.preferredWidth: 120; text: "Shape"; color: "#d6d6da" }
-                                Repeater {
-                                    model: [{ id: "arrow", name: "Chevron" }, { id: "slant", name: "Slant" }, { id: "round", name: "Pill" },
-                                            { id: "block", name: "Block" }, { id: "none", name: "None" }]
-                                    Chip {
-                                        required property var modelData
-                                        text: modelData.name
-                                        chosen: (page.st.shape || "none") === modelData.id
-                                        onClicked: bar.setStyle("shape", modelData.id)
+                                Label { Layout.preferredWidth: 120; Layout.alignment: Qt.AlignTop; topPadding: 6; text: "Shape"; color: "#d6d6da" }
+                                Flow {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+                                    Repeater {
+                                        model: [{ id: "arrow", name: "Chevron" }, { id: "slant", name: "Slant" }, { id: "backslant", name: "Back slant" },
+                                                { id: "trapezoid", name: "Trapezoid" }, { id: "hex", name: "Hexagon" }, { id: "round", name: "Pill" },
+                                                { id: "block", name: "Block" }, { id: "leaf", name: "Leaf" }, { id: "tab", name: "Tab" },
+                                                { id: "underline", name: "Underline" }, { id: "none", name: "None" }]
+                                        Chip {
+                                            required property var modelData
+                                            text: modelData.name
+                                            chosen: (page.st.shape || "none") === modelData.id
+                                            onClicked: bar.setStyle("shape", modelData.id)
+                                        }
                                     }
                                 }
                             }

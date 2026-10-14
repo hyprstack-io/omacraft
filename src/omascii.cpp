@@ -70,8 +70,9 @@ void Omascii::refresh() {
         m_config = status.value("config").toObject().toVariantMap();
         QVariantMap options;
         for (const auto &key : {"layouts", "styles", "effects", "coreEffects", "charsets", "flips", "shadows", "borders",
-                                "colorModes", "gradients"})
+                                "colorModes", "gradients", "effectGroups", "palettes"})
             options.insert(key, status.value(key).toArray().toVariantList());
+        options["paletteStops"] = status.value("paletteStops").toObject().toVariantMap();
         options["fontCount"] = status.value("fontCount").toInt();
         options["tdf"] = status.value("tdf").toObject().toVariantMap();
         options["ttf"] = status.value("ttf").toObject().toVariantMap();

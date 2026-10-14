@@ -19,8 +19,10 @@
 #include "agentdock.h"
 #include "animations.h"
 #include "bar.h"
+#include "burn.h"
 #include "hyprcraft.h"
 #include "isobuilder.h"
+#include "launcher.h"
 #include "omascii.h"
 #include "plugins.h"
 #include "portalfilepicker.h"
@@ -64,17 +66,19 @@ int main(int argc, char *argv[]) {
 
     Theme theme;
     Plugins plugins;
-    Animations animations([&plugins] { return plugins.pluginDir("skll.animations"); });
-    AgentDock dock([&plugins] { return plugins.pluginDir("skll.agentdock"); },
-                   [&plugins] { return plugins.isEnabled("skll.agentdock"); });
+    Animations animations([&plugins] { return plugins.pluginDir("omacraft.animations"); });
+    AgentDock dock([&plugins] { return plugins.pluginDir("omacraft.agentdock"); },
+                   [&plugins] { return plugins.isEnabled("omacraft.agentdock"); });
     Bar bar([&plugins] { return plugins.pluginDir("omabar16"); });
-    Omascii omascii([&plugins] { return plugins.pluginDir("skll.omascii"); });
+    Launcher launcher([&plugins] { return plugins.pluginDir("omacraft.studio"); });
+    Burn burn([&plugins] { return plugins.pluginDir("omacraft.burn"); });
+    Omascii omascii([&plugins] { return plugins.pluginDir("omacraft.omascii"); });
     HyprCraft hyprcraft([&plugins] {
         QStringList dirs;
-        const QString dir = plugins.pluginDir("skll.hyprcraft");
+        const QString dir = plugins.pluginDir("omacraft.hyprcraft");
         if (!dir.isEmpty())
             dirs << dir + "/app";
-        dirs << plugins.sourcePath("skll.hyprcraft") + "/app";
+        dirs << plugins.sourcePath("omacraft.hyprcraft") + "/app";
         // The package carries a copy of the build for machines without the
         // project checked out.
         dirs << "/usr/share/omacraft/hyprcraft";
@@ -87,6 +91,8 @@ int main(int argc, char *argv[]) {
     QObject::connect(&plugins, &Plugins::changed, &animations, &Animations::refresh);
     QObject::connect(&plugins, &Plugins::changed, &dock, &AgentDock::reload);
     QObject::connect(&plugins, &Plugins::changed, &bar, &Bar::reload);
+    QObject::connect(&plugins, &Plugins::changed, &launcher, &Launcher::reload);
+    QObject::connect(&plugins, &Plugins::changed, &burn, &Burn::reload);
     QObject::connect(&plugins, &Plugins::changed, &hyprcraft, &HyprCraft::refresh);
     QObject::connect(&plugins, &Plugins::changed, &omascii, [&omascii] {
         if (omascii.available() != omascii.loaded())
@@ -115,13 +121,15 @@ int main(int argc, char *argv[]) {
     context->setContextProperty("animations", &animations);
     context->setContextProperty("dock", &dock);
     context->setContextProperty("bar", &bar);
+    context->setContextProperty("launcher", &launcher);
+    context->setContextProperty("burn", &burn);
     context->setContextProperty("omascii", &omascii);
     context->setContextProperty("hyprcraft", &hyprcraft);
     context->setContextProperty("hyprcraftProfile", &webProfile);
     context->setContextProperty("iso", &iso);
 
     // `omacraft <page>` opens on that page, for keybindings and the bar.
-    const QStringList pages{"plugins", "animations", "dock", "bar", "ascii", "hyprcraft", "iso"};
+    const QStringList pages{"plugins", "animations", "effects", "dock", "bar", "launcher", "ascii", "hyprcraft", "iso"};
     const QString start = app.arguments().value(1);
     context->setContextProperty("startPage", qMax(0, pages.indexOf(start)));
 

@@ -536,8 +536,55 @@ Item {
                                     spacing: 8
                                     ColorRow { label: "Colour"; value: page.c.color; onPicked: v => omascii.setOption("color", v) }
                                     ChipRow { label: "Colour mode"; choices: page.o.colorModes || []; value: page.c.colorMode; onPicked: v => omascii.setOption("colorMode", v) }
-                                    ColorRow { visible: page.c.colorMode === "gradient"; label: "Gradient to"; value: page.c.color2; onPicked: v => omascii.setOption("color2", v) }
-                                    ChipRow { visible: page.c.colorMode === "gradient"; label: "Direction"; choices: page.o.gradients || []; value: page.c.gradient; onPicked: v => omascii.setOption("gradient", v) }
+                                    ColorRow {
+                                        visible: ["gradient", "stripes", "split"].indexOf(page.c.colorMode) >= 0
+                                        label: page.c.colorMode === "gradient" ? "Gradient to" : "Second colour"
+                                        value: page.c.color2
+                                        onPicked: v => omascii.setOption("color2", v)
+                                    }
+                                    // Ready-made colour runs, each shown as its gradient.
+                                    RowLayout {
+                                        visible: page.c.colorMode === "palette"
+                                        Layout.fillWidth: true
+                                        spacing: 6
+                                        Label { Layout.preferredWidth: 110; Layout.alignment: Qt.AlignTop; topPadding: 6; text: "Palette"; color: "#d6d6da" }
+                                        Flow {
+                                            Layout.fillWidth: true
+                                            spacing: 5
+                                            Repeater {
+                                                model: page.o.palettes || []
+                                                delegate: Rectangle {
+                                                    id: pal
+                                                    required property string modelData
+                                                    readonly property var stops: (page.o.paletteStops || {})[modelData] || []
+                                                    readonly property bool chosen: (page.c.colorPalette || "sunset") === modelData
+                                                    implicitWidth: palName.implicitWidth + 58
+                                                    implicitHeight: 30
+                                                    radius: 7
+                                                    color: palHover.hovered ? "#1d1d21" : "#111113"
+                                                    border.color: chosen ? theme.accent : "#26262b"
+                                                    border.width: chosen ? 2 : 1
+                                                    Row {
+                                                        x: 8; anchors.verticalCenter: parent.verticalCenter
+                                                        Repeater {
+                                                            model: pal.stops
+                                                            Rectangle { required property string modelData; width: 34 / Math.max(1, pal.stops.length); height: 12; color: "#" + modelData }
+                                                        }
+                                                    }
+                                                    Label { id: palName; x: 48; anchors.verticalCenter: parent.verticalCenter; text: pal.modelData; color: pal.chosen ? theme.accent : "#d6d6da"; font.pixelSize: 12 }
+                                                    HoverHandler { id: palHover; cursorShape: Qt.PointingHandCursor }
+                                                    TapHandler { onTapped: omascii.setOption("colorPalette", pal.modelData) }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    ChipRow {
+                                        visible: ["gradient", "rainbow", "palette"].indexOf(page.c.colorMode) >= 0
+                                        label: "Direction"
+                                        choices: page.o.gradients || []
+                                        value: page.c.gradient
+                                        onPicked: v => omascii.setOption("gradient", v)
+                                    }
                                     SwitchRow { label: "Font colours"; hint: "Keep a TheDraw colour font's own colours."; checked: page.c.fontColors === true; onToggled: on => omascii.setOption("fontColors", on) }
                                     RowLayout {
                                         Label { Layout.preferredWidth: 110; text: "Fill"; color: "#d6d6da" }
@@ -571,30 +618,59 @@ Item {
                                         Button { text: "Core 11"; flat: true; focusPolicy: Qt.NoFocus; onClicked: omascii.setEffects(page.o.coreEffects || []) }
                                         Button { text: "Clear"; flat: true; focusPolicy: Qt.NoFocus; onClicked: omascii.setEffects([]) }
                                     }
-                                    GridLayout {
-                                        visible: page.c.style === "animated"
-                                        Layout.fillWidth: true
-                                        columns: Math.max(2, Math.floor(width / 170))
-                                        rowSpacing: 0
-                                        columnSpacing: 6
-                                        Repeater {
-                                            model: page.o.effects || []
-                                            delegate: RowLayout {
-                                                required property string modelData
-                                                spacing: 0
-                                                CheckBox {
-                                                    Layout.fillWidth: true
-                                                    text: modelData
-                                                    checked: (page.c.effects || []).indexOf(modelData) >= 0
-                                                    focusPolicy: Qt.NoFocus
-                                                    onClicked: omascii.toggleEffect(modelData)
+                                    // One block per group: the core set, the rest of ttfx,
+                                    // the screensaver's own and its presets, omascii's originals.
+                                    Repeater {
+                                        model: page.c.style === "animated"
+                                               ? ((page.o.effectGroups || []).length ? page.o.effectGroups
+                                                                                     : [{ id: "all", name: "Effects", effects: page.o.effects || [] }])
+                                               : []
+                                        delegate: ColumnLayout {
+                                            id: group
+                                            required property var modelData
+                                            readonly property var chosen: (page.c.effects || []).filter(e => group.modelData.effects.indexOf(e) >= 0)
+                                            Layout.fillWidth: true
+                                            spacing: 0
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                Layout.topMargin: 6
+                                                SectionLabel { text: group.modelData.name }
+                                                Label { text: group.chosen.length + " of " + group.modelData.effects.length; color: "#5f5f68"; font.pixelSize: 11 }
+                                                Item { Layout.fillWidth: true }
+                                                Button {
+                                                    text: "All"; flat: true; focusPolicy: Qt.NoFocus
+                                                    onClicked: omascii.setEffects((page.o.effects || []).filter(e => (page.c.effects || []).indexOf(e) >= 0 || group.modelData.effects.indexOf(e) >= 0))
                                                 }
-                                                ToolButton {
-                                                    text: "▶"
-                                                    focusPolicy: Qt.NoFocus
-                                                    ToolTip.visible: hovered
-                                                    ToolTip.text: "Play " + modelData + " in the preview"
-                                                    onClicked: page.play(modelData)
+                                                Button {
+                                                    text: "None"; flat: true; focusPolicy: Qt.NoFocus
+                                                    onClicked: omascii.setEffects((page.c.effects || []).filter(e => group.modelData.effects.indexOf(e) < 0))
+                                                }
+                                            }
+                                            GridLayout {
+                                                Layout.fillWidth: true
+                                                columns: Math.max(2, Math.floor(width / 190))
+                                                rowSpacing: 0
+                                                columnSpacing: 6
+                                                Repeater {
+                                                    model: group.modelData.effects
+                                                    delegate: RowLayout {
+                                                        required property string modelData
+                                                        spacing: 0
+                                                        CheckBox {
+                                                            Layout.fillWidth: true
+                                                            text: modelData
+                                                            checked: (page.c.effects || []).indexOf(modelData) >= 0
+                                                            focusPolicy: Qt.NoFocus
+                                                            onClicked: omascii.toggleEffect(modelData)
+                                                        }
+                                                        ToolButton {
+                                                            text: "▶"
+                                                            focusPolicy: Qt.NoFocus
+                                                            ToolTip.visible: hovered
+                                                            ToolTip.text: "Play " + modelData + " in the preview"
+                                                            onClicked: page.play(modelData)
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }

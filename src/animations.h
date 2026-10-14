@@ -1,10 +1,11 @@
 #pragma once
 
 #include <QObject>
+#include <QStringList>
 #include <QVariantList>
 #include <functional>
 
-// Hyprland animation presets, through the skll.animations plugin's own
+// Hyprland animation presets, through the omacraft.animations plugin's own
 // omarchy-animations script, so the bar widget and OMAcraft always agree.
 class Animations : public QObject {
     Q_OBJECT
@@ -22,6 +23,16 @@ class Animations : public QObject {
     Q_PROPERTY(bool canUndo READ canUndo NOTIFY changed)
     Q_PROPERTY(bool canRedo READ canRedo NOTIFY changed)
     Q_PROPERTY(QString customPath READ customPath CONSTANT)
+    // Overrides on top of the preset: window and workspace shapes, and a
+    // gradient window border that can spin.
+    Q_PROPERTY(QString windowStyle READ windowStyle NOTIFY changed)
+    Q_PROPERTY(QString workspaceStyle READ workspaceStyle NOTIFY changed)
+    Q_PROPERTY(QString border READ border NOTIFY changed)
+    Q_PROPERTY(bool borderLoop READ borderLoop NOTIFY changed)
+    Q_PROPERTY(int borderSpeed READ borderSpeed NOTIFY changed)
+    Q_PROPERTY(QVariantList borders READ borders NOTIFY changed)
+    Q_PROPERTY(QStringList windowStyles READ windowStyles NOTIFY changed)
+    Q_PROPERTY(QStringList workspaceStyles READ workspaceStyles NOTIFY changed)
 
 public:
     // pluginDir finds the plugin's folder each time, since it can be
@@ -42,6 +53,14 @@ public:
     bool canUndo() const { return !m_undo.isEmpty(); }
     bool canRedo() const { return !m_redo.isEmpty(); }
     QString customPath() const { return m_home + "/.config/omarchy/animation-presets.json"; }
+    QString windowStyle() const { return m_windowStyle; }
+    QString workspaceStyle() const { return m_workspaceStyle; }
+    QString border() const { return m_border; }
+    bool borderLoop() const { return m_borderLoop; }
+    int borderSpeed() const { return m_borderSpeed; }
+    QVariantList borders() const { return m_borders; }
+    QStringList windowStyles() const { return m_windowStyles; }
+    QStringList workspaceStyles() const { return m_workspaceStyles; }
 
     QString script() const;
 
@@ -58,6 +77,11 @@ public:
     Q_INVOKABLE void undo();
     Q_INVOKABLE void redo();
     Q_INVOKABLE void openCustomPresets();
+    Q_INVOKABLE void setWindowStyle(const QString &style);
+    Q_INVOKABLE void setWorkspaceStyle(const QString &style);
+    Q_INVOKABLE void setBorder(const QString &id);
+    Q_INVOKABLE void setBorderLoop(bool on);
+    Q_INVOKABLE void setBorderSpeed(int seconds);
     Q_INVOKABLE void dismissMessages();
 
 signals:
@@ -87,6 +111,14 @@ private:
     QString m_notice;
     QString m_lua;
     QString m_luaPreset;
+    QString m_windowStyle = "preset";
+    QString m_workspaceStyle = "preset";
+    QString m_border = "theme";
+    bool m_borderLoop = false;
+    int m_borderSpeed = 6;
+    QVariantList m_borders;
+    QStringList m_windowStyles;
+    QStringList m_workspaceStyles;
     QList<Choice> m_undo;
     QList<Choice> m_redo;
 };

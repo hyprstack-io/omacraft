@@ -27,6 +27,15 @@ bool Animations::readStatus(const QByteArray &json) {
     m_last = object.value("last").toString();
     m_file = object.value("file").toString();
     m_presets = object.value("presets").toArray().toVariantList();
+    // Older copies of the script have none of these; the page then hides them.
+    m_windowStyle = object.value("windowStyle").toString("preset");
+    m_workspaceStyle = object.value("workspaceStyle").toString("preset");
+    m_border = object.value("border").toString("theme");
+    m_borderLoop = object.value("borderLoop").toBool();
+    m_borderSpeed = object.value("borderSpeed").toInt(6);
+    m_borders = object.value("borders").toArray().toVariantList();
+    m_windowStyles = object.value("windowStyles").toVariant().toStringList();
+    m_workspaceStyles = object.value("workspaceStyles").toVariant().toStringList();
     emit changed();
     return true;
 }
@@ -82,6 +91,31 @@ void Animations::setSpeed(double speed) {
 }
 
 void Animations::toggle() { run({"toggle"}, true); }
+
+void Animations::setWindowStyle(const QString &style) {
+    if (style != m_windowStyle)
+        run({"style", "windows", style}, false);
+}
+
+void Animations::setWorkspaceStyle(const QString &style) {
+    if (style != m_workspaceStyle)
+        run({"style", "workspaces", style}, false);
+}
+
+void Animations::setBorder(const QString &id) {
+    if (id != m_border)
+        run({"border", id}, false);
+}
+
+void Animations::setBorderLoop(bool on) {
+    if (on != m_borderLoop)
+        run({"border", m_border, on ? "--loop" : "--no-loop"}, false);
+}
+
+void Animations::setBorderSpeed(int seconds) {
+    if (seconds != m_borderSpeed)
+        run({"border", m_border, "--border-speed", QString::number(seconds)}, false);
+}
 void Animations::next() { run({"next"}, true); }
 void Animations::previous() { run({"prev"}, true); }
 

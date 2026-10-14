@@ -26,7 +26,8 @@ AgentDock::AgentDock(std::function<QString()> pluginDir, std::function<bool()> r
 
 QStringList AgentDock::settingKeys() {
     return {"position", "gap", "iconSize", "opacity", "reserveCollapsed", "reserveExpanded",
-            "hiddenAgents", "cwd", "dock", "width"};
+            "hiddenAgents", "cwd", "dock", "width", "magnify", "magnifyScale", "magnifyRange",
+            "dockShape", "iconShape", "iconPlate", "dockColor", "accentColor", "dockBorder"};
 }
 
 QJsonObject AgentDock::defaultState() {
@@ -35,6 +36,9 @@ QJsonObject AgentDock::defaultState() {
         {"width", 520}, {"activeTab", ""}, {"dock", QJsonArray()}, {"dockSeeded", false},
         {"position", "right"}, {"gap", 10}, {"iconSize", 28}, {"opacity", 0.94},
         {"reserveCollapsed", false}, {"reserveExpanded", true}, {"hiddenAgents", QJsonArray()}, {"cwd", ""},
+        {"magnify", false}, {"magnifyScale", 1.7}, {"magnifyRange", 2}, {"dockShape", "rounded"},
+        {"iconShape", "rounded"}, {"iconPlate", "hover"}, {"dockColor", "theme"}, {"accentColor", "theme"},
+        {"dockBorder", "subtle"},
     };
 }
 

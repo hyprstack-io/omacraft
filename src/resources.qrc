@@ -5,6 +5,8 @@
         <file alias="AnimationsPage.qml">AnimationsPage.qml</file>
         <file alias="DockPage.qml">DockPage.qml</file>
         <file alias="BarPage.qml">BarPage.qml</file>
+        <file alias="LauncherPage.qml">LauncherPage.qml</file>
+        <file alias="BurnPage.qml">BurnPage.qml</file>
         <file alias="AsciiPage.qml">AsciiPage.qml</file>
         <file alias="HyprCraftPage.qml">HyprCraftPage.qml</file>
         <file alias="IsoPage.qml">IsoPage.qml</file>

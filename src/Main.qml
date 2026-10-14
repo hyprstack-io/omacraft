@@ -18,11 +18,13 @@ ApplicationWindow {
 
     readonly property var pages: [
         { id: "plugins", name: "Plugins", glyph: "\u{f0ac6}", plugin: "", file: "PluginsPage.qml" },
-        { id: "animations", name: "Animations", glyph: "\u{f0d6d}", plugin: "skll.animations", file: "AnimationsPage.qml" },
-        { id: "dock", name: "Agent Dock", glyph: "\u{f06a9}", plugin: "skll.agentdock", file: "DockPage.qml" },
+        { id: "animations", name: "Animations", glyph: "\u{f0d6d}", plugin: "omacraft.animations", file: "AnimationsPage.qml" },
+        { id: "effects", name: "Window FX", glyph: "\u{f0238}", plugin: "omacraft.burn", file: "BurnPage.qml" },
+        { id: "dock", name: "Agent Dock", glyph: "\u{f06a9}", plugin: "omacraft.agentdock", file: "DockPage.qml" },
         { id: "bar", name: "Bar", glyph: "\u{f0570}", plugin: "omabar16", file: "BarPage.qml" },
-        { id: "ascii", name: "Boot ASCII", glyph: "\u{f0b9e}", plugin: "skll.omascii", file: "AsciiPage.qml" },
-        { id: "hyprcraft", name: "HyprCraft", glyph: "\u{f0b0b}", plugin: "skll.hyprcraft", file: "HyprCraftPage.qml" },
+        { id: "launcher", name: "OMArofi", glyph: "\u{f003b}", plugin: "omacraft.studio", file: "LauncherPage.qml" },
+        { id: "ascii", name: "Boot ASCII", glyph: "\u{f0b9e}", plugin: "omacraft.omascii", file: "AsciiPage.qml" },
+        { id: "hyprcraft", name: "HyprCraft", glyph: "\u{f0b0b}", plugin: "omacraft.hyprcraft", file: "HyprCraftPage.qml" },
         { id: "iso", name: "ISO Builder", glyph: "\u{f0a4f}", plugin: "", file: "IsoPage.qml" }
     ]
     property int current: startPage
@@ -337,7 +339,7 @@ ApplicationWindow {
                 }
                 Repeater {
                     model: [
-                        { keys: "1 … 7", action: "Switch pages (Ctrl 1 … 7 anywhere)" },
+                        { keys: "1 … 9", action: "Switch pages (Ctrl 1 … 9 anywhere)" },
                         { keys: "Ctrl PgUp/PgDn", action: "Previous / next page" },
                         { keys: "Ctrl R", action: "Restart the Omarchy shell" },
                         { keys: "Esc", action: "Close, dismiss, or leave a field" },

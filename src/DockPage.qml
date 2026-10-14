@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
 
-// The Agent Dock's three settings tabs (General, Items, Agents), with room
+// The Agent Dock's settings tabs (General, Look, Items, Agents), with room
 // to see everything at once.
 Item {
     id: page
@@ -16,8 +16,15 @@ Item {
     property int tab: 0
     property int editing: -2 // -2 closed, -1 a new agent, else its index
     readonly property var s: dock.settings
+    // The dock's own named colours (Dock.qml), shown as swatches.
+    readonly property var dockColors: ({ midnight: "#11111b", ink: "#000000", slate: "#1e293b", ocean: "#0b3954",
+                                         forest: "#12372a", plum: "#2d1b3d", wine: "#3b0d1a", amber: "#3a2800",
+                                         frost: "#dfe9f5", paper: "#f2efe9" })
+    readonly property var accentColors: ({ red: "#f7768e", orange: "#ff9e64", yellow: "#e0af68", green: "#9ece6a",
+                                           teal: "#73daca", cyan: "#7dcfff", blue: "#7aa2f7", purple: "#bb9af7",
+                                           pink: "#ff79c6", white: "#ffffff" })
     readonly property var shortcuts: [
-        { keys: "G / I / A", action: "General, Items, Agents" },
+        { keys: "G / L / I / A", action: "General, Look, Items, Agents" },
         { keys: "Space", action: "Show or hide the dock's panel" },
         { keys: "S", action: "Open the dock's own settings card" }
     ]
@@ -40,8 +47,9 @@ Item {
 
     readonly property bool keys: active && keysFree && dock.available
     Shortcut { sequence: "G"; context: Qt.ApplicationShortcut; enabled: page.keys; onActivated: page.tab = 0 }
-    Shortcut { sequence: "I"; context: Qt.ApplicationShortcut; enabled: page.keys; onActivated: page.tab = 1 }
-    Shortcut { sequence: "A"; context: Qt.ApplicationShortcut; enabled: page.keys; onActivated: page.tab = 2 }
+    Shortcut { sequence: "L"; context: Qt.ApplicationShortcut; enabled: page.keys; onActivated: page.tab = 1 }
+    Shortcut { sequence: "I"; context: Qt.ApplicationShortcut; enabled: page.keys; onActivated: page.tab = 2 }
+    Shortcut { sequence: "A"; context: Qt.ApplicationShortcut; enabled: page.keys; onActivated: page.tab = 3 }
     Shortcut { sequence: "Space"; context: Qt.ApplicationShortcut; enabled: page.keys; onActivated: dock.toggleDock() }
     Shortcut { sequence: "S"; context: Qt.ApplicationShortcut; enabled: page.keys; onActivated: dock.openDockSettings() }
 
@@ -60,7 +68,7 @@ Item {
 
         NotInstalled {
             visible: !dock.available
-            pluginId: "skll.agentdock"
+            pluginId: "omacraft.agentdock"
             what: "The dock is a shell panel from the Agent Dock plugin."
         }
 
@@ -83,7 +91,7 @@ Item {
             onCurrentIndexChanged: page.tab = currentIndex
             background: null
             Repeater {
-                model: ["General", "Items", "Agents"]
+                model: ["General", "Look", "Items", "Agents"]
                 TabButton {
                     required property string modelData
                     text: modelData
@@ -211,6 +219,139 @@ Item {
                             }
                         }
                     }
+
+                }
+            }
+
+            // --- Look ---
+            ScrollView {
+                id: lookScroll
+                contentWidth: availableWidth
+                clip: true
+                ColumnLayout {
+                    width: lookScroll.availableWidth
+                    spacing: 14
+                    // Magnification (the macOS effect), shapes and colours.
+                    Card {
+                        Layout.fillWidth: true
+                        implicitHeight: lookColumn.implicitHeight + 36
+                        ColumnLayout {
+                            id: lookColumn
+                            anchors.fill: parent
+                            anchors.margins: 18
+                            spacing: 14
+
+                            SectionLabel { text: "Magnify" }
+                            SwitchRow {
+                                label: "Enlarge icons under the pointer"
+                                hint: "Like the macOS dock: the icon you point at grows and its neighbours grow a little less, then everything settles back when you leave."
+                                checked: page.s.magnify === true
+                                onToggled: on => dock.set("magnify", on)
+                            }
+                            SliderRow {
+                                visible: page.s.magnify === true
+                                label: "Largest size"
+                                from: 1.1; to: 2.4; stepSize: 0.05; suffix: "×"
+                                value: page.s.magnifyScale || 1.7
+                                onMoved: value => dock.set("magnifyScale", Math.round(value * 100) / 100)
+                            }
+                            SliderRow {
+                                visible: page.s.magnify === true
+                                label: "Reach"
+                                from: 1; to: 4; stepSize: 1; decimals: 0; suffix: " icons"
+                                value: page.s.magnifyRange || 2
+                                onMoved: value => dock.set("magnifyRange", Math.round(value))
+                            }
+
+                            SectionLabel { text: "Shapes"; Layout.topMargin: 6 }
+                            Repeater {
+                                model: [
+                                    { key: "dockShape", label: "Dock", fallback: "rounded",
+                                      options: [["rounded", "Rounded"], ["pill", "Pill"], ["soft", "Soft"], ["square", "Square"], ["edge", "Attached to edge"]] },
+                                    { key: "iconShape", label: "Icon tiles", fallback: "rounded",
+                                      options: [["rounded", "Rounded"], ["circle", "Circle"], ["squircle", "Squircle"], ["square", "Square"], ["diamond", "Diamond"]] },
+                                    { key: "iconPlate", label: "Show tiles", fallback: "hover",
+                                      options: [["hover", "On hover"], ["always", "Always"], ["outline", "As outlines"]] },
+                                    { key: "dockBorder", label: "Border", fallback: "subtle",
+                                      options: [["subtle", "Subtle"], ["accent", "Accent"], ["none", "None"]] }
+                                ]
+                                delegate: RowLayout {
+                                    id: shapeRow
+                                    required property var modelData
+                                    spacing: 8
+                                    Label { Layout.preferredWidth: 120; text: shapeRow.modelData.label; color: "#d6d6da" }
+                                    Repeater {
+                                        model: shapeRow.modelData.options
+                                        Chip {
+                                            required property var modelData
+                                            text: modelData[1]
+                                            chosen: (page.s[shapeRow.modelData.key] || shapeRow.modelData.fallback) === modelData[0]
+                                            onClicked: dock.set(shapeRow.modelData.key, modelData[0])
+                                        }
+                                    }
+                                }
+                            }
+
+                            SectionLabel { text: "Colours"; Layout.topMargin: 6 }
+                            Repeater {
+                                model: [
+                                    { key: "dockColor", label: "Dock", colors: page.dockColors },
+                                    { key: "accentColor", label: "Accent", colors: page.accentColors }
+                                ]
+                                delegate: RowLayout {
+                                    id: colourRow
+                                    required property var modelData
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Label { Layout.preferredWidth: 120; Layout.alignment: Qt.AlignTop; topPadding: 6; text: colourRow.modelData.label; color: "#d6d6da" }
+                                    Flow {
+                                        Layout.fillWidth: true
+                                        spacing: 6
+                                        Chip {
+                                            text: "Theme"
+                                            chosen: (page.s[colourRow.modelData.key] || "theme") === "theme"
+                                            onClicked: dock.set(colourRow.modelData.key, "theme")
+                                        }
+                                        Repeater {
+                                            model: Object.keys(colourRow.modelData.colors)
+                                            delegate: Rectangle {
+                                                id: swatchChip
+                                                required property string modelData
+                                                readonly property bool chosen: page.s[colourRow.modelData.key] === modelData
+                                                implicitWidth: swatchName.implicitWidth + 38
+                                                implicitHeight: 30
+                                                radius: 7
+                                                color: swatchHover.hovered ? "#1d1d21" : "#111113"
+                                                border.color: chosen ? theme.accent : "#26262b"
+                                                border.width: chosen ? 2 : 1
+                                                Rectangle {
+                                                    x: 9; anchors.verticalCenter: parent.verticalCenter
+                                                    width: 14; height: 14; radius: 7
+                                                    color: colourRow.modelData.colors[swatchChip.modelData]
+                                                    border.color: "#3a3a40"
+                                                }
+                                                Label {
+                                                    id: swatchName
+                                                    x: 29; anchors.verticalCenter: parent.verticalCenter
+                                                    text: swatchChip.modelData.charAt(0).toUpperCase() + swatchChip.modelData.slice(1)
+                                                    color: swatchChip.chosen ? theme.accent : "#d6d6da"
+                                                    font.pixelSize: 12
+                                                }
+                                                HoverHandler { id: swatchHover; cursorShape: Qt.PointingHandCursor }
+                                                TapHandler { onTapped: dock.set(colourRow.modelData.key, swatchChip.modelData) }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Label {
+                                Layout.fillWidth: true
+                                text: "Light dock colours (Frost, Paper) switch the dock's text and icons to dark."
+                                color: "#74747d"
+                                font.pixelSize: 11
+                            }
+                        }
+                    }
                 }
             }
 
@@ -320,7 +461,7 @@ Item {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             clip: true
-                            model: page.active && page.tab === 1 ? dock.apps(appSearch.text) : []
+                            model: page.active && page.tab === 2 ? dock.apps(appSearch.text) : []
                             ScrollBar.vertical: ScrollBar {}
                             delegate: ItemDelegate {
                                 required property var modelData

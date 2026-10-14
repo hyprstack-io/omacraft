@@ -13,6 +13,8 @@ HEADERS += \
     src/filepicker.h \
     src/hyprcraft.h \
     src/isobuilder.h \
+    src/launcher.h \
+    src/burn.h \
     src/omascii.h \
     src/plugins.h \
     src/portalfilepicker.h \
@@ -30,6 +32,8 @@ SOURCES += \
     src/drives.cpp \
     src/hyprcraft.cpp \
     src/isobuilder.cpp \
+    src/launcher.cpp \
+    src/burn.cpp \
     src/omascii.cpp \
     src/plugins.cpp \
     src/portalfilepicker.cpp \

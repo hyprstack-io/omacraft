@@ -6,11 +6,14 @@
 #include <QJsonObject>
 #include <QTemporaryDir>
 #include <QtTest>
+#include <sys/stat.h>
 
 #include "agentdock.h"
 #include "animations.h"
 #include "bar.h"
+#include "burn.h"
 #include "hyprcraft.h"
+#include "launcher.h"
 #include "omascii.h"
 #include "plugins.h"
 #include "proc.h"
@@ -88,8 +91,8 @@ void OmacraftTests::expandsHomeAndQuotes()
 void OmacraftTests::readsBarSections()
 {
     const auto shell = QJsonDocument::fromJson(R"({"bar":{"id":"omabar16","layout":{
-        "left":[{"id":"a"}],"center":[{"id":"b"}],"right":[{"id":"c"},{"id":"skll.agentdock"}]}}})").object();
-    QCOMPARE(Plugins::sectionIn(shell, "skll.agentdock"), QString("right"));
+        "left":[{"id":"a"}],"center":[{"id":"b"}],"right":[{"id":"c"},{"id":"omacraft.agentdock"}]}}})").object();
+    QCOMPARE(Plugins::sectionIn(shell, "omacraft.agentdock"), QString("right"));
     QCOMPARE(Plugins::sectionIn(shell, "b"), QString("center"));
     QCOMPARE(Plugins::sectionIn(shell, "missing"), QString());
     QCOMPARE(Plugins::barIn(shell), QString("omabar16"));
@@ -100,18 +103,18 @@ void OmacraftTests::installsByLinkingTheSource()
 {
     QTemporaryDir home;
     const QString source = home.path() + "/Work/skll-agentdock/plugin";
-    writeManifest(source, "skll.agentdock");
+    writeManifest(source, "omacraft.agentdock");
 
     Plugins plugins(home.path(), false);
-    QVERIFY(!plugins.isInstalled("skll.agentdock"));
-    QVERIFY(plugins.plugin("skll.agentdock").value("canInstall").toBool());
+    QVERIFY(!plugins.isInstalled("omacraft.agentdock"));
+    QVERIFY(plugins.plugin("omacraft.agentdock").value("canInstall").toBool());
 
-    plugins.install("skll.agentdock");
-    const QFileInfo installed(home.path() + "/.config/omarchy/plugins/skll.agentdock");
+    plugins.install("omacraft.agentdock");
+    const QFileInfo installed(home.path() + "/.config/omarchy/plugins/omacraft.agentdock");
     QVERIFY(installed.isSymLink());
     QCOMPARE(installed.symLinkTarget(), source);
-    QVERIFY(plugins.isInstalled("skll.agentdock"));
-    QCOMPARE(plugins.plugin("skll.agentdock").value("version").toString(), QString("1.2.3"));
+    QVERIFY(plugins.isInstalled("omacraft.agentdock"));
+    QCOMPARE(plugins.plugin("omacraft.agentdock").value("version").toString(), QString("1.2.3"));
     QCOMPARE(plugins.error(), QString());
 }
 
@@ -119,34 +122,34 @@ void OmacraftTests::removingALinkKeepsTheCode()
 {
     QTemporaryDir home;
     const QString source = home.path() + "/Projects/omascii";
-    writeManifest(source, "skll.omascii");
+    writeManifest(source, "omacraft.omascii");
     QDir().mkpath(home.path() + "/.config/omarchy/plugins");
-    QVERIFY(QFile::link(source, home.path() + "/.config/omarchy/plugins/skll.omascii"));
+    QVERIFY(QFile::link(source, home.path() + "/.config/omarchy/plugins/omacraft.omascii"));
 
     Plugins plugins(home.path(), false);
-    QVERIFY(plugins.isInstalled("skll.omascii"));
-    plugins.remove("skll.omascii");
-    QVERIFY(!QFileInfo(home.path() + "/.config/omarchy/plugins/skll.omascii").isSymLink());
+    QVERIFY(plugins.isInstalled("omacraft.omascii"));
+    plugins.remove("omacraft.omascii");
+    QVERIFY(!QFileInfo(home.path() + "/.config/omarchy/plugins/omacraft.omascii").isSymLink());
     QVERIFY(QFileInfo::exists(source + "/manifest.json"));
-    QVERIFY(!plugins.isInstalled("skll.omascii"));
+    QVERIFY(!plugins.isInstalled("omacraft.omascii"));
 }
 
 void OmacraftTests::removingAFolderSetsItAsideAndInstallBringsItBack()
 {
     QTemporaryDir home;
-    const QString installed = home.path() + "/.config/omarchy/plugins/skll.animations";
-    writeManifest(installed, "skll.animations");
+    const QString installed = home.path() + "/.config/omarchy/plugins/omacraft.animations";
+    writeManifest(installed, "omacraft.animations");
     writeFile(installed + "/presets.json", "{}");
 
     Plugins plugins(home.path(), false);
-    plugins.remove("skll.animations");
+    plugins.remove("omacraft.animations");
     QVERIFY(!QFileInfo::exists(installed));
-    const QString stash = home.path() + "/.local/share/omacraft/stash/skll.animations";
+    const QString stash = home.path() + "/.local/share/omacraft/stash/omacraft.animations";
     QVERIFY(QFileInfo::exists(stash + "/presets.json"));
-    QVERIFY(plugins.plugin("skll.animations").value("stashed").toBool());
-    QCOMPARE(plugins.pluginDir("skll.animations"), QFileInfo(stash).canonicalFilePath());
+    QVERIFY(plugins.plugin("omacraft.animations").value("stashed").toBool());
+    QCOMPARE(plugins.pluginDir("omacraft.animations"), QFileInfo(stash).canonicalFilePath());
 
-    plugins.install("skll.animations");
+    plugins.install("omacraft.animations");
     QVERIFY(QFileInfo::exists(installed + "/presets.json"));
     QVERIFY(!QFileInfo(installed).isSymLink());
     QVERIFY(!QFileInfo::exists(stash));
@@ -156,37 +159,37 @@ void OmacraftTests::installReplacesABrokenLinkButNotAFolder()
 {
     QTemporaryDir home;
     const QString source = home.path() + "/Work/skll-agentdock/plugin";
-    writeManifest(source, "skll.agentdock");
-    const QString target = home.path() + "/.config/omarchy/plugins/skll.agentdock";
+    writeManifest(source, "omacraft.agentdock");
+    const QString target = home.path() + "/.config/omarchy/plugins/omacraft.agentdock";
     QDir().mkpath(QFileInfo(target).absolutePath());
     QVERIFY(QFile::link(home.path() + "/gone", target));
 
     Plugins plugins(home.path(), false);
-    QCOMPARE(plugins.plugin("skll.agentdock").value("state").toString(), QString("Broken link"));
-    plugins.install("skll.agentdock");
+    QCOMPARE(plugins.plugin("omacraft.agentdock").value("state").toString(), QString("Broken link"));
+    plugins.install("omacraft.agentdock");
     QCOMPARE(QFileInfo(target).symLinkTarget(), source);
 
     // Something of the user's that isn't a plugin stays put.
     QTemporaryDir home2;
-    writeManifest(home2.path() + "/Work/skll-agentdock/plugin", "skll.agentdock");
-    QDir().mkpath(home2.path() + "/.config/omarchy/plugins/skll.agentdock");
-    writeFile(home2.path() + "/.config/omarchy/plugins/skll.agentdock/notes.txt", "mine");
+    writeManifest(home2.path() + "/Work/skll-agentdock/plugin", "omacraft.agentdock");
+    QDir().mkpath(home2.path() + "/.config/omarchy/plugins/omacraft.agentdock");
+    writeFile(home2.path() + "/.config/omarchy/plugins/omacraft.agentdock/notes.txt", "mine");
     Plugins other(home2.path(), false);
-    other.install("skll.agentdock");
+    other.install("omacraft.agentdock");
     QVERIFY(other.error().contains("in the way"));
-    QVERIFY(QFileInfo::exists(home2.path() + "/.config/omarchy/plugins/skll.agentdock/notes.txt"));
+    QVERIFY(QFileInfo::exists(home2.path() + "/.config/omarchy/plugins/omacraft.agentdock/notes.txt"));
 }
 
 void OmacraftTests::sourcesCanBeMoved()
 {
     QTemporaryDir home;
     const QString elsewhere = home.path() + "/code/dock";
-    writeManifest(elsewhere, "skll.agentdock");
+    writeManifest(elsewhere, "omacraft.agentdock");
     Plugins plugins(home.path(), false);
-    QVERIFY(!plugins.plugin("skll.agentdock").value("sourceExists").toBool());
-    plugins.setSource("skll.agentdock", "~/code/dock");
-    QCOMPARE(plugins.sourcePath("skll.agentdock"), elsewhere);
-    QVERIFY(plugins.plugin("skll.agentdock").value("canInstall").toBool());
+    QVERIFY(!plugins.plugin("omacraft.agentdock").value("sourceExists").toBool());
+    plugins.setSource("omacraft.agentdock", "~/code/dock");
+    QCOMPARE(plugins.sourcePath("omacraft.agentdock"), elsewhere);
+    QVERIFY(plugins.plugin("omacraft.agentdock").value("canInstall").toBool());
 }
 
 // --- animations ---
@@ -203,6 +206,28 @@ void OmacraftTests::readsAnimationStatus()
     QCOMPARE(animations.presets().size(), 2);
     QVERIFY(animations.presets().at(1).toMap().value("custom").toBool());
     QVERIFY(!animations.readStatus("not json"));
+}
+
+void OmacraftTests::readsAnimationLookOverrides()
+{
+    Animations animations({});
+    // An older script has no overrides: the page falls back to the preset's own.
+    QVERIFY(animations.readStatus(R"({"preset":"omarchy","speed":1,"last":"omarchy","file":"/x.lua","presets":[]})"));
+    QCOMPARE(animations.windowStyle(), QString("preset"));
+    QCOMPARE(animations.border(), QString("theme"));
+    QVERIFY(animations.windowStyles().isEmpty());
+
+    QVERIFY(animations.readStatus(R"({"preset":"pop","speed":1,"last":"pop","file":"/x.lua","presets":[],
+        "windowStyle":"slide top","workspaceStyle":"fade","border":"synthwave","borderLoop":true,"borderSpeed":4,
+        "borders":[{"id":"synthwave","name":"Synthwave","colors":["ff2a6d","d300c5","05d9e8"],"angle":45}],
+        "windowStyles":["preset","slide top"],"workspaceStyles":["preset","fade"]})"));
+    QCOMPARE(animations.windowStyle(), QString("slide top"));
+    QCOMPARE(animations.workspaceStyle(), QString("fade"));
+    QCOMPARE(animations.border(), QString("synthwave"));
+    QVERIFY(animations.borderLoop());
+    QCOMPARE(animations.borderSpeed(), 4);
+    QCOMPARE(animations.borders().first().toMap().value("colors").toList().size(), 3);
+    QCOMPARE(animations.windowStyles(), QStringList({"preset", "slide top"}));
 }
 
 // --- agent dock ---
@@ -284,6 +309,24 @@ void OmacraftTests::dockHidesAgentTabs()
     QVERIFY(!dock.agents().at(1).toMap().value("shown").toBool());
     dock.setAgentShown("gemini", true);
     QVERIFY(dock.agents().at(1).toMap().value("shown").toBool());
+}
+
+void OmacraftTests::dockLookHasDefaults()
+{
+    QTemporaryDir home;
+    AgentDock dock({}, [] { return false; }, home.path());
+    // The look keys go through the dock's `set` like the rest, with the
+    // plugin's own defaults until they're changed.
+    for (const auto &key : {"magnify", "magnifyScale", "magnifyRange", "dockShape", "iconShape", "iconPlate",
+                            "dockColor", "accentColor", "dockBorder"})
+        QVERIFY2(AgentDock::settingKeys().contains(key), key);
+    QCOMPARE(dock.settings().value("magnify").toBool(), false);
+    QCOMPARE(dock.settings().value("dockShape").toString(), QString("rounded"));
+    dock.set("magnify", true);
+    dock.set("dockColor", "ocean");
+    AgentDock again({}, [] { return false; }, home.path());
+    QVERIFY(again.settings().value("magnify").toBool());
+    QCOMPARE(again.settings().value("dockColor").toString(), QString("ocean"));
 }
 
 // --- bar ---
@@ -388,3 +431,150 @@ int runOmacraftTests(int argc, char **argv)
     return QTest::qExec(&tests, argc, argv);
 }
 
+
+// --- launcher (OMArofi) ---
+
+namespace {
+
+ino_t inodeOf(const QString &path) {
+    struct stat info {};
+    return ::stat(QFile::encodeName(path).constData(), &info) == 0 ? info.st_ino : 0;
+}
+
+void writeLauncherStyles(const QString &pluginDir) {
+    writeFile(pluginDir + "/LauncherStyles.js", R"(.pragma library
+var layouts = [ { id: "classic", name: "Classic", kind: "classic" }, { id: "dock", name: "Dock", kind: "strip" } ]
+var schemes = [ { id: "omarchy", name: "Omarchy theme" }, { id: "nord", name: "Nord", bg: "#2e3440" } ]
+var transitions = [ { id: "auto", name: "Layout's own" }, { id: "pop", name: "Pop", ms: 320, scale: 0.55 } ]
+function layout(id) { return layouts[0] }
+)");
+}
+
+} // namespace
+
+void OmacraftTests::launcherReadsItsStyles()
+{
+    QTemporaryDir home;
+    const QString plugin = home.path() + "/studio";
+    writeLauncherStyles(plugin);
+    Launcher launcher([plugin] { return plugin; }, home.path(), false);
+    QVERIFY(launcher.available());
+    QCOMPARE(launcher.layouts().size(), 2);
+    QCOMPARE(launcher.schemes().at(1).toMap().value("bg").toString(), QString("#2e3440"));
+    QCOMPARE(launcher.transitions().at(1).toMap().value("ms").toInt(), 320);
+    // Nothing saved yet: the launcher's own defaults.
+    QCOMPARE(launcher.layout(), QString("classic"));
+    QCOMPARE(launcher.transition(), QString("auto"));
+    QCOMPARE(launcher.speed(), 1.0);
+    QVERIFY(launcher.animateLayouts());
+
+    Launcher missing([] { return QString(); }, home.path(), false);
+    QVERIFY(!missing.available());
+}
+
+void OmacraftTests::launcherWritesInPlaceAndKeepsOtherKeys()
+{
+    QTemporaryDir home;
+    const QString plugin = home.path() + "/studio";
+    writeLauncherStyles(plugin);
+    const QString style = home.path() + "/.config/omarchy/launcher-style.json";
+    writeFile(style, R"({"layout": "classic", "scheme": "omarchy", "someoneElses": 7})");
+    const auto inode = inodeOf(style);
+
+    Launcher launcher([plugin] { return plugin; }, home.path(), false);
+    launcher.setLayout("dock");
+    launcher.setTransition("pop");
+    launcher.setSpeed(9);
+    launcher.setAnimateColors(false);
+    launcher.setScheme("no-such-scheme");
+    QVERIFY(!launcher.error().isEmpty());
+
+    QFile file(style);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const auto saved = QJsonDocument::fromJson(file.readAll()).object();
+    QCOMPARE(saved.value("layout").toString(), QString("dock"));
+    QCOMPARE(saved.value("scheme").toString(), QString("omarchy"));
+    QCOMPARE(saved.value("transition").toString(), QString("pop"));
+    QCOMPARE(saved.value("speed").toDouble(), 3.0);
+    QCOMPARE(saved.value("animateColors").toBool(true), false);
+    QCOMPARE(saved.value("someoneElses").toInt(), 7);
+    // The same file, rewritten, so the shell's watcher stays on it.
+    QCOMPARE(inodeOf(style), inode);
+}
+
+static void writeBurnEffects(const QString &plugin)
+{
+    writeFile(plugin + "/effects.json", R"({"effects": [
+        {"id": "fire", "name": "Fire", "pad": 0.12, "duration": 1500, "color": "#ff7a1a"},
+        {"id": "doom", "name": "Doom", "pad": 0, "duration": 1300},
+        {"id": "glide", "name": "Glide", "pad": 0, "duration": 450}
+    ]})");
+}
+
+void OmacraftTests::burnReadsItsEffects()
+{
+    QTemporaryDir home;
+    const QString plugin = home.path() + "/burn";
+    writeBurnEffects(plugin);
+    Burn burn([plugin] { return plugin; }, home.path(), false);
+    QVERIFY(burn.available());
+    QCOMPARE(burn.effects().size(), 3);
+    QCOMPARE(burn.shaderDir(), plugin + "/shaders");
+    // Nothing saved yet: the plugin's own defaults.
+    QVERIFY(burn.enabled());
+    QCOMPARE(burn.closeEffects(), QStringList{"fire"});
+    QCOMPARE(burn.openEffects(), QStringList{"glide"});
+    QCOMPARE(burn.exclude(), QStringList{"org.omarchy.screensaver"});
+    QVERIFY(burn.skipFullscreen());
+    QVERIFY(!burn.keysInstalled());
+
+    Burn missing([] { return QString(); }, home.path(), false);
+    QVERIFY(!missing.available());
+}
+
+void OmacraftTests::burnWritesInPlaceAndKeepsOtherKeys()
+{
+    QTemporaryDir home;
+    const QString plugin = home.path() + "/burn";
+    writeBurnEffects(plugin);
+    const QString path = home.path() + "/.config/omarchy/burn-my-windows.json";
+    writeFile(path, R"({"close": {"effects": ["fire"], "speed": 1, "theirs": 1}, "someoneElses": 7})");
+    const auto inode = inodeOf(path);
+
+    Burn burn([plugin] { return plugin; }, home.path(), false);
+    burn.toggleEffect("close", "doom");
+    QCOMPARE(burn.closeEffects(), (QStringList{"fire", "doom"}));
+    burn.toggleEffect("close", "fire");
+    burn.toggleEffect("close", "doom"); // the last one stays
+    QCOMPARE(burn.closeEffects(), QStringList{"doom"});
+    burn.toggleEffect("open", "random");
+    QCOMPARE(burn.openEffects(), QStringList{"random"});
+    burn.toggleEffect("open", "fire"); // picking one ends "any"
+    QCOMPARE(burn.openEffects(), QStringList{"fire"});
+    burn.setSpeed("close", 9);
+    QCOMPARE(burn.closeSpeed(), 3.0);
+    burn.setIntensity(0.01);
+    QCOMPARE(burn.intensity(), 0.25);
+    burn.setColor("#38ff6a");
+    burn.addExclude("  org.gnome.Calculator ");
+    burn.addExclude("org.gnome.Calculator");
+    burn.removeExclude("org.omarchy.screensaver");
+    QCOMPARE(burn.exclude(), QStringList{"org.gnome.Calculator"});
+    burn.setSideEnabled("open", false);
+    QVERIFY(!burn.openEnabled());
+
+    QVERIFY(burn.error().isEmpty());
+    burn.setColor("pink");
+    QVERIFY(!burn.error().isEmpty());
+    burn.setEffects("close", {"no-such-effect"});
+    QCOMPARE(burn.closeEffects(), QStringList{"doom"});
+
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const auto saved = QJsonDocument::fromJson(file.readAll()).object();
+    QCOMPARE(saved.value("someoneElses").toInt(), 7);
+    QCOMPARE(saved.value("close").toObject().value("theirs").toInt(), 1);
+    QCOMPARE(saved.value("color").toString(), QString("#38ff6a"));
+    // The shell watches this file, so it is rewritten, not replaced.
+    QCOMPARE(inodeOf(path), inode);
+}

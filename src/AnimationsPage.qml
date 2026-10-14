@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
 
-// Hyprland animation presets and their speed: the skll.animations bar
+// Hyprland animation presets and their speed: the omacraft.animations bar
 // widget's panel, with the Lua each preset writes beside it.
 Item {
     id: page
@@ -80,7 +80,7 @@ Item {
 
         NotInstalled {
             visible: !animations.available
-            pluginId: "skll.animations"
+            pluginId: "omacraft.animations"
             what: "The presets and the script that writes them come with the Animations plugin."
         }
 
@@ -133,6 +133,109 @@ Item {
                     onClicked: animations.toggle()
                 }
                 KeyCap { text: "T" }
+            }
+        }
+
+        // Shapes and border colours, on top of whichever preset is in use.
+        Card {
+            visible: animations.available && animations.windowStyles.length > 0
+            Layout.fillWidth: true
+            implicitHeight: lookColumn.implicitHeight + 24
+            ColumnLayout {
+                id: lookColumn
+                anchors.fill: parent
+                anchors.margins: 12
+                anchors.leftMargin: 18
+                spacing: 8
+                Repeater {
+                    model: [
+                        { label: "Window shape", kind: "windows", list: animations.windowStyles, value: animations.windowStyle },
+                        { label: "Workspace shape", kind: "workspaces", list: animations.workspaceStyles, value: animations.workspaceStyle }
+                    ]
+                    delegate: RowLayout {
+                        id: styleRow
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: 10
+                        Label { Layout.preferredWidth: 120; Layout.alignment: Qt.AlignTop; topPadding: 6; text: styleRow.modelData.label; color: "#d6d6da" }
+                        Flow {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            Repeater {
+                                model: styleRow.modelData.list
+                                Chip {
+                                    required property string modelData
+                                    text: modelData === "preset" ? "Preset's own" : modelData
+                                    chosen: styleRow.modelData.value === modelData
+                                    enabled: !animations.busy
+                                    onClicked: styleRow.modelData.kind === "windows" ? animations.setWindowStyle(modelData) : animations.setWorkspaceStyle(modelData)
+                                }
+                            }
+                        }
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+                    Label { Layout.preferredWidth: 120; Layout.alignment: Qt.AlignTop; topPadding: 6; text: "Window border"; color: "#d6d6da" }
+                    Flow {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        Chip { text: "Theme's own"; chosen: animations.border === "theme"; onClicked: animations.setBorder("theme") }
+                        Repeater {
+                            model: animations.borders
+                            delegate: Rectangle {
+                                id: run
+                                required property var modelData
+                                readonly property bool chosen: animations.border === modelData.id
+                                implicitWidth: runName.implicitWidth + 58
+                                implicitHeight: 30
+                                radius: 7
+                                color: runHover.hovered ? "#1d1d21" : "#111113"
+                                border.color: chosen ? theme.accent : "#26262b"
+                                border.width: chosen ? 2 : 1
+                                // The colour run as it wraps the window.
+                                Rectangle {
+                                    x: 8; anchors.verticalCenter: parent.verticalCenter
+                                    width: 30; height: 12; radius: 3
+                                    gradient: Gradient {
+                                        orientation: Gradient.Horizontal
+                                        GradientStop { position: 0; color: "#" + run.modelData.colors[0] }
+                                        GradientStop { position: 0.5; color: "#" + run.modelData.colors[Math.floor(run.modelData.colors.length / 2)] }
+                                        GradientStop { position: 1; color: "#" + run.modelData.colors[run.modelData.colors.length - 1] }
+                                    }
+                                }
+                                Label { id: runName; x: 46; anchors.verticalCenter: parent.verticalCenter; text: run.modelData.name; color: run.chosen ? theme.accent : "#d6d6da"; font.pixelSize: 12 }
+                                HoverHandler { id: runHover; cursorShape: Qt.PointingHandCursor }
+                                TapHandler { onTapped: animations.setBorder(run.modelData.id) }
+                            }
+                        }
+                    }
+                }
+                RowLayout {
+                    visible: animations.border !== "theme"
+                    Layout.fillWidth: true
+                    spacing: 14
+                    SwitchRow {
+                        Layout.fillWidth: false
+                        Layout.preferredWidth: 300
+                        label: "Spin the border"
+                        hint: "The gradient turns around each window."
+                        checked: animations.borderLoop
+                        onToggled: on => animations.setBorderLoop(on)
+                    }
+                    SliderRow {
+                        visible: animations.borderLoop
+                        label: "One turn every"
+                        from: 1
+                        to: 10
+                        stepSize: 1
+                        decimals: 0
+                        value: animations.borderSpeed
+                        suffix: " s"
+                        onMoved: value => animations.setBorderSpeed(Math.round(value))
+                    }
+                }
             }
         }
 

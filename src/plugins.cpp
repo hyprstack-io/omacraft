@@ -38,6 +38,7 @@ Plugins::Plugins(const QString &home, bool runCommands, QObject *parent)
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, [this] { m_debounce.start(); });
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, [this] { m_debounce.start(); });
 
+
     loadSources();
     readShellConfig();
     rebuild();
@@ -47,19 +48,27 @@ Plugins::Plugins(const QString &home, bool runCommands, QObject *parent)
 
 QList<Plugins::Definition> Plugins::definitions() {
     return {
-        {"skll.agentdock", "Agent Dock",
+        {"omacraft.burn", "Burn My Windows",
+         "Window open and close effects after the GNOME extension: fire, broken glass, the Doom melt, "
+         "the Matrix, portals, an old TV switching off and more.",
+         "effects", "~/Work/omacraft-burn/plugin"},
+        {"omacraft.agentdock", "Agent Dock",
          "A dock on the screen edge that opens into a side panel with a tab per AI agent.",
          "dock", "~/Work/skll-agentdock/plugin"},
         {"omabar16", "omabar16",
          "The bar itself: segment shapes, themes, layouts, and the drag-and-drop customizer.",
          "bar", ""},
-        {"skll.animations", "Animations",
+        {"omacraft.animations", "Animations",
          "Hyprland animation presets with a speed control, from the bar.",
          "animations", ""},
-        {"skll.omascii", "omascii",
+        {"omacraft.omascii", "omascii",
          "FIGlet, TheDraw, system-font and image ASCII art for the Plymouth boot screen.",
          "ascii", "~/Projects/omascii"},
-        {"skll.hyprcraft", "HyprCraft",
+        {"omacraft.studio", "Studio (OMArofi)",
+         "The OMArofi launcher: rofi-style layouts, colour schemes and transitions. Studio also brings "
+         "wallpapers and the bar customizer. Its own uninstall.sh puts the stock menu back best.",
+         "launcher", "~/Work/skll-studio/plugin"},
+        {"omacraft.hyprcraft", "HyprCraft",
          "Hyprland, Waybar, Rofi, SwayNC, GTK/Qt and terminal configurator, as a bar dropdown.",
          "hyprcraft", "~/Projects/HyprCraft/omarchy-plugin"},
     };
