@@ -16,7 +16,7 @@ ColumnLayout {
         Layout.fillWidth: true
         Label {
             text: label.toUpperCase()
-            color: "#8a8a93"
+            color: theme.textMuted
             font.pixelSize: 11
             font.letterSpacing: 1.2
             font.weight: Font.DemiBold
@@ -36,7 +36,7 @@ ColumnLayout {
         text: hint
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
-        color: "#74747d"
+        color: theme.textDim
         font.pixelSize: 12
         textFormat: Text.StyledText
     }

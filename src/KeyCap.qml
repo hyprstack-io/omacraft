@@ -4,7 +4,7 @@ import QtQuick.Controls
 // A key, as shown next to the control it triggers.
 Rectangle {
     property string text
-    property color tint: "#9a9aa3"
+    property color tint: theme.textMuted
 
     implicitWidth: Math.max(22, label.implicitWidth + 12)
     implicitHeight: 20

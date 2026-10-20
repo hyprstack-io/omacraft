@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
+import Omacraft 1.0
 
 // omascii's boot screen designer in three steps: pick the art, fine-tune it,
 // then save it or apply it to the boot screen.
@@ -10,13 +11,15 @@ Item {
 
     property bool active: false
     property bool keysFree: false
+    // Whether a preset also switches to the TheDraw font it was made with.
+    property bool presetFont: true
     signal openPage(string name)
 
     readonly property bool dialogOpen: false
     readonly property var c: omascii.config
     readonly property var o: omascii.options
     property string source: "figlet" // saved, figlet, tdf, ttf, image
-    property int tuneTab: 0
+    property int tuneTab: Math.max(0, ["text", "image", "style", "animation"].indexOf(startTab))
     property string deleting: ""
     property bool playing: false
     property int frame: 0
@@ -137,16 +140,57 @@ Item {
         spacing: 14
 
         PageHeader {
-            title: "Boot ASCII"
+            title: "HyprSPLASH"
             subtitle: "omascii: FIGlet, TheDraw, system-font or image art for the Plymouth boot screen"
             glyph: "\u{f0b9e}"
             StatePill {
-                visible: omascii.loaded
-                text: omascii.boot.installed ? "Boot screen: omascii" : "Boot screen: " + (omascii.boot.theme || "stock")
-                on: omascii.boot.installed === true
+                visible: omascii.loaded || bootSplash.on
+                text: bootSplash.on ? "Boot screen: HyprStack"
+                    : omascii.boot.installed ? "Boot screen: omascii" : "Boot screen: " + (omascii.boot.theme || "stock")
+                on: bootSplash.on || omascii.boot.installed === true
             }
             Button { text: "Undo"; flat: true; focusPolicy: Qt.NoFocus; enabled: omascii.canUndo; onClicked: omascii.undo() }
             Button { text: "Redo"; flat: true; focusPolicy: Qt.NoFocus; enabled: omascii.canRedo; onClicked: omascii.redo() }
+        }
+
+        // The HyprStack logo animation, a ready-made boot screen beside the
+        // ones designed here.
+        Card {
+            Layout.fillWidth: true
+            implicitHeight: hyprstackRow.implicitHeight + 20
+            RowLayout {
+                id: hyprstackRow
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 10
+                CheckBox {
+                    focusPolicy: Qt.NoFocus
+                    enabled: bootSplash.available && !bootSplash.switching
+                    checked: bootSplash.on
+                    onClicked: {
+                        const wanted = checked;
+                        // Stay bound to the real boot theme; it flips once the switch is done.
+                        checked = Qt.binding(() => bootSplash.on);
+                        bootSplash.setOn(wanted);
+                    }
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 1
+                    Label { text: "Use the HyprStack boot animation as the default boot screen"; color: theme.text }
+                    Label {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        font.pixelSize: 11
+                        color: bootSplash.error ? theme.dangerText : theme.textFaint
+                        text: bootSplash.error ? bootSplash.error
+                            : !bootSplash.available ? "Not installed: it comes with the omacraft package."
+                            : bootSplash.switching ? "Switching in the terminal: it asks for your password, then rebuilds the initramfs."
+                            : bootSplash.on ? "The HyprStack logo plays at boot, with the disk password prompt below it. Untick to go back to " + bootSplash.previousTheme() + "."
+                            : "The HyprStack logo animation, with the disk password prompt below it. Asks for your password and rebuilds the initramfs."
+                    }
+                }
+            }
         }
 
         MessageBar {
@@ -222,10 +266,10 @@ Item {
                                 Label {
                                     Layout.fillWidth: true
                                     text: modelData.name
-                                    color: inUse ? theme.accent : "white"
+                                    color: inUse ? theme.accent : theme.text
                                     elide: Text.ElideRight
                                 }
-                                Label { text: modelData.detail; color: "#5f5f68"; font.pixelSize: 10; elide: Text.ElideRight; Layout.maximumWidth: 120 }
+                                Label { text: modelData.detail; color: theme.textFaint; font.pixelSize: 10; elide: Text.ElideRight; Layout.maximumWidth: 120 }
                             }
                             onClicked: {
                                 fontList.currentIndex = index;
@@ -238,7 +282,7 @@ Item {
                             visible: fontList.count === 0
                             horizontalAlignment: Text.AlignHCenter
                             wrapMode: Text.WordWrap
-                            color: "#74747d"
+                            color: theme.textDim
                             text: omascii.loadingFonts ? "Loading fonts…"
                                 : page.source === "tdf" && (page.o.tdf || {}).count === 0 ? "No TheDraw fonts yet."
                                 : "No fonts match."
@@ -289,8 +333,8 @@ Item {
                                 ColumnLayout {
                                     Layout.fillWidth: true
                                     spacing: 0
-                                    Label { Layout.fillWidth: true; text: modelData.name; color: inUse ? theme.accent : "white"; elide: Text.ElideMiddle }
-                                    Label { text: modelData.dir; color: "#5f5f68"; font.pixelSize: 10 }
+                                    Label { Layout.fillWidth: true; text: modelData.name; color: inUse ? theme.accent : theme.text; elide: Text.ElideMiddle }
+                                    Label { text: modelData.dir; color: theme.textFaint; font.pixelSize: 10 }
                                 }
                             }
                             onClicked: omascii.setOption("image", modelData.path)
@@ -313,8 +357,8 @@ Item {
                             width: savedList.width - 10
                             height: 108
                             radius: 8
-                            color: "#111113"
-                            border.color: "#26262b"
+                            color: theme.inset
+                            border.color: theme.border
                             clip: true
                             ColumnLayout {
                                 anchors.fill: parent
@@ -322,22 +366,20 @@ Item {
                                 spacing: 4
                                 RowLayout {
                                     Layout.fillWidth: true
-                                    Label { Layout.fillWidth: true; text: savedTile.modelData.name; color: "white"; elide: Text.ElideRight; font.pixelSize: 12 }
-                                    Label { text: savedTile.modelData.kind; color: "#5f5f68"; font.pixelSize: 10 }
+                                    Label { Layout.fillWidth: true; text: savedTile.modelData.name; color: theme.text; elide: Text.ElideRight; font.pixelSize: 12 }
+                                    Label { text: savedTile.modelData.kind; color: theme.textFaint; font.pixelSize: 10 }
                                 }
                                 Item {
                                     Layout.fillWidth: true
                                     Layout.fillHeight: true
                                     clip: true
-                                    Text {
+                                    AsciiView {
                                         id: thumb
-                                        text: savedTile.modelData.html || ""
-                                        textFormat: Text.RichText
-                                        color: "#d6d6da"
-                                        font.family: "monospace"
-                                        font.pixelSize: 10
-                                        transformOrigin: Item.TopLeft
-                                        scale: Math.min(1, parent.width / Math.max(1, implicitWidth), parent.height / Math.max(1, implicitHeight))
+                                        html: savedTile.modelData.html || ""
+                                        color: theme.textSoft
+                                        fontFamily: "monospace"
+                                        pixelSize: 10
+                                        zoom: Math.min(1, parent.width / Math.max(1, naturalWidth), parent.height / Math.max(1, naturalHeight))
                                     }
                                 }
                                 RowLayout {
@@ -349,7 +391,7 @@ Item {
                                         flat: true
                                         focusPolicy: Qt.NoFocus
                                         implicitHeight: 28
-                                        Material.foreground: page.deleting === savedTile.modelData.id ? "#ff8a8a" : undefined
+                                        Material.foreground: page.deleting === savedTile.modelData.id ? theme.danger : undefined
                                         onClicked: {
                                             if (page.deleting === savedTile.modelData.id) {
                                                 omascii.removeSaved(savedTile.modelData.id);
@@ -366,7 +408,7 @@ Item {
                             anchors.centerIn: parent
                             visible: savedList.count === 0
                             text: "Nothing saved yet."
-                            color: "#74747d"
+                            color: theme.textDim
                         }
                     }
                 }
@@ -385,22 +427,20 @@ Item {
                     Layout.minimumHeight: 200
                     radius: 12
                     color: omascii.previewBackground
-                    border.color: "#26262b"
+                    border.color: theme.border
                     clip: true
 
                     readonly property string shown: page.playing && omascii.frames.length > 0
                                                     ? omascii.frames[Math.min(page.frame, omascii.frames.length - 1)]
                                                     : omascii.previewHtml
-                    Text {
+                    AsciiView {
                         id: art
                         anchors.centerIn: parent
-                        text: stage.shown
-                        textFormat: Text.RichText
+                        html: stage.shown
                         color: omascii.previewForeground
-                        font.family: "monospace"
-                        font.pixelSize: 14
-                        lineHeight: 1.0
-                        scale: Math.min(1.6, (stage.width - 40) / Math.max(1, implicitWidth), (stage.height - 40) / Math.max(1, implicitHeight))
+                        fontFamily: "monospace"
+                        pixelSize: 14
+                        zoom: Math.min(1.6, (stage.width - 40) / Math.max(1, naturalWidth), (stage.height - 40) / Math.max(1, naturalHeight))
                     }
                     RowLayout {
                         anchors.left: parent.left
@@ -409,7 +449,7 @@ Item {
                         spacing: 8
                         Label {
                             text: omascii.previewCols + " × " + omascii.previewRows + (omascii.rendering ? " · drawing…" : "")
-                            color: "#8a8a93"
+                            color: theme.textMuted
                             font.pixelSize: 11
                             font.family: "monospace"
                         }
@@ -469,7 +509,7 @@ Item {
                                     spacing: 8
                                     RowLayout {
                                         Layout.fillWidth: true
-                                        Label { Layout.preferredWidth: 110; text: "Text"; color: "#d6d6da" }
+                                        Label { Layout.preferredWidth: 110; text: "Text"; color: theme.textSoft }
                                         TextField {
                                             Layout.fillWidth: true
                                             text: page.c.text || ""
@@ -506,14 +546,14 @@ Item {
                                     Label {
                                         Layout.fillWidth: true
                                         text: page.c.source === "image" ? "Using " + page.home(page.c.image) : "Pick an image on the left to use one."
-                                        color: page.c.source === "image" ? "white" : "#74747d"
+                                        color: page.c.source === "image" ? theme.text : theme.textDim
                                         elide: Text.ElideMiddle
                                     }
                                     SliderRow { label: "Columns"; from: 20; to: 240; stepSize: 1; decimals: 0; value: page.c.imageWidth || 80; onMoved: v => omascii.setOption("imageWidth", Math.round(v)) }
                                     ChipRow { label: "Charset"; choices: page.o.charsets || []; value: page.c.charset; onPicked: v => omascii.setOption("charset", v) }
                                     RowLayout {
                                         visible: page.c.charset === "custom"
-                                        Label { Layout.preferredWidth: 110; text: "Ramp"; color: "#d6d6da" }
+                                        Label { Layout.preferredWidth: 110; text: "Ramp"; color: theme.textSoft }
                                         TextField { Layout.fillWidth: true; text: page.c.chars || ""; placeholderText: " .:oO@ (darkest first)"; font.family: "monospace"; onTextEdited: omascii.setOption("chars", text) }
                                     }
                                     SwitchRow { label: "Image colours"; checked: page.c.imageColors === true; onToggled: on => omascii.setOption("imageColors", on) }
@@ -534,6 +574,55 @@ Item {
                                 ColumnLayout {
                                     width: styleScroll.availableWidth
                                     spacing: 8
+                                    // TheDraw-style looks in one click: colours, shading behind
+                                    // the ink, shadow and frame, and a font that suits them.
+                                    RowLayout {
+                                        visible: (page.o.presets || []).length > 0
+                                        Layout.fillWidth: true
+                                        spacing: 6
+                                        Label { Layout.preferredWidth: 110; Layout.alignment: Qt.AlignTop; topPadding: 6; text: "Presets"; color: theme.textSoft }
+                                        Flow {
+                                            Layout.fillWidth: true
+                                            spacing: 5
+                                            Repeater {
+                                                model: page.o.presets || []
+                                                delegate: Rectangle {
+                                                    id: preset
+                                                    required property var modelData
+                                                    // "theme" follows the Omarchy theme's own colours.
+                                                    readonly property var stops: modelData.swatch === "theme"
+                                                        ? ["red", "yellow", "green", "cyan", "blue", "magenta"].map(n => page.paletteHex(n)).filter(h => h.startsWith("#")).map(h => h.slice(1))
+                                                        : modelData.swatch || []
+                                                    readonly property bool chosen: Object.keys(modelData.options).every(k => JSON.stringify(page.c[k]) === JSON.stringify(modelData.options[k]))
+                                                    implicitWidth: presetName.implicitWidth + 58
+                                                    implicitHeight: 30
+                                                    radius: 7
+                                                    color: presetHover.hovered ? theme.hover : theme.inset
+                                                    border.color: chosen ? theme.accent : theme.border
+                                                    border.width: chosen ? 2 : 1
+                                                    Row {
+                                                        x: 8; anchors.verticalCenter: parent.verticalCenter
+                                                        Repeater {
+                                                            model: preset.stops
+                                                            Rectangle { required property string modelData; width: 34 / Math.max(1, preset.stops.length); height: 12; color: "#" + modelData }
+                                                        }
+                                                    }
+                                                    Label { id: presetName; x: 48; anchors.verticalCenter: parent.verticalCenter; text: preset.modelData.name; color: preset.chosen ? theme.accent : theme.textSoft; font.pixelSize: 12 }
+                                                    ToolTip.visible: presetHover.hovered
+                                                    ToolTip.text: page.presetFont ? "With " + preset.modelData.font : "Keeps your font"
+                                                    HoverHandler { id: presetHover; cursorShape: Qt.PointingHandCursor }
+                                                    TapHandler { onTapped: omascii.applyPreset(preset.modelData.options, page.presetFont ? preset.modelData.font : "") }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    SwitchRow {
+                                        visible: (page.o.presets || []).length > 0
+                                        label: "Presets pick a font"
+                                        hint: "Switch to the TheDraw font each preset was made with (needs the TheDraw fonts)."
+                                        checked: page.presetFont
+                                        onToggled: on => page.presetFont = on
+                                    }
                                     ColorRow { label: "Colour"; value: page.c.color; onPicked: v => omascii.setOption("color", v) }
                                     ChipRow { label: "Colour mode"; choices: page.o.colorModes || []; value: page.c.colorMode; onPicked: v => omascii.setOption("colorMode", v) }
                                     ColorRow {
@@ -547,7 +636,7 @@ Item {
                                         visible: page.c.colorMode === "palette"
                                         Layout.fillWidth: true
                                         spacing: 6
-                                        Label { Layout.preferredWidth: 110; Layout.alignment: Qt.AlignTop; topPadding: 6; text: "Palette"; color: "#d6d6da" }
+                                        Label { Layout.preferredWidth: 110; Layout.alignment: Qt.AlignTop; topPadding: 6; text: "Palette"; color: theme.textSoft }
                                         Flow {
                                             Layout.fillWidth: true
                                             spacing: 5
@@ -561,8 +650,8 @@ Item {
                                                     implicitWidth: palName.implicitWidth + 58
                                                     implicitHeight: 30
                                                     radius: 7
-                                                    color: palHover.hovered ? "#1d1d21" : "#111113"
-                                                    border.color: chosen ? theme.accent : "#26262b"
+                                                    color: palHover.hovered ? theme.hover : theme.inset
+                                                    border.color: chosen ? theme.accent : theme.border
                                                     border.width: chosen ? 2 : 1
                                                     Row {
                                                         x: 8; anchors.verticalCenter: parent.verticalCenter
@@ -571,7 +660,7 @@ Item {
                                                             Rectangle { required property string modelData; width: 34 / Math.max(1, pal.stops.length); height: 12; color: "#" + modelData }
                                                         }
                                                     }
-                                                    Label { id: palName; x: 48; anchors.verticalCenter: parent.verticalCenter; text: pal.modelData; color: pal.chosen ? theme.accent : "#d6d6da"; font.pixelSize: 12 }
+                                                    Label { id: palName; x: 48; anchors.verticalCenter: parent.verticalCenter; text: pal.modelData; color: pal.chosen ? theme.accent : theme.textSoft; font.pixelSize: 12 }
                                                     HoverHandler { id: palHover; cursorShape: Qt.PointingHandCursor }
                                                     TapHandler { onTapped: omascii.setOption("colorPalette", pal.modelData) }
                                                 }
@@ -585,9 +674,16 @@ Item {
                                         value: page.c.gradient
                                         onPicked: v => omascii.setOption("gradient", v)
                                     }
+                                    ChipRow {
+                                        visible: (page.o.inkBgs || []).length > 0
+                                        label: "Ink background"
+                                        choices: page.o.inkBgs || []
+                                        value: page.c.inkBg || "none"
+                                        onPicked: v => omascii.setOption("inkBg", v)
+                                    }
                                     SwitchRow { label: "Font colours"; hint: "Keep a TheDraw colour font's own colours."; checked: page.c.fontColors === true; onToggled: on => omascii.setOption("fontColors", on) }
                                     RowLayout {
-                                        Label { Layout.preferredWidth: 110; text: "Fill"; color: "#d6d6da" }
+                                        Label { Layout.preferredWidth: 110; text: "Fill"; color: theme.textSoft }
                                         TextField { Layout.preferredWidth: 160; text: page.c.fill || ""; placeholderText: "█ or 01"; font.family: "monospace"; onTextEdited: omascii.setOption("fill", text) }
                                     }
                                     ChipRow { label: "Flip"; choices: page.o.flips || []; value: page.c.flip; onPicked: v => omascii.setOption("flip", v) }
@@ -611,7 +707,7 @@ Item {
                                         Label {
                                             Layout.fillWidth: true
                                             text: (page.c.effects || []).length + " intro effects · fewer make a smaller initramfs"
-                                            color: "#8a8a93"
+                                            color: theme.textMuted
                                             font.pixelSize: 12
                                         }
                                         Button { text: "Select all"; flat: true; focusPolicy: Qt.NoFocus; onClicked: omascii.setEffects(page.o.effects || []) }
@@ -635,7 +731,7 @@ Item {
                                                 Layout.fillWidth: true
                                                 Layout.topMargin: 6
                                                 SectionLabel { text: group.modelData.name }
-                                                Label { text: group.chosen.length + " of " + group.modelData.effects.length; color: "#5f5f68"; font.pixelSize: 11 }
+                                                Label { text: group.chosen.length + " of " + group.modelData.effects.length; color: theme.textFaint; font.pixelSize: 11 }
                                                 Item { Layout.fillWidth: true }
                                                 Button {
                                                     text: "All"; flat: true; focusPolicy: Qt.NoFocus
@@ -726,7 +822,7 @@ Item {
         signal picked(string value)
         Layout.fillWidth: true
         spacing: 6
-        Label { Layout.preferredWidth: 110; text: chipRow.label; color: "#d6d6da"; Layout.alignment: Qt.AlignTop; topPadding: 6 }
+        Label { Layout.preferredWidth: 110; text: chipRow.label; color: theme.textSoft; Layout.alignment: Qt.AlignTop; topPadding: 6 }
         Flow {
             Layout.fillWidth: true
             spacing: 5
@@ -750,7 +846,7 @@ Item {
         signal picked(string value)
         Layout.fillWidth: true
         spacing: 6
-        Label { Layout.preferredWidth: 110; text: colorRow.label; color: "#d6d6da"; Layout.alignment: Qt.AlignTop; topPadding: 4 }
+        Label { Layout.preferredWidth: 110; text: colorRow.label; color: theme.textSoft; Layout.alignment: Qt.AlignTop; topPadding: 4 }
         Flow {
             Layout.fillWidth: true
             spacing: 4
@@ -760,7 +856,7 @@ Item {
                     required property string modelData
                     width: 24; height: 24; radius: 5
                     color: page.paletteHex(modelData)
-                    border.color: colorRow.value === modelData ? "white" : "#3a3a40"
+                    border.color: colorRow.value === modelData ? theme.text : theme.borderStrong
                     border.width: colorRow.value === modelData ? 2 : 1
                     ToolTip.visible: swatchHover.hovered
                     ToolTip.text: modelData
@@ -776,6 +872,12 @@ Item {
                 font.family: "monospace"
                 font.pixelSize: 11
                 onEditingFinished: if (/^#[0-9a-fA-F]{6}$/.test(text.trim())) colorRow.picked(text.trim())
+            }
+            ColorButton {
+                value: colorRow.value || ""
+                fallback: page.paletteHex(colorRow.value || "accent")
+                title: colorRow.label
+                onPicked: hex => colorRow.picked(hex)
             }
         }
     }

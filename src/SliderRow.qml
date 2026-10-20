@@ -21,7 +21,7 @@ RowLayout {
     Label {
         Layout.preferredWidth: 120
         text: row.label
-        color: "#d6d6da"
+        color: theme.textSoft
         elide: Text.ElideRight
     }
     Slider {

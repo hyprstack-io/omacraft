@@ -15,14 +15,14 @@ Rectangle {
     implicitHeight: 30
     radius: 7
     opacity: dimmed ? 0.45 : 1
-    color: chosen ? Qt.rgba(tone.r, tone.g, tone.b, 0.16) : hover.hovered ? "#1d1d21" : "#111113"
-    border.color: chosen ? theme.accent : "#26262b"
+    color: chosen ? Qt.rgba(tone.r, tone.g, tone.b, 0.16) : hover.hovered ? theme.hover : theme.inset
+    border.color: chosen ? theme.accent : theme.border
 
     Label {
         id: label
         anchors.centerIn: parent
         text: chip.text
-        color: chip.chosen ? theme.accent : "#d6d6da"
+        color: chip.chosen ? theme.accent : theme.textSoft
         font.pixelSize: 12
     }
     HoverHandler { id: hover; cursorShape: Qt.PointingHandCursor }

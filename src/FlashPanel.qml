@@ -78,8 +78,8 @@ Rectangle {
         width: Math.min(parent.width - 48, 680)
         height: Math.min(parent.height - 48, body.implicitHeight + 48)
         radius: 12
-        color: "#18181b"
-        border.color: "#2a2a30"
+        color: theme.card
+        border.color: theme.borderStrong
 
         MouseArea { anchors.fill: parent }
 
@@ -93,7 +93,7 @@ Rectangle {
                 Layout.fillWidth: true
                 Label {
                     text: "Write to a USB drive"
-                    color: "white"
+                    color: theme.text
                     font.pixelSize: 18
                     font.weight: Font.DemiBold
                 }
@@ -106,8 +106,8 @@ Rectangle {
                 Layout.fillWidth: true
                 implicitHeight: isoRow.implicitHeight + 20
                 radius: 8
-                color: "#111113"
-                border.color: "#26262b"
+                color: theme.inset
+                border.color: theme.border
 
                 RowLayout {
                     id: isoRow
@@ -120,7 +120,7 @@ Rectangle {
                         Label {
                             Layout.fillWidth: true
                             text: iso.flashIso === "" ? "No ISO chosen" : iso.flashIso.split("/").pop()
-                            color: iso.flashIso === "" ? "#8a8a93" : "white"
+                            color: iso.flashIso === "" ? theme.textMuted : theme.text
                             font.family: "monospace"
                             font.pixelSize: 13
                             elide: Text.ElideMiddle
@@ -129,7 +129,7 @@ Rectangle {
                             visible: iso.flashIso !== ""
                             Layout.fillWidth: true
                             text: iso.flashIsoSize + " · " + iso.flashIso
-                            color: "#74747d"
+                            color: theme.textDim
                             font.pixelSize: 11
                             elide: Text.ElideMiddle
                         }
@@ -149,13 +149,13 @@ Rectangle {
                 Layout.fillWidth: true
                 Label {
                     text: "REMOVABLE DRIVES"
-                    color: "#8a8a93"
+                    color: theme.textMuted
                     font.pixelSize: 11
                     font.letterSpacing: 1.2
                     font.weight: Font.DemiBold
                 }
                 Item { Layout.fillWidth: true }
-                Label { text: "↑ ↓ to choose"; color: "#74747d"; font.pixelSize: 11 }
+                Label { text: "↑ ↓ to choose"; color: theme.textDim; font.pixelSize: 11 }
                 Button {
                     text: "Refresh"
                     flat: true
@@ -170,14 +170,14 @@ Rectangle {
                 visible: iso.drives.length > 0 && iso.flashIso === ""
                 Layout.fillWidth: true
                 text: "Choose an ISO first, then a drive."
-                color: "#8a8a93"
+                color: theme.textMuted
             }
 
             Label {
                 visible: iso.drives.length === 0
                 Layout.fillWidth: true
                 text: "No removable drives found. Plug in a USB stick and press R."
-                color: "#8a8a93"
+                color: theme.textMuted
                 wrapMode: Text.WordWrap
             }
 
@@ -193,8 +193,8 @@ Rectangle {
                         Layout.fillWidth: true
                         implicitHeight: driveRow.implicitHeight + 18
                         radius: 8
-                        color: chosen ? Qt.rgba(panel.accent.r, panel.accent.g, panel.accent.b, 0.10) : "#111113"
-                        border.color: chosen ? panel.accent : "#26262b"
+                        color: chosen ? Qt.rgba(panel.accent.r, panel.accent.g, panel.accent.b, 0.10) : theme.inset
+                        border.color: chosen ? panel.accent : theme.border
                         opacity: usable ? 1 : 0.55
 
                         RowLayout {
@@ -205,7 +205,7 @@ Rectangle {
                             spacing: 12
                             Label {
                                 text: modelData.name
-                                color: chosen ? panel.accent : "white"
+                                color: chosen ? panel.accent : theme.text
                                 font.family: "monospace"
                                 font.pixelSize: 14
                                 font.weight: Font.DemiBold
@@ -217,7 +217,7 @@ Rectangle {
                                 Label {
                                     Layout.fillWidth: true
                                     text: modelData.model + "  ·  " + modelData.size + (modelData.transport ? "  ·  " + modelData.transport : "")
-                                    color: "white"
+                                    color: theme.text
                                     elide: Text.ElideRight
                                 }
                                 Label {
@@ -225,7 +225,7 @@ Rectangle {
                                     visible: text !== ""
                                     text: modelData.blocker !== "" ? modelData.blocker
                                           : modelData.mountpoints !== "" ? "Mounted at " + modelData.mountpoints + ", unmounted before writing" : ""
-                                    color: modelData.blocker !== "" ? "#ff8a8a" : "#8a8a93"
+                                    color: modelData.blocker !== "" ? theme.danger : theme.textMuted
                                     font.pixelSize: 11
                                     elide: Text.ElideRight
                                 }
@@ -252,7 +252,7 @@ Rectangle {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     textFormat: Text.StyledText
-                    color: "#ffb4b4"
+                    color: theme.dangerText
                     text: panel.selected ? "Everything on <b>" + panel.selected.model + "</b> (" + panel.selected.name + ", "
                                            + panel.selected.size + ") will be erased." : ""
                 }
@@ -271,7 +271,7 @@ Rectangle {
                         text: "Erase and write"
                         focusPolicy: Qt.NoFocus
                         enabled: panel.canWrite
-                        Material.background: "#c94a4a"
+                        Material.background: theme.danger
                         Material.foreground: "white"
                         onClicked: panel.write()
                     }
@@ -295,9 +295,9 @@ Rectangle {
                     Label {
                         Layout.fillWidth: true
                         text: iso.cancelling ? "Stopping…" : iso.stage
-                        color: "white"
+                        color: theme.text
                     }
-                    Label { text: iso.elapsed; color: "#8a8a93"; font.family: "monospace" }
+                    Label { text: iso.elapsed; color: theme.textMuted; font.family: "monospace" }
                     Button {
                         text: "Stop"
                         flat: true

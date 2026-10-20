@@ -1,0 +1,269 @@
+# HyprStack Plymouth theme: the HyprStack logo animation over the colour of
+# its own backdrop, with Omarchy's LUKS prompt and progress bar below it.
+#
+# frames/0.png .. frames/239.png come from hyprstack-boot-logo.mp4 through
+# plymouth/make-frames.sh: 24 fps, cropped to the logo and faded out at the
+# edges so they sit on the plain background. Frames are decoded one at a time
+# as they're shown, so memory holds a single frame rather than all 240.
+
+Window.SetBackgroundTopColor(0.125, 0.149, 0.161);
+Window.SetBackgroundBottomColor(0.125, 0.149, 0.161);
+
+#----------------------------------------- Animation --------------------------------
+
+global.frame_count = 240;
+global.video_fps = 24;
+global.refresh_fps = 50;  # Plymouth calls the refresh function 50 times a second
+
+global.shown_frame = -1;
+global.tick = 0;
+
+logo.image = Image("frames/0.png");
+logo.sprite = Sprite(logo.image);
+logo.sprite.SetOpacity(1);
+
+fun animate_logo() {
+  frame = Math.Int(global.tick * global.video_fps / global.refresh_fps) % global.frame_count;
+  if (frame != global.shown_frame) {
+    global.shown_frame = frame;
+    logo.image = Image("frames/" + frame + ".png");
+    logo.sprite.SetImage(logo.image);
+  }
+}
+
+global.fake_progress_limit = 0.7;  # Target percentage for fake progress (0.0 to 1.0)
+global.fake_progress_duration = 15.0;  # Duration in seconds to reach limit
+
+global.animation_frame = 0;
+global.fake_progress = 0.0;
+global.real_progress = 0.0;
+global.fake_progress_active = 0;
+global.fake_progress_start_time = 0.0;
+global.password_shown = 0;
+global.max_progress = 0.0;
+
+global.layout_width = 0;
+global.layout_height = 0;
+
+fun refresh_callback() {
+  # Displays can show up after this script ran, e.g. a Thunderbolt monitor
+  # whose DisplayPort tunnel comes up after plymouthd started, so re-center
+  # when the window changes size.
+  if (Window.GetWidth() != global.layout_width || Window.GetHeight() != global.layout_height) {
+    layout();
+  }
+
+  global.tick++;
+  animate_logo();
+
+  global.animation_frame++;
+
+  if (global.fake_progress_active == 1) {
+    elapsed_time = global.animation_frame / 50.0;
+    time_ratio = elapsed_time / global.fake_progress_duration;
+    if (time_ratio > 1.0) time_ratio = 1.0;
+
+    # Ease out: 1 - (1 - x)^2
+    eased_ratio = 1 - ((1 - time_ratio) * (1 - time_ratio));
+    global.fake_progress = eased_ratio * global.fake_progress_limit;
+    update_progress_bar(global.fake_progress);
+  }
+}
+
+Plymouth.SetRefreshFunction(refresh_callback);
+
+#----------------------------------------- Helper Functions --------------------------------
+
+fun update_progress_bar(progress) {
+  # Only ever move forward
+  if (progress > global.max_progress) {
+    global.max_progress = progress;
+
+    width = Math.Int(progress_bar.original_image.GetWidth() * progress);
+    if (width < 1) width = 1;
+
+    progress_bar.image = progress_bar.original_image.Scale(width, progress_bar.original_image.GetHeight());
+    progress_bar.sprite.SetImage(progress_bar.image);
+  }
+}
+
+fun show_progress_bar() {
+  progress_box.sprite.SetOpacity(1);
+  progress_bar.sprite.SetOpacity(1);
+}
+
+fun hide_progress_bar() {
+  progress_box.sprite.SetOpacity(0);
+  progress_bar.sprite.SetOpacity(0);
+}
+
+fun show_password_dialog() {
+  lock.sprite.SetOpacity(1);
+  entry.sprite.SetOpacity(1);
+}
+
+fun hide_password_dialog() {
+  lock.sprite.SetOpacity(0);
+  entry.sprite.SetOpacity(0);
+
+  for (index = 0; bullet.sprites[index]; index++) {
+    bullet.sprites[index].SetOpacity(0);
+  }
+}
+
+fun start_fake_progress() {
+  global.fake_progress_active = 1;
+  global.animation_frame = 0;
+  global.max_progress = 0.0;
+  global.fake_progress = 0.0;
+  global.fake_progress_start_time = 0.0;
+}
+
+fun stop_fake_progress() {
+  global.fake_progress_active = 0;
+}
+
+#----------------------------------------- Dialogue --------------------------------
+
+lock.image = Image("lock.png");
+entry.image = Image("entry.png");
+bullet.image = Image("bullet.png");
+
+entry.sprite = Sprite(entry.image);
+entry.sprite.SetOpacity(0);
+
+# The lock is 84x96; keep it a little shorter than the entry field
+lock.height = entry.image.GetHeight() * 0.8;
+lock.width = 84 * (lock.height / 96);
+
+lock.sprite = Sprite(lock.image.Scale(lock.width, lock.height));
+lock.sprite.SetOpacity(0);
+
+bullet.sprites = [];
+
+fun position_bullet(index) {
+  bullet.sprites[index].SetPosition(entry.x + 20 + index * (7 + 5), entry.y + entry.image.GetHeight() / 2 - 3.5, 10002);
+}
+
+fun display_normal_callback() {
+  hide_password_dialog();
+
+  mode = Plymouth.GetMode();
+
+  # The progress bar only means something after the disk is unlocked
+  if ((mode == "boot" || mode == "resume") && global.password_shown == 1) {
+    show_progress_bar();
+    start_fake_progress();
+  }
+}
+
+fun display_password_callback(prompt, bullets) {
+  global.password_shown = 1;
+
+  stop_fake_progress();
+  hide_progress_bar();
+  show_password_dialog();
+
+  for (index = 0; bullet.sprites[index]; index++) {
+    bullet.sprites[index].SetOpacity(0);
+  }
+
+  max_bullets = 21;
+  bullets_to_show = bullets;
+  if (bullets_to_show > max_bullets) {
+    bullets_to_show = max_bullets;
+  }
+
+  for (index = 0; index < bullets_to_show; index++) {
+    if (!bullet.sprites[index]) {
+      bullet.sprites[index] = Sprite(bullet.image.Scale(7, 7));
+      position_bullet(index);
+    }
+
+    bullet.sprites[index].SetOpacity(1);
+  }
+}
+
+Plymouth.SetDisplayNormalFunction(display_normal_callback);
+Plymouth.SetDisplayPasswordFunction(display_password_callback);
+
+#----------------------------------------- Progress Bar --------------------------------
+
+progress_box.image = Image("progress_box.png");
+progress_box.sprite = Sprite(progress_box.image);
+progress_box.sprite.SetOpacity(0);
+
+progress_bar.original_image = Image("progress_bar.png");
+progress_bar.sprite = Sprite();
+progress_bar.image = progress_bar.original_image.Scale(1, progress_bar.original_image.GetHeight());
+progress_bar.sprite.SetOpacity(0);
+
+fun progress_callback(duration, progress) {
+  # Duration and progress freeze while the disk is being decrypted, so fake
+  # progress runs until the real figure is moving again and has caught up.
+  if (global.fake_progress_start_time == 0.0) {
+    global.fake_progress_start_time = duration;
+  }
+
+  global.real_progress = progress;
+
+  if (duration > global.fake_progress_start_time && progress > global.fake_progress) {
+    stop_fake_progress();
+    update_progress_bar(progress);
+  }
+}
+
+Plymouth.SetBootProgressFunction(progress_callback);
+
+#----------------------------------------- Layout --------------------------------
+
+fun layout() {
+  global.layout_width = Window.GetWidth();
+  global.layout_height = Window.GetHeight();
+
+  # The logo sits a little above center, leaving room for the prompt below
+  logo.sprite.SetX(global.layout_width / 2 - logo.image.GetWidth() / 2);
+  logo.sprite.SetY(global.layout_height / 2 - logo.image.GetHeight() / 2 - 60);
+  logo.sprite.SetZ(1);
+
+  entry.x = global.layout_width / 2 - entry.image.GetWidth() / 2;
+  # The frames fade out over their outer rows, so the prompt can tuck under
+  entry.y = logo.sprite.GetY() + logo.image.GetHeight() - 20;
+  entry.sprite.SetPosition(entry.x, entry.y, 10001);
+
+  lock.x = entry.x - lock.width - 15;
+  lock.y = entry.y + entry.image.GetHeight() / 2 - lock.height / 2;
+  lock.sprite.SetPosition(lock.x, lock.y, 10001);
+
+  for (index = 0; bullet.sprites[index]; index++) {
+    position_bullet(index);
+  }
+
+  progress_box.x = global.layout_width / 2 - progress_box.image.GetWidth() / 2;
+  progress_box.y = entry.y + entry.image.GetHeight() / 2 - progress_box.image.GetHeight() / 2;
+  progress_box.sprite.SetPosition(progress_box.x, progress_box.y, 0);
+
+  progress_bar.x = global.layout_width / 2 - progress_bar.original_image.GetWidth() / 2;
+  progress_bar.y = progress_box.y + (progress_box.image.GetHeight() - progress_bar.original_image.GetHeight()) / 2;
+  progress_bar.sprite.SetPosition(progress_bar.x, progress_bar.y, 1);
+}
+
+layout();
+
+#----------------------------------------- Message --------------------------------
+
+message_sprite = Sprite();
+message_sprite.SetPosition(10, 10, 10000);
+
+fun display_message_callback(text) {
+  message = Image.Text(text, 1, 1, 1);
+  message_sprite.SetImage(message);
+  message_sprite.SetOpacity(1);
+}
+
+fun hide_message_callback(text) {
+  message_sprite.SetOpacity(0);
+}
+
+Plymouth.SetDisplayMessageFunction(display_message_callback);
+Plymouth.SetHideMessageFunction(hide_message_callback);

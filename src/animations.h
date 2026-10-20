@@ -33,6 +33,8 @@ class Animations : public QObject {
     Q_PROPERTY(QVariantList borders READ borders NOTIFY changed)
     Q_PROPERTY(QStringList windowStyles READ windowStyles NOTIFY changed)
     Q_PROPERTY(QStringList workspaceStyles READ workspaceStyles NOTIFY changed)
+    // Every named curve (bezier points or spring), for drawing presets' motion.
+    Q_PROPERTY(QVariantMap curves READ curves NOTIFY changed)
 
 public:
     // pluginDir finds the plugin's folder each time, since it can be
@@ -61,6 +63,7 @@ public:
     QVariantList borders() const { return m_borders; }
     QStringList windowStyles() const { return m_windowStyles; }
     QStringList workspaceStyles() const { return m_workspaceStyles; }
+    QVariantMap curves() const { return m_curves; }
 
     QString script() const;
 
@@ -97,6 +100,9 @@ private:
     };
     void run(const QStringList &arguments, bool record);
     void setBusy(bool busy);
+    // Gives each preset its "animations" (duration, curve, style per part)
+    // from the plugin's presets.json and your own file, which status leaves out.
+    void attachMotion();
     void setError(const QString &message);
 
     std::function<QString()> m_pluginDir;
@@ -119,6 +125,7 @@ private:
     QVariantList m_borders;
     QStringList m_windowStyles;
     QStringList m_workspaceStyles;
+    QVariantMap m_curves;
     QList<Choice> m_undo;
     QList<Choice> m_redo;
 };

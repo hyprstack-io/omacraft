@@ -1,0 +1,9 @@
+[Plymouth Theme]
+Name=HyprStack
+Description=The HyprStack logo animation, with Omarchy's LUKS prompt and progress bar.
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/hyprstack-boot
+ScriptFile=/usr/share/plymouth/themes/hyprstack-boot/hyprstack-boot.script
+ConsoleLogBackgroundColor=0x202629

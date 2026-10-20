@@ -146,7 +146,7 @@ Rectangle {
         width: Math.min(parent.width - 48, 1180)
         height: parent.height - 48
         radius: 12
-        color: "#151518"
+        color: theme.card
         border.color: panel.line
         clip: true
 
@@ -164,12 +164,12 @@ Rectangle {
                 Layout.margins: 16
                 spacing: 10
 
-                Label { text: "Configuration files"; color: "white"; font.pixelSize: 16; font.weight: Font.DemiBold }
+                Label { text: "Configuration files"; color: theme.text; font.pixelSize: 16; font.weight: Font.DemiBold }
                 Label {
                     Layout.fillWidth: true
                     text: "Files on the live system, or the profile's own with <b>profile:</b> in front."
                     textFormat: Text.StyledText
-                    color: "#74747d"
+                    color: theme.textDim
                     font.pixelSize: 12
                     wrapMode: Text.WordWrap
                 }
@@ -191,7 +191,7 @@ Rectangle {
                     visible: panel.pathError !== ""
                     Layout.fillWidth: true
                     text: panel.pathError
-                    color: "#ff8a8a"
+                    color: theme.danger
                     font.pixelSize: 12
                     wrapMode: Text.WordWrap
                 }
@@ -209,7 +209,7 @@ Rectangle {
 
                         component SectionLabel: Label {
                             Layout.topMargin: 8
-                            color: "#8a8a93"
+                            color: theme.textMuted
                             font.pixelSize: 11
                             font.letterSpacing: 1.2
                             font.weight: Font.DemiBold
@@ -225,7 +225,7 @@ Rectangle {
                             implicitHeight: rowText.implicitHeight + 12
                             radius: 6
                             color: current ? Qt.rgba(panel.accent.r, panel.accent.g, panel.accent.b, 0.12)
-                                           : rowHover.hovered ? "#1c1c1f" : "transparent"
+                                           : rowHover.hovered ? theme.raised : "transparent"
                             border.color: current ? Qt.rgba(panel.accent.r, panel.accent.g, panel.accent.b, 0.5) : "transparent"
                             ColumnLayout {
                                 id: rowText
@@ -236,7 +236,7 @@ Rectangle {
                                 Label {
                                     Layout.fillWidth: true
                                     text: row.name
-                                    color: row.current ? panel.accent : "white"
+                                    color: row.current ? panel.accent : theme.text
                                     font.family: "monospace"
                                     font.pixelSize: 12
                                     elide: Text.ElideMiddle
@@ -245,7 +245,7 @@ Rectangle {
                                     visible: row.detail !== ""
                                     Layout.fillWidth: true
                                     text: row.detail
-                                    color: "#74747d"
+                                    color: theme.textDim
                                     font.pixelSize: 11
                                     elide: Text.ElideRight
                                 }
@@ -294,7 +294,7 @@ Rectangle {
                     Label {
                         Layout.fillWidth: true
                         text: panel.currentPath === "" ? "No file open" : panel.displayName + (panel.dirty ? "  ●" : "")
-                        color: panel.currentPath === "" ? "#74747d" : "white"
+                        color: panel.currentPath === "" ? theme.textDim : theme.text
                         font.family: "monospace"
                         font.pixelSize: 14
                         elide: Text.ElideMiddle
@@ -352,7 +352,7 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     radius: 8
-                    color: "#0b0b0d"
+                    color: theme.sidebar
                     border.color: editor.activeFocus ? Qt.rgba(panel.accent.r, panel.accent.g, panel.accent.b, 0.6) : panel.line
 
                     Flickable {
@@ -386,7 +386,7 @@ Rectangle {
                             topPadding: 8
                             bottomPadding: 8
                             rightPadding: 12
-                            color: "#d6d6da"
+                            color: theme.textSoft
                             selectionColor: Qt.rgba(panel.accent.r, panel.accent.g, panel.accent.b, 0.35)
                             selectedTextColor: "white"
                             font.family: "monospace"
@@ -408,7 +408,7 @@ Rectangle {
                             x: flick.contentX
                             width: Math.max(36, numbers.implicitWidth + 20)
                             height: Math.max(flick.height, editor.implicitHeight)
-                            color: "#111113"
+                            color: theme.inset
                             Text {
                                 id: numbers
                                 anchors.right: parent.right
@@ -416,7 +416,7 @@ Rectangle {
                                 topPadding: 8
                                 horizontalAlignment: Text.AlignRight
                                 font: editor.font
-                                color: "#4a4a52"
+                                color: theme.textFaint
                                 text: {
                                     const lines = [];
                                     for (let i = 1; i <= Math.max(1, editor.lineCount); ++i)
@@ -434,7 +434,7 @@ Rectangle {
                         horizontalAlignment: Text.AlignHCenter
                         wrapMode: Text.WordWrap
                         lineHeight: 1.3
-                        color: "#5f5f68"
+                        color: theme.textFaint
                         text: "Choose a file on the left, or type a path such as /etc/motd or profile:pacman.conf.\n"
                               + "It starts from the profile's copy, or this machine's, so you only change what you need."
                     }
@@ -451,7 +451,7 @@ Rectangle {
                             const column = editor.cursorPosition - before.lastIndexOf("\n");
                             return "Ln " + line + ", Col " + column + " · " + editor.lineCount + " lines · " + panel.language;
                         }
-                        color: "#74747d"
+                        color: theme.textDim
                         font.family: "monospace"
                         font.pixelSize: 11
                     }
@@ -459,7 +459,7 @@ Rectangle {
                     Label {
                         text: panel.edited ? (panel.dirty ? "Unsaved changes" : "Saved to the ISO's settings")
                                            : "Not on the ISO until you add it"
-                        color: panel.dirty || !panel.edited ? "#e6c06a" : "#74747d"
+                        color: panel.dirty || !panel.edited ? theme.warning : theme.textDim
                         font.pixelSize: 11
                     }
                 }
@@ -483,19 +483,19 @@ Rectangle {
                 width: 420
                 height: confirmColumn.implicitHeight + 40
                 radius: 12
-                color: "#1c1c1f"
-                border.color: "#2a2a30"
+                color: theme.raised
+                border.color: theme.borderStrong
                 MouseArea { anchors.fill: parent }
                 ColumnLayout {
                     id: confirmColumn
                     anchors.fill: parent
                     anchors.margins: 20
                     spacing: 12
-                    Label { text: "Save your changes?"; color: "white"; font.pixelSize: 16; font.weight: Font.DemiBold }
+                    Label { text: "Save your changes?"; color: theme.text; font.pixelSize: 16; font.weight: Font.DemiBold }
                     Label {
                         Layout.fillWidth: true
                         text: panel.displayName + " has changes that aren't saved yet."
-                        color: "#b4b4bc"
+                        color: theme.textSoft
                         wrapMode: Text.WordWrap
                     }
                     RowLayout {

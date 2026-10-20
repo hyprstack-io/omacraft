@@ -22,7 +22,7 @@ Card {
         Label {
             Layout.alignment: Qt.AlignHCenter
             text: (card.info.name || card.pluginId) + " isn't installed"
-            color: "white"
+            color: theme.text
             font.pixelSize: 17
             font.weight: Font.DemiBold
         }
@@ -30,7 +30,7 @@ Card {
             Layout.fillWidth: true
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
-            color: "#8a8a93"
+            color: theme.textMuted
             text: card.info.canInstall
                   ? card.what + " Install it to use this page."
                   : card.what + " Its code wasn't found at " + (card.info.source || "any known place")

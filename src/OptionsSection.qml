@@ -36,7 +36,7 @@ ColumnLayout {
 
         Layout.fillWidth: true
         font.family: "monospace"
-        color: known ? "white" : "#ff8a8a"
+        color: known ? theme.text : theme.danger
         onEditingFinished: commit(text)
         Keys.onDownPressed: if (suggestions.count > 0) suggestions.currentIndex = Math.min(suggestions.count - 1, suggestions.currentIndex + 1)
         Keys.onUpPressed: if (suggestions.count > 0) suggestions.currentIndex = Math.max(0, suggestions.currentIndex - 1)
@@ -53,7 +53,7 @@ ColumnLayout {
             padding: 4
             visible: field.matches.length > 0
             closePolicy: Popup.NoAutoClose
-            background: Rectangle { color: "#1c1c1f"; radius: 6; border.color: section.line }
+            background: Rectangle { color: theme.raised; radius: 6; border.color: section.line }
             contentItem: ListView {
                 id: suggestions
                 implicitHeight: contentHeight
@@ -66,13 +66,13 @@ ColumnLayout {
                     width: ListView.view.width
                     height: 26
                     radius: 4
-                    color: index === suggestions.currentIndex || hover.hovered ? "#2a2a30" : "transparent"
+                    color: index === suggestions.currentIndex || hover.hovered ? theme.borderStrong : "transparent"
                     Label {
                         anchors.verticalCenter: parent.verticalCenter
                         x: 8
                         text: modelData
                         font.family: "monospace"
-                        color: "#d6d6da"
+                        color: theme.textSoft
                     }
                     HoverHandler { id: hover }
                     TapHandler {
@@ -168,7 +168,7 @@ ColumnLayout {
                     Layout.preferredWidth: 1
                     implicitHeight: compressionText.implicitHeight + 18
                     radius: 8
-                    color: chosen ? Qt.rgba(section.accent.r, section.accent.g, section.accent.b, 0.10) : "#111113"
+                    color: chosen ? Qt.rgba(section.accent.r, section.accent.g, section.accent.b, 0.10) : theme.inset
                     border.color: chosen ? section.accent : section.line
                     ColumnLayout {
                         id: compressionText
@@ -177,14 +177,14 @@ ColumnLayout {
                         spacing: 2
                         Label {
                             text: modelData.name
-                            color: chosen ? section.accent : "white"
+                            color: chosen ? section.accent : theme.text
                             font.weight: Font.DemiBold
                             font.pixelSize: 13
                         }
                         Label {
                             Layout.fillWidth: true
                             text: modelData.detail
-                            color: "#8a8a93"
+                            color: theme.textMuted
                             font.pixelSize: 11
                             wrapMode: Text.WordWrap
                         }

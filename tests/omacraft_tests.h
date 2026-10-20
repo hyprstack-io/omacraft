@@ -10,6 +10,7 @@ class OmacraftTests : public QObject {
 private slots:
     void themeFallsBack();
     void themeReadsAccent();
+    void themeFollowsLightAndDark();
     void savesAtomically();
     void expandsHomeAndQuotes();
     void readsBarSections();
@@ -21,6 +22,7 @@ private slots:
     void sourcesCanBeMoved();
     void readsAnimationStatus();
     void readsAnimationLookOverrides();
+    void animationPresetsCarryTheirMotion();
     void dockStartsFromItsDefaults();
     void dockSavesSettingsWhileStopped();
     void dockItemsMoveAndKeepOnlyTheirFields();
@@ -29,12 +31,29 @@ private slots:
     void dockLookHasDefaults();
     void barReadsPresetsJs();
     void barSaysWhenItIsNotTheBar();
+    void barReadsStudioPresetsWithImports();
+    void barEditsShellJsonInPlaceWithUndo();
+    void barLayoutsKeepWidgetSettings();
+    void barThemesSaveImportAndSanitize();
     void omasciiChecksBeforeApplying();
     void omasciiReadsEveryFontList();
     void hyprcraftServesOnlyTheApp();
     void hyprcraftFindsTheFirstBuild();
+    void hyprcraftKnowsAnOmarchyBundle();
     void launcherReadsItsStyles();
     void launcherWritesInPlaceAndKeepsOtherKeys();
     void burnReadsItsEffects();
     void burnWritesInPlaceAndKeepsOtherKeys();
+    void foldersReadTheirBarEntries();
+    void foldersScanInstalledApps();
+    void foldersEditShellJsonInPlace();
+    void wallpaperKnowsAFavoriteByAnyName();
+    void wallpaperMergesPagesWithoutRepeats();
+    void wallpaperWritesInOrderAndFlipsAtOnce();
+    void barUnderlineTextReadsOnTheBar();
+    void themeSyncBuildsABorderGradient();
+    void themeSyncFollowsAndPutsBack();
+    void asciiViewPaintsBackgroundSpans();
+    void omasciiPresetIsOneUndoStep();
+    void bootSplashReadsTheThemeAndWhereToGoBack();
 };

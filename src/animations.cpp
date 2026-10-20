@@ -36,8 +36,37 @@ bool Animations::readStatus(const QByteArray &json) {
     m_borders = object.value("borders").toArray().toVariantList();
     m_windowStyles = object.value("windowStyles").toVariant().toStringList();
     m_workspaceStyles = object.value("workspaceStyles").toVariant().toStringList();
+    attachMotion();
     emit changed();
     return true;
+}
+
+void Animations::attachMotion() {
+    const QString dir = m_pluginDir ? m_pluginDir() : QString();
+    QHash<QString, QVariant> motion;
+    m_curves.clear();
+    // Yours last, so a preset of yours wins over a built-in with its id.
+    for (const auto &path : {dir.isEmpty() ? QString() : dir + "/presets.json", customPath()}) {
+        QFile file(path);
+        if (path.isEmpty() || !file.open(QIODevice::ReadOnly))
+            continue;
+        const auto object = QJsonDocument::fromJson(file.readAll()).object();
+        const auto curves = object.value("curves").toObject();
+        for (auto it = curves.begin(); it != curves.end(); ++it)
+            m_curves.insert(it.key(), it.value().toVariant());
+        for (const auto &value : object.value("presets").toArray()) {
+            const auto preset = value.toObject();
+            if (preset.contains("animations"))
+                motion.insert(preset.value("id").toString(), preset.value("animations").toVariant());
+        }
+    }
+    for (auto &value : m_presets) {
+        auto preset = value.toMap();
+        const QString id = preset.value("id").toString();
+        if (motion.contains(id))
+            preset.insert("animations", motion.value(id));
+        value = preset;
+    }
 }
 
 void Animations::refresh() {

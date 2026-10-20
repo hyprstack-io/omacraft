@@ -8,6 +8,9 @@
 
 #include "proc.h"
 
+#include <csignal>
+#include <sys/prctl.h>
+
 namespace {
 
 QJsonObject readJsonObject(const QString &path) {
@@ -43,6 +46,9 @@ Plugins::Plugins(const QString &home, bool runCommands, QObject *parent)
     connect(&m_reloadDebounce, &QTimer::timeout, this, [this] {
         Proc::run(this, "omarchy-shell", {"shell", "rescanPlugins"});
     });
+    // inotifywait runs for as long as OMAcraft does; the kernel stops it when
+    // OMAcraft goes, even when OMAcraft is killed and never runs ~Plugins.
+    m_sourceWatch.setChildProcessModifier([] { prctl(PR_SET_PDEATHSIG, SIGTERM); });
     connect(&m_sourceWatch, &QProcess::readyReadStandardOutput, this, [this] {
         m_sourceWatch.readAllStandardOutput();
         m_reloadDebounce.start();
@@ -68,7 +74,7 @@ QList<Plugins::Definition> Plugins::definitions() {
          "Window open and close effects after the GNOME extension: fire, broken glass, the Doom melt, "
          "the Matrix, portals, an old TV switching off and more.",
          "effects", "~/Work/omacraft-burn/plugin"},
-        {"omacraft.agentdock", "Agent Dock",
+        {"omacraft.agentdock", "HyprDOCKN",
          "A dock on the screen edge that opens into a side panel with a tab per AI agent.",
          "dock", "~/Work/skll-agentdock/plugin"},
         {"omabar16", "omabar16",
@@ -80,11 +86,14 @@ QList<Plugins::Definition> Plugins::definitions() {
         {"omacraft.omascii", "omascii",
          "FIGlet, TheDraw, system-font and image ASCII art for the Plymouth boot screen.",
          "ascii", "~/Projects/omascii"},
-        {"omacraft.studio", "Studio (OMArofi)",
-         "The OMArofi launcher: rofi-style layouts, colour schemes and transitions. Studio also brings "
+        {"omacraft.studio", "Studio (HyprLAUNCH)",
+         "The HyprLAUNCH launcher: rofi-style layouts, colour schemes and transitions. Studio also brings "
          "wallpapers and the bar customizer. Its own uninstall.sh puts the stock menu back best.",
          "launcher", "~/Work/skll-studio/plugin"},
-        {"omacraft.hyprcraft", "HyprCraft",
+        {"omacraft.folders", "Folder trays",
+         "Folders on the bar that open into a row of the apps you pick, like the system tray's drawer.",
+         "bar", "~/Work/omacraft/plugins/folders"},
+        {"omacraft.hyprcraft", "HyprFIGZ",
          "Hyprland, Waybar, Rofi, SwayNC, GTK/Qt and terminal configurator, as a bar dropdown.",
          "hyprcraft", "~/Projects/HyprCraft/omarchy-plugin"},
     };

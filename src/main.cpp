@@ -2,6 +2,7 @@
 // places them in the shell, and holds every one's settings, alongside the
 // HyprCraft configurator and the hyprbuildz ISO builder.
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QGuiApplication>
 #include <QIcon>
@@ -18,16 +19,22 @@
 
 #include "agentdock.h"
 #include "animations.h"
+#include "asciiview.h"
 #include "bar.h"
+#include "bootsplash.h"
 #include "burn.h"
 #include "hyprcraft.h"
 #include "isobuilder.h"
+#include "lights.h"
 #include "launcher.h"
 #include "omascii.h"
 #include "plugins.h"
 #include "portalfilepicker.h"
 #include "syntaxhighlighter.h"
+#include "folders.h"
 #include "theme.h"
+#include "themesync.h"
+#include "wallpaper.h"
 
 // Desktop entries name their icons by theme name, so QML asks for
 // image://icon/<name> and gets the icon theme's picture.
@@ -48,6 +55,13 @@ public:
 };
 
 int main(int argc, char *argv[]) {
+    // `omacraft --sync-colors` is the theme-set hook's: no window, just bring
+    // OMAcraft's parts up to the new theme.
+    if (argc > 1 && QString(argv[1]) == "--sync-colors") {
+        QCoreApplication app(argc, argv);
+        return ThemeSync::syncNow();
+    }
+
     // The web view needs both of these before the application exists.
     HyprCraft::registerScheme();
     QtWebEngineQuick::initialize();
@@ -69,10 +83,11 @@ int main(int argc, char *argv[]) {
     Animations animations([&plugins] { return plugins.pluginDir("omacraft.animations"); });
     AgentDock dock([&plugins] { return plugins.pluginDir("omacraft.agentdock"); },
                    [&plugins] { return plugins.isEnabled("omacraft.agentdock"); });
-    Bar bar([&plugins] { return plugins.pluginDir("omabar16"); });
+    Bar bar([&plugins] { return plugins.pluginDir("omabar16"); }, [&plugins] { return plugins.pluginDir("omacraft.studio"); });
     Launcher launcher([&plugins] { return plugins.pluginDir("omacraft.studio"); });
     Burn burn([&plugins] { return plugins.pluginDir("omacraft.burn"); });
     Omascii omascii([&plugins] { return plugins.pluginDir("omacraft.omascii"); });
+    BootSplash bootSplash;
     HyprCraft hyprcraft([&plugins] {
         QStringList dirs;
         const QString dir = plugins.pluginDir("omacraft.hyprcraft");
@@ -86,6 +101,12 @@ int main(int argc, char *argv[]) {
     });
     PortalFilePicker picker;
     IsoBuilder iso(&picker);
+    Folders folders;
+    Wallpaper wallpaper([&plugins] { return plugins.pluginDir("omacraft.studio"); }, &picker);
+    // HyprKEYZ edits AlienFlare's scene; the alienflare service lights the keys.
+    Lights lights;
+    ThemeSync themeSync(&dock, &animations, &burn, &launcher, &omascii, &wallpaper);
+    themeSync.setLights(&lights);
 
     // Each page follows the plugins as they're installed, removed and moved.
     QObject::connect(&plugins, &Plugins::changed, &animations, &Animations::refresh);
@@ -94,6 +115,7 @@ int main(int argc, char *argv[]) {
     QObject::connect(&plugins, &Plugins::changed, &launcher, &Launcher::reload);
     QObject::connect(&plugins, &Plugins::changed, &burn, &Burn::reload);
     QObject::connect(&plugins, &Plugins::changed, &hyprcraft, &HyprCraft::refresh);
+    QObject::connect(&plugins, &Plugins::changed, &wallpaper, &Wallpaper::refresh);
     QObject::connect(&plugins, &Plugins::changed, &omascii, [&omascii] {
         if (omascii.available() != omascii.loaded())
             omascii.refresh();
@@ -112,6 +134,7 @@ int main(int argc, char *argv[]) {
     webProfile.installUrlSchemeHandler("hyprcraft", &hyprcraft);
 
     qmlRegisterType<SyntaxHighlighter>("Omacraft", 1, 0, "SyntaxHighlighter");
+    qmlRegisterType<AsciiView>("Omacraft", 1, 0, "AsciiView");
 
     QQmlApplicationEngine engine;
     engine.addImageProvider("icon", new IconProvider);
@@ -124,14 +147,21 @@ int main(int argc, char *argv[]) {
     context->setContextProperty("launcher", &launcher);
     context->setContextProperty("burn", &burn);
     context->setContextProperty("omascii", &omascii);
+    context->setContextProperty("bootSplash", &bootSplash);
     context->setContextProperty("hyprcraft", &hyprcraft);
     context->setContextProperty("hyprcraftProfile", &webProfile);
     context->setContextProperty("iso", &iso);
+    context->setContextProperty("wallpaper", &wallpaper);
+    context->setContextProperty("folders", &folders);
+    context->setContextProperty("themeSync", &themeSync);
+    context->setContextProperty("lights", &lights);
 
     // `omacraft <page>` opens on that page, for keybindings and the bar.
-    const QStringList pages{"plugins", "animations", "effects", "dock", "bar", "launcher", "ascii", "hyprcraft", "iso"};
+    const QStringList pages{"plugins", "wallpaper", "animations", "effects", "dock", "bar", "launcher", "ascii", "hyprcraft", "iso", "lights"};
     const QString start = app.arguments().value(1);
     context->setContextProperty("startPage", qMax(0, pages.indexOf(start)));
+    // `omacraft wallpaper colors` also opens a page's own tab.
+    context->setContextProperty("startTab", app.arguments().value(2));
 
     engine.load(QUrl("qrc:/Main.qml"));
     if (engine.rootObjects().isEmpty())

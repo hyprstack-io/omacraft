@@ -5,7 +5,26 @@
         <file alias="AnimationsPage.qml">AnimationsPage.qml</file>
         <file alias="DockPage.qml">DockPage.qml</file>
         <file alias="BarPage.qml">BarPage.qml</file>
+        <file alias="Stage.qml">Stage.qml</file>
+        <file alias="Segmented.qml">Segmented.qml</file>
+        <file alias="EdgePicker.qml">EdgePicker.qml</file>
+        <file alias="AnimStage.qml">AnimStage.qml</file>
+        <file alias="CurveGraph.qml">CurveGraph.qml</file>
+        <file alias="DockPreview.qml">DockPreview.qml</file>
+        <file alias="BarStyle.js">BarStyle.js</file>
+        <file alias="BarSegment.qml">BarSegment.qml</file>
+        <file alias="BarPreview.qml">BarPreview.qml</file>
+        <file alias="BarTile.qml">BarTile.qml</file>
+        <file alias="BarThemesTab.qml">BarThemesTab.qml</file>
+        <file alias="BarLayoutTab.qml">BarLayoutTab.qml</file>
+        <file alias="BarStyleTab.qml">BarStyleTab.qml</file>
+        <file alias="BarInspector.qml">BarInspector.qml</file>
+        <file alias="BarColorRow.qml">BarColorRow.qml</file>
+        <file alias="FontField.qml">FontField.qml</file>
         <file alias="LauncherPage.qml">LauncherPage.qml</file>
+        <file alias="WallpaperPage.qml">WallpaperPage.qml</file>
+        <file alias="WallpaperTile.qml">WallpaperTile.qml</file>
+        <file alias="FoldersPanel.qml">FoldersPanel.qml</file>
         <file alias="BurnPage.qml">BurnPage.qml</file>
         <file alias="AsciiPage.qml">AsciiPage.qml</file>
         <file alias="HyprCraftPage.qml">HyprCraftPage.qml</file>
@@ -13,6 +32,8 @@
         <file alias="AccentButton.qml">AccentButton.qml</file>
         <file alias="Card.qml">Card.qml</file>
         <file alias="Chip.qml">Chip.qml</file>
+        <file alias="ColorButton.qml">ColorButton.qml</file>
+        <file alias="ColorPicker.qml">ColorPicker.qml</file>
         <file alias="Confirm.qml">Confirm.qml</file>
         <file alias="MessageBar.qml">MessageBar.qml</file>
         <file alias="NotInstalled.qml">NotInstalled.qml</file>
@@ -27,6 +48,10 @@
         <file alias="FlashPanel.qml">FlashPanel.qml</file>
         <file alias="EditorPanel.qml">EditorPanel.qml</file>
         <file alias="OptionsSection.qml">OptionsSection.qml</file>
+        <file alias="LightsPage.qml">LightsPage.qml</file>
+        <file alias="LightsView.qml">LightsView.qml</file>
+        <file alias="KeyboardView.qml">KeyboardView.qml</file>
+        <file alias="PresetTile.qml">PresetTile.qml</file>
         <file alias="build.sh">build.sh</file>
         <file alias="flash.sh">flash.sh</file>
     </qresource>

@@ -11,21 +11,26 @@ ApplicationWindow {
     minimumHeight: 600
     visible: true
     title: iso.busy && iso.progress > 0.01 ? "OMAcraft — ISO " + Math.round(iso.progress * 100) + "%" : "OMAcraft"
-    color: "#0e0e10"
+    color: theme.window
 
-    Material.theme: Material.Dark
+    // Follows the Omarchy theme: light themes get a light window.
+    Material.theme: theme.dark ? Material.Dark : Material.Light
     Material.accent: Qt.color(theme.accent)
+    Material.background: theme.window
+    Material.foreground: theme.text
 
     readonly property var pages: [
         { id: "plugins", name: "Plugins", glyph: "\u{f0ac6}", plugin: "", file: "PluginsPage.qml" },
+        { id: "wallpaper", name: "Wallpaper", glyph: "\u{f08b9}", plugin: "omacraft.studio", file: "WallpaperPage.qml" },
         { id: "animations", name: "Animations", glyph: "\u{f0d6d}", plugin: "omacraft.animations", file: "AnimationsPage.qml" },
         { id: "effects", name: "Window FX", glyph: "\u{f0238}", plugin: "omacraft.burn", file: "BurnPage.qml" },
-        { id: "dock", name: "Agent Dock", glyph: "\u{f06a9}", plugin: "omacraft.agentdock", file: "DockPage.qml" },
+        { id: "dock", name: "HyprDOCKN", glyph: "\u{f06a9}", plugin: "omacraft.agentdock", file: "DockPage.qml" },
         { id: "bar", name: "Bar", glyph: "\u{f0570}", plugin: "omabar16", file: "BarPage.qml" },
-        { id: "launcher", name: "OMArofi", glyph: "\u{f003b}", plugin: "omacraft.studio", file: "LauncherPage.qml" },
-        { id: "ascii", name: "Boot ASCII", glyph: "\u{f0b9e}", plugin: "omacraft.omascii", file: "AsciiPage.qml" },
-        { id: "hyprcraft", name: "HyprCraft", glyph: "\u{f0b0b}", plugin: "omacraft.hyprcraft", file: "HyprCraftPage.qml" },
-        { id: "iso", name: "ISO Builder", glyph: "\u{f0a4f}", plugin: "", file: "IsoPage.qml" }
+        { id: "launcher", name: "HyprLAUNCH", glyph: "\u{f003b}", plugin: "omacraft.studio", file: "LauncherPage.qml" },
+        { id: "ascii", name: "HyprSPLASH", glyph: "\u{f0b9e}", plugin: "omacraft.omascii", file: "AsciiPage.qml" },
+        { id: "hyprcraft", name: "HyprFIGZ", glyph: "\u{f0b0b}", plugin: "omacraft.hyprcraft", file: "HyprCraftPage.qml" },
+        { id: "iso", name: "HyprBUILDZ", glyph: "\u{f0a4f}", plugin: "", file: "IsoPage.qml" },
+        { id: "lights", name: "HyprKEYZ", glyph: "\u{f030c}", plugin: "", file: "LightsPage.qml" }
     ]
     property int current: startPage
     property var visited: ({})
@@ -93,8 +98,9 @@ ApplicationWindow {
         model: win.pages.length
         Item {
             required property int index
-            Shortcut { sequence: "Ctrl+" + (index + 1); context: Qt.ApplicationShortcut; onActivated: win.show(index) }
-            Shortcut { sequence: String(index + 1); context: Qt.ApplicationShortcut; enabled: win.keysFree; onActivated: win.show(index) }
+            // Pages past the ninth are reached with Ctrl PgUp / PgDn.
+            Shortcut { sequence: index < 9 ? "Ctrl+" + (index + 1) : ""; context: Qt.ApplicationShortcut; enabled: index < 9; onActivated: win.show(index) }
+            Shortcut { sequence: index < 9 ? String(index + 1) : ""; context: Qt.ApplicationShortcut; enabled: win.keysFree && index < 9; onActivated: win.show(index) }
         }
     }
 
@@ -103,7 +109,7 @@ ApplicationWindow {
     Shortcut {
         sequence: "Escape"
         context: Qt.ApplicationShortcut
-        // HyprCraft's own dialogs close with Esc, so leave it to the web view.
+        // HyprFIGZ's own dialogs close with Esc, so leave it to the web view.
         enabled: !win.webPage || win.overlayOpen
         onActivated: {
             if (win.quitConfirmVisible)
@@ -142,8 +148,8 @@ ApplicationWindow {
         Rectangle {
             Layout.fillHeight: true
             Layout.preferredWidth: 220
-            color: "#0b0b0d"
-            Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: "#1c1c20" }
+            color: theme.sidebar
+            Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: theme.border }
 
             ColumnLayout {
                 anchors.fill: parent
@@ -166,8 +172,8 @@ ApplicationWindow {
                     }
                     ColumnLayout {
                         spacing: 0
-                        Label { text: "OMAcraft"; color: "white"; font.pixelSize: 17; font.weight: Font.DemiBold }
-                        Label { text: "Your Omarchy plugins"; color: "#74747d"; font.pixelSize: 11 }
+                        Label { text: "OMAcraft"; color: theme.text; font.pixelSize: 17; font.weight: Font.DemiBold }
+                        Label { text: "Your Omarchy plugins"; color: theme.textDim; font.pixelSize: 11 }
                     }
                 }
 
@@ -184,7 +190,7 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         implicitHeight: 40
                         radius: 8
-                        color: chosen ? Qt.rgba(tone.r, tone.g, tone.b, 0.13) : navHover.hovered ? "#16161a" : "transparent"
+                        color: chosen ? Qt.rgba(tone.r, tone.g, tone.b, 0.13) : navHover.hovered ? theme.hover : "transparent"
 
                         RowLayout {
                             anchors.fill: parent
@@ -194,29 +200,29 @@ ApplicationWindow {
                             Label {
                                 Layout.preferredWidth: 20
                                 text: nav.modelData.glyph
-                                color: nav.chosen ? theme.accent : "#9a9aa3"
+                                color: nav.chosen ? theme.accent : theme.textMuted
                                 font.family: "JetBrainsMono Nerd Font"
                                 font.pixelSize: 16
                             }
                             Label {
                                 Layout.fillWidth: true
                                 text: nav.modelData.name
-                                color: nav.chosen ? "white" : "#c8c8cf"
+                                color: nav.chosen ? theme.text : theme.textSoft
                                 font.weight: nav.chosen ? Font.DemiBold : Font.Normal
                             }
                             // Whether the page's plugin is on, off, or missing.
                             Rectangle {
                                 visible: nav.pluginState !== ""
                                 width: 7; height: 7; radius: 4
-                                color: nav.pluginState === "on" ? theme.accent : nav.pluginState === "off" ? "#5f5f68" : "transparent"
-                                border.color: nav.pluginState === "missing" ? "#ff8a8a" : "transparent"
+                                color: nav.pluginState === "on" ? theme.accent : nav.pluginState === "off" ? theme.textFaint : "transparent"
+                                border.color: nav.pluginState === "missing" ? theme.danger : "transparent"
                                 ToolTip.visible: dotHover.hovered
                                 ToolTip.text: nav.pluginState === "on" ? "Enabled in the shell" : nav.pluginState === "off" ? "Installed, not enabled" : "Not installed"
                                 HoverHandler { id: dotHover }
                             }
                             Label {
-                                text: nav.index + 1
-                                color: "#4a4a52"
+                                text: nav.index < 9 ? nav.index + 1 : ""
+                                color: theme.textFaint
                                 font.family: "monospace"
                                 font.pixelSize: 11
                             }
@@ -232,7 +238,7 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     visible: !plugins.shellRunning
                     text: "The shell isn't answering."
-                    color: "#ff8a8a"
+                    color: theme.danger
                     font.pixelSize: 11
                     wrapMode: Text.WordWrap
                 }
@@ -247,10 +253,10 @@ ApplicationWindow {
                 RowLayout {
                     Layout.fillWidth: true
                     Layout.leftMargin: 6
-                    Label { text: "Shortcuts"; color: "#5f5f68"; font.pixelSize: 11 }
+                    Label { text: "Shortcuts"; color: theme.textFaint; font.pixelSize: 11 }
                     KeyCap { text: "?" }
                     Item { Layout.fillWidth: true }
-                    Label { text: "Quit"; color: "#5f5f68"; font.pixelSize: 11 }
+                    Label { text: "Quit"; color: theme.textFaint; font.pixelSize: 11 }
                     KeyCap { text: "Q" }
                 }
             }
@@ -258,7 +264,7 @@ ApplicationWindow {
 
         // --- pages ---
         // Each page loads the first time it's opened and then stays, so a
-        // running build or an edit in HyprCraft survives switching away.
+        // running build or an edit in HyprFIGZ survives switching away.
         StackLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -310,7 +316,7 @@ ApplicationWindow {
             width: helpColumn.width + 56
             height: helpColumn.height + 48
             radius: 12
-            color: "#1c1c1f"
+            color: theme.raised
 
             Column {
                 id: helpColumn
@@ -327,12 +333,12 @@ ApplicationWindow {
                         color: theme.accent
                         font.family: "monospace"
                     }
-                    Label { text: modelData.action; color: "#d6d6da" }
+                    Label { text: modelData.action; color: theme.textSoft }
                 }
 
                 Label {
                     text: "Keyboard shortcuts"
-                    color: "white"
+                    color: theme.text
                     font.pixelSize: 16
                     font.weight: Font.DemiBold
                     bottomPadding: 8
@@ -351,7 +357,7 @@ ApplicationWindow {
                 Label {
                     visible: win.page !== null && (win.page.shortcuts || []).length > 0
                     text: win.pages[win.current].name
-                    color: "white"
+                    color: theme.text
                     font.weight: Font.DemiBold
                     topPadding: 10
                     bottomPadding: 4

@@ -80,6 +80,9 @@ public:
 
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void setOption(const QString &key, const QVariant &value);
+    // A preset's options in one change (one undo step), and its font when
+    // font isn't empty.
+    Q_INVOKABLE void applyPreset(const QVariantMap &options, const QString &font = {});
     Q_INVOKABLE void toggleEffect(const QString &effect);
     Q_INVOKABLE void setEffects(const QStringList &effects);
     Q_INVOKABLE void undo();

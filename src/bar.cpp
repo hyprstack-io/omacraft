@@ -1,17 +1,24 @@
 #include "bar.h"
 
+#include <algorithm>
+
+#include <QColor>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJSEngine>
-#include <QJsonArray>
 #include <QJsonDocument>
 #include <QRegularExpression>
+#include <QSet>
 
 #include "proc.h"
+#include "theme.h"
 
 namespace {
+
+const QStringList kLanes{"left", "center", "right"};
+const QString kNotTheBar = "omabar16 isn't your bar right now. Use it as the bar first.";
 
 QJsonObject readJsonObject(const QString &path) {
     QFile file(path);
@@ -20,28 +27,75 @@ QJsonObject readJsonObject(const QString &path) {
     return QJsonDocument::fromJson(file.readAll()).object();
 }
 
-// The current Omarchy theme's named colours, so palettes that name them
-// ("accent", "blue") can be shown as swatches.
-QHash<QString, QString> themeColors(const QString &home) {
-    QHash<QString, QString> colors;
-    QFile file(home + "/.local/state/omarchy/current/theme/colors.toml");
+bool isHex(const QJsonValue &value) {
+    static const QRegularExpression hex("^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$");
+    return value.isString() && hex.match(value.toString()).hasMatch();
+}
+
+QString slug(const QString &label) {
+    QString out = label.toLower();
+    out.replace(QRegularExpression("[^a-z0-9]+"), "-");
+    out.remove(QRegularExpression("^-+|-+$"));
+    return out;
+}
+
+// The parts of the bar section OMAcraft edits, out of shell.json's "bar".
+QJsonObject configOf(const QJsonObject &bar) {
+    QJsonObject layout = bar.value("layout").toObject();
+    for (const auto &lane : kLanes)
+        if (!layout.value(lane).isArray())
+            layout.insert(lane, QJsonArray{});
+    return QJsonObject{{"position", bar.value("position").toString("top")},
+                       {"transparent", bar.value("transparent").toBool()},
+                       {"centerAnchor", bar.contains("centerAnchor") ? bar.value("centerAnchor").toString() : "omarchy.clock"},
+                       {"layout", layout},
+                       {"style", bar.value("style").toObject()}};
+}
+
+// The source of a QML JavaScript library, made plain JavaScript: ".pragma
+// library" dropped and each ".import "x.js" as Name" replaced by that file's
+// top-level names, gathered into an object called Name.
+QString plainScript(const QString &path, int depth = 0) {
+    QFile file(path);
     if (!file.open(QIODevice::ReadOnly))
-        return colors;
-    static const QRegularExpression line(R"re(^\s*([a-z0-9_]+)\s*=\s*["'](#[0-9a-fA-F]{6})["'])re",
-                                         QRegularExpression::MultilineOption);
-    auto it = line.globalMatch(QString::fromUtf8(file.readAll()));
+        return {};
+    QString source = QString::fromUtf8(file.readAll());
+    source.replace(QRegularExpression(R"(^\s*\.pragma\s+library\s*$)", QRegularExpression::MultilineOption), "");
+    static const QRegularExpression importLine(R"re(^\s*\.import\s+"([^"]+\.js)"\s+as\s+(\w+)\s*$)re",
+                                               QRegularExpression::MultilineOption);
+    QString prelude;
+    auto it = importLine.globalMatch(source);
     while (it.hasNext()) {
         const auto match = it.next();
-        colors.insert(match.captured(1), match.captured(2));
+        const QString inner = QFileInfo(path).absolutePath() + "/" + match.captured(1);
+        const QString body = depth < 3 ? plainScript(inner, depth + 1) : QString();
+        static const QRegularExpression topName(R"(^(?:var|function)\s+(\w+))", QRegularExpression::MultilineOption);
+        QStringList names;
+        auto names_it = topName.globalMatch(body);
+        while (names_it.hasNext())
+            names << names_it.next().captured(1);
+        names.removeDuplicates();
+        QStringList fields;
+        for (const auto &name : names)
+            fields << QString("%1: typeof %1 === 'undefined' ? undefined : %1").arg(name);
+        prelude += QString("var %1 = (function() {\n%2\nreturn { %3 };\n})();\n")
+                       .arg(match.captured(2), body, fields.join(", "));
     }
-    return colors;
+    source.replace(importLine, "");
+    return prelude + source;
+}
+
+QString stampOf(const QString &path) {
+    return path + "@" + QFileInfo(path).lastModified().toString(Qt::ISODateWithMs);
 }
 
 } // namespace
 
-Bar::Bar(std::function<QString()> pluginDir, const QString &home, bool runCommands, QObject *parent)
+Bar::Bar(std::function<QString()> pluginDir, std::function<QString()> studioDir, const QString &home, bool runCommands,
+         QObject *parent)
     : QObject(parent),
       m_pluginDir(std::move(pluginDir)),
+      m_studioDir(std::move(studioDir)),
       m_home(home.isEmpty() ? QDir::homePath() : home),
       m_runCommands(runCommands) {
     m_debounce.setSingleShot(true);
@@ -49,22 +103,26 @@ Bar::Bar(std::function<QString()> pluginDir, const QString &home, bool runComman
     connect(&m_debounce, &QTimer::timeout, this, &Bar::reload);
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, [this] { m_debounce.start(); });
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, [this] { m_debounce.start(); });
+    // Long enough to gather a run of edits, short enough to feel live.
+    m_writeTimer.setSingleShot(true);
+    m_writeTimer.setInterval(140);
+    connect(&m_writeTimer, &QTimer::timeout, this, &Bar::write);
+    m_burst.setSingleShot(true);
+    m_burst.setInterval(600);
     reload();
     if (m_runCommands)
         refreshWidgets();
 }
 
+// --- reading ---
+
 bool Bar::loadPresets(const QString &path, QString *problem) {
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) {
+    const QString source = plainScript(path);
+    if (source.isEmpty()) {
         if (problem)
             *problem = "Can't read " + path;
         return false;
     }
-    // ".pragma library" is a QML directive, not JavaScript.
-    QString source = QString::fromUtf8(file.readAll());
-    source.replace(QRegularExpression(R"(^\s*\.pragma\s+library\s*$)", QRegularExpression::MultilineOption), "");
-
     QJSEngine engine;
     const QJSValue result = engine.evaluate(source, path);
     if (result.isError()) {
@@ -74,7 +132,7 @@ bool Bar::loadPresets(const QString &path, QString *problem) {
     }
     const QJSValue global = engine.globalObject();
 
-    const auto colors = themeColors(m_home);
+    const auto colors = Theme::readColors(m_home + "/.local/state/omarchy/current/theme/colors.toml");
     const QStringList defaultPalette = global.property("DEFAULT_PALETTE").toVariant().toStringList();
     auto swatches = [&](const QVariantMap &style) {
         QStringList palette = style.value("palette").toStringList();
@@ -87,42 +145,104 @@ bool Bar::loadPresets(const QString &path, QString *problem) {
     };
 
     QVariantList themes;
-    auto addGroup = [&](const QVariantList &list, const QString &group) {
+    auto addThemes = [&](const QVariantList &list, const QString &group) {
         for (const auto &value : list) {
             auto theme = value.toMap();
+            if (theme.value("id").toString().isEmpty())
+                continue;
             theme["group"] = group;
             theme["swatches"] = swatches(theme.value("style").toMap());
             themes << theme;
         }
     };
-    addGroup(global.property("THEMES").toVariant().toList(), "Looks");
-    addGroup(global.property("JAKOOLIT").toVariant().toList(), "JaKooLit");
-    addGroup(global.property("BASE16").toVariant().toList(), "base16");
-
-    QFile userFile(m_home + "/.config/omarchy/omabar16/themes.json");
-    if (userFile.open(QIODevice::ReadOnly))
-        addGroup(QJsonDocument::fromJson(userFile.readAll()).array().toVariantList(), "Yours");
+    addThemes(global.property("THEMES").toVariant().toList(), "Originals");
+    addThemes(global.property("JAKOOLIT").toVariant().toList(), "JaKooLit");
+    if (global.hasProperty("HANCORE"))
+        addThemes(global.property("HANCORE").toVariant().toList(), "HANCORE");
+    addThemes(global.property("BASE16").toVariant().toList(), "base16");
+    QVariantList yours = userThemes().toVariantList();
+    for (auto &theme : yours) {
+        auto map = theme.toMap();
+        map["user"] = true;
+        theme = map;
+    }
+    addThemes(yours, "Yours");
 
     QVariantList layouts;
-    for (const auto &value : global.property("LAYOUTS").toVariant().toList()) {
+    QVariantList source_layouts = global.property(global.hasProperty("ALL_LAYOUTS") ? "ALL_LAYOUTS" : "LAYOUTS")
+                                      .toVariant().toList();
+    for (const auto &value : source_layouts) {
         auto layout = value.toMap();
-        QStringList ids;
+        const QString id = layout.value("id").toString();
+        QStringList counts;
         const auto lanes = layout.value("layout").toMap();
-        for (const auto &lane : {"left", "center", "right"})
-            ids << QString::number(lanes.value(lane).toList().size());
-        layout["counts"] = ids.join(" · ");
+        for (const auto &lane : kLanes)
+            counts << QString::number(lanes.value(lane).toList().size());
+        layout["counts"] = counts.join(" · ");
+        const QString edge = layout.value("position").toString();
+        layout["group"] = id.startsWith("jk-") ? "JaKooLit"
+                        : id.startsWith("hc-") ? "HANCORE"
+                        : (edge == "left" || edge == "right") ? "Side rails"
+                        : "Originals";
         layouts << layout;
     }
 
     m_themes = themes;
     m_layouts = layouts;
     m_glyphs = global.property("GLYPHS").toVariant().toMap();
+    loadIcons(QFileInfo(path).absolutePath() + "/Icons.js");
     emit presetsChanged();
     return true;
 }
 
+void Bar::loadIcons(const QString &path) {
+    m_iconSets.clear();
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return;
+    // RAW = { fa: "name:hex;…", oct: "…" }
+    static const QRegularExpression set(R"re(^\s*(\w+)\s*:\s*"([^"]*)")re", QRegularExpression::MultilineOption);
+    auto it = set.globalMatch(QString::fromUtf8(file.readAll()));
+    while (it.hasNext()) {
+        const auto match = it.next();
+        if (match.captured(2).contains(':'))
+            m_iconSets.insert(match.captured(1), match.captured(2));
+    }
+}
+
+QVariantList Bar::icons(const QString &set, const QString &query, int limit) const {
+    QVariantList out;
+    const QStringList words = query.toLower().split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+    for (const auto &pair : m_iconSets.value(set).split(';', Qt::SkipEmptyParts)) {
+        const int colon = pair.lastIndexOf(':');
+        if (colon <= 0)
+            continue;
+        QString name = pair.left(colon);
+        name.replace('_', ' ');
+        bool match = true;
+        for (const auto &word : words)
+            match = match && name.contains(word);
+        if (!match)
+            continue;
+        bool ok = false;
+        const uint code = pair.mid(colon + 1).toUInt(&ok, 16);
+        if (!ok)
+            continue;
+        out << QVariantMap{{"name", name}, {"glyph", QString::fromUcs4(reinterpret_cast<const char32_t *>(&code), 1)}};
+        if (out.size() >= limit)
+            break;
+    }
+    return out;
+}
+
 void Bar::setShellConfig(const QJsonObject &shell) {
     m_shell = shell;
+    const QJsonObject next = configOf(shell.value("bar").toObject());
+    if (next != m_cfg)
+        m_cfg = next;
+    // The bar as OMAcraft first found it, for Revert.
+    if (m_snapshot.isEmpty() && !shell.isEmpty())
+        m_snapshot = m_cfg;
     emit changed();
 }
 
@@ -130,34 +250,50 @@ void Bar::watch() {
     const auto paths = m_watcher.files() + m_watcher.directories();
     if (!paths.isEmpty())
         m_watcher.removePaths(paths);
-    const QString shell = m_home + "/.config/omarchy/shell.json";
+    const QString shell = shellPath();
     for (const auto &path : {shell, QFileInfo(shell).absolutePath(), m_home + "/.config/omarchy/omabar16"})
         if (QFileInfo::exists(path))
             m_watcher.addPath(path);
 }
 
 void Bar::reload() {
-    setShellConfig(readJsonObject(m_home + "/.config/omarchy/shell.json"));
+    // An edit not yet written is newer than the file.
+    if (!m_pendingWrite)
+        setShellConfig(readJsonObject(shellPath()));
+
+    QStringList candidates;
+    if (m_studioDir && !m_studioDir().isEmpty())
+        candidates << m_studioDir() + "/bar/data/Presets.js";
     const QString dir = m_pluginDir ? m_pluginDir() : QString();
-    const QString presets = dir.isEmpty() ? QString() : dir + "/data/Presets.js";
-    // shell.json changes on every tweak; only read the presets again when
+    if (!dir.isEmpty())
+        candidates << dir + "/data/Presets.js";
+    QString presets;
+    for (const auto &path : candidates)
+        if (QFileInfo::exists(path)) {
+            presets = path;
+            break;
+        }
+    // The bar can't draw any of it without omabar16.
+    if (dir.isEmpty())
+        presets.clear();
+
+    // shell.json changes on every edit; only read the presets again when
     // they, or the user's saved themes, have changed.
-    const QString userThemes = m_home + "/.config/omarchy/omabar16/themes.json";
-    const QString stamp = presets + "|" + QFileInfo(presets).lastModified().toString(Qt::ISODateWithMs) + "|"
-                        + QFileInfo(userThemes).lastModified().toString(Qt::ISODateWithMs);
-    QString problem;
+    const QString stamp = presets.isEmpty() ? QString()
+                        : stampOf(presets) + "|" + stampOf(m_home + "/.config/omarchy/omabar16/themes.json");
     if (presets.isEmpty()) {
-        m_presetsPath.clear();
+        m_presetsStamp.clear();
         if (!m_themes.isEmpty()) {
             m_themes.clear();
             m_layouts.clear();
             emit presetsChanged();
         }
-    } else if (stamp != m_presetsPath) {
+    } else if (stamp != m_presetsStamp) {
+        QString problem;
         if (loadPresets(presets, &problem))
-            m_presetsPath = stamp;
+            m_presetsStamp = stamp;
         else
-            setError("Couldn't read omabar16's presets: " + problem);
+            setError("Couldn't read the bar's presets: " + problem);
     }
     watch();
 }
@@ -168,21 +304,53 @@ QString Bar::barId() const {
 }
 
 QString Bar::position() const {
-    const auto value = m_shell.value("bar").toObject().value("position").toString();
+    const auto value = m_cfg.value("position").toString();
     return value.isEmpty() ? "top" : value;
 }
 
-bool Bar::transparent() const { return m_shell.value("bar").toObject().value("transparent").toBool(); }
-QVariantMap Bar::style() const { return m_shell.value("bar").toObject().value("style").toObject().toVariantMap(); }
-QVariantMap Bar::layout() const { return m_shell.value("bar").toObject().value("layout").toObject().toVariantMap(); }
+QVariantMap Bar::themeColors() const {
+    QVariantMap out;
+    const auto colors = Theme::readColors(m_home + "/.local/state/omarchy/current/theme/colors.toml");
+    for (auto it = colors.begin(); it != colors.end(); ++it)
+        out.insert(it.key(), it.value());
+    return out;
+}
 
 QString Bar::currentTheme() const {
-    // The customizer marks a theme current when the bar's style is exactly it.
-    const QJsonObject current = m_shell.value("bar").toObject().value("style").toObject();
+    // A theme is current when the bar's style is exactly it.
+    QJsonObject current = m_cfg.value("style").toObject();
+    // An underlined theme may have had its text made readable.
+    const bool underline = current.value("shape").toString() == "underline";
+    if (underline)
+        current.remove("fg");
     for (const auto &value : m_themes) {
         const auto theme = value.toMap();
-        if (QJsonObject::fromVariantMap(theme.value("style").toMap()) == current)
+        QJsonObject style = QJsonObject::fromVariantMap(theme.value("style").toMap());
+        if (underline)
+            style.remove("fg");
+        if (style == current)
             return theme.value("id").toString();
+    }
+    return {};
+}
+
+QString Bar::currentLayout() const {
+    // The same widgets in the same places; their settings don't count.
+    auto ids = [](const QJsonObject &layout) {
+        QStringList out;
+        for (const auto &lane : kLanes) {
+            QStringList row;
+            for (const auto &entry : layout.value(lane).toArray())
+                row << entry.toObject().value("id").toString();
+            out << row.join(",");
+        }
+        return out.join("|");
+    };
+    const QString mine = ids(m_cfg.value("layout").toObject());
+    for (const auto &value : m_layouts) {
+        const auto layout = value.toMap();
+        if (ids(QJsonObject::fromVariantMap(layout.value("layout").toMap())) == mine)
+            return layout.value("id").toString();
     }
     return {};
 }
@@ -201,9 +369,11 @@ void Bar::refreshWidgets() {
                 continue;
             const auto barWidget = plugin.value("barWidget").toObject();
             const QString name = barWidget.value("displayName").toString();
+            const QString category = barWidget.value("category").toString();
             widgets << QVariantMap{{"id", plugin.value("id").toString()},
                                    {"name", name.isEmpty() ? plugin.value("name").toString() : name},
-                                   {"category", barWidget.value("category").toString()},
+                                   {"description", plugin.value("description").toString()},
+                                   {"category", category.isEmpty() ? "Other" : category},
                                    {"multiple", barWidget.value("allowMultiple").toBool()}};
         }
         std::sort(widgets.begin(), widgets.end(), [](const QVariant &a, const QVariant &b) {
@@ -217,29 +387,577 @@ void Bar::refreshWidgets() {
 
 QString Bar::glyphFor(const QString &id) const {
     const QString glyph = m_glyphs.value(id).toString();
-    return glyph.isEmpty() ? QString::fromUtf8("●") : glyph;
+    return glyph.isEmpty() ? QString::fromUcs4(U"\U000F0B47") : glyph;
 }
 
-void Bar::ipc(const QStringList &arguments, const QString &doneNotice) {
-    if (!inUse()) {
-        setError("omabar16 isn't your bar right now. Use it as the bar first.");
+QString Bar::widgetName(const QString &id) const {
+    for (const auto &value : m_widgets) {
+        const auto widget = value.toMap();
+        if (widget.value("id").toString() == id)
+            return widget.value("name").toString();
+    }
+    QString name = id.section('.', 1);
+    if (name.isEmpty())
+        name = id;
+    name.replace('-', ' ');
+    return name.isEmpty() ? name : name.at(0).toUpper() + name.mid(1);
+}
+
+// --- writing ---
+
+bool Bar::editable() {
+    if (inUse())
+        return true;
+    setError(kNotTheBar);
+    return false;
+}
+
+bool Bar::commit(QJsonObject next, bool checkInk) {
+    if (!editable())
+        return false;
+    if (checkInk) {
+        QJsonObject bar = next;
+        const QString ink = underlineInk(bar, Theme::readColors(m_home + "/.local/state/omarchy/current/theme/colors.toml"));
+        if (!ink.isEmpty()) {
+            QJsonObject style = next.value("style").toObject();
+            style.insert("fg", ink);
+            next.insert("style", style);
+            setNotice(QString("Underlined text sits on the bar itself, so it's now %1 to read there.").arg(ink));
+        }
+    }
+    if (next == m_cfg)
+        return true;
+    // A run of quick edits (a slider dragged, a colour wheel turned) is one step.
+    if (!m_burst.isActive()) {
+        m_undo.append(m_cfg);
+        while (m_undo.size() > 80)
+            m_undo.removeFirst();
+        m_redo.clear();
+    }
+    m_burst.start();
+    m_cfg = next;
+    m_pendingWrite = true;
+    m_writeTimer.start();
+    emit changed();
+    return true;
+}
+
+void Bar::flush() {
+    if (m_writeTimer.isActive()) {
+        m_writeTimer.stop();
+        write();
+    }
+}
+
+void Bar::write() {
+    m_pendingWrite = false;
+    QFile file(shellPath());
+    if (!file.open(QIODevice::ReadWrite)) {
+        setError("Couldn't open " + shellPath() + ": " + file.errorString());
         return;
     }
-    if (!m_runCommands)
+    const QByteArray before = file.readAll();
+    QJsonParseError parseError;
+    QJsonObject shell = QJsonDocument::fromJson(before.trimmed().isEmpty() ? "{}" : before, &parseError).object();
+    if (parseError.error != QJsonParseError::NoError) {
+        setError("shell.json doesn't read as JSON (" + parseError.errorString() + "), so the bar wasn't saved.");
         return;
-    Proc::run(this, "omarchy-shell", QStringList{"omabar16"} + arguments, [this, arguments, doneNotice](const Proc::Result &result) {
-        const QString answer = QString::fromUtf8(result.out).trimmed();
-        if (!result.ok()) {
-            setError(QString("omabar16 didn't answer %1: %2").arg(arguments.first(), result.message()));
-        } else if (!answer.isEmpty() && answer != "ok" && arguments.first() != "tab") {
-            setError(QString("omabar16: %1").arg(answer));
-        } else if (!doneNotice.isEmpty()) {
-            m_notice = doneNotice;
-            m_error.clear();
-            emit messageChanged();
+    }
+    QJsonObject bar = shell.value("bar").toObject();
+    for (auto it = m_cfg.begin(); it != m_cfg.end(); ++it)
+        bar.insert(it.key(), it.value());
+    bar.insert("id", "omabar16");
+    shell.insert("bar", bar);
+    // In place, not through a rename: the shell's file watcher stays on it.
+    const QByteArray bytes = QJsonDocument(shell).toJson(QJsonDocument::Indented);
+    if (!file.seek(0) || file.write(bytes) != bytes.size() || !file.resize(bytes.size())) {
+        setError("Couldn't save " + shellPath() + ": " + file.errorString());
+        return;
+    }
+    file.close();
+    m_shell = shell;
+}
+
+QJsonObject Bar::entryAt(const QString &lane, int index) const {
+    const QJsonArray entries = m_cfg.value("layout").toObject().value(lane).toArray();
+    return index >= 0 && index < entries.size() ? entries.at(index).toObject() : QJsonObject();
+}
+
+QJsonObject Bar::newEntry(const QString &id) const {
+    if (id == "omarchy.spacer")
+        return {{"id", id}, {"size", 12}};
+    if (id == "omarchy.clock")
+        return {{"id", id}, {"format", "dddd HH:mm"}, {"formatAlt", "d MMMM 'W'ww yyyy"}, {"verticalFormat", "HH\n—\nmm"}};
+    return {{"id", id}};
+}
+
+void Bar::fixAnchor(QJsonObject &cfg) {
+    // The anchor sits dead centre; it has to be in the centre lane. Failing
+    // that the clock, failing that nothing (the lane centres as a group).
+    const QJsonArray center = cfg.value("layout").toObject().value("center").toArray();
+    auto has = [&center](const QString &id) {
+        return std::any_of(center.begin(), center.end(), [&id](const QJsonValue &v) { return v.toObject().value("id").toString() == id; });
+    };
+    const QString anchor = cfg.value("centerAnchor").toString();
+    if (!anchor.isEmpty() && has(anchor))
+        return;
+    cfg.insert("centerAnchor", has("omarchy.clock") ? "omarchy.clock" : "");
+}
+
+// --- themes ---
+
+void Bar::applyTheme(const QString &id) {
+    for (const auto &value : m_themes) {
+        const auto theme = value.toMap();
+        if (theme.value("id").toString() != id)
+            continue;
+        QJsonObject next = m_cfg;
+        next.insert("style", QJsonObject::fromVariantMap(theme.value("style").toMap()));
+        commit(next, true);
+        return;
+    }
+    if (editable())
+        setError("There's no bar theme called " + id + ".");
+}
+
+void Bar::setWholeStyle(const QVariantMap &style) {
+    QJsonObject next = m_cfg;
+    next.insert("style", sanitizeStyle(QJsonObject::fromVariantMap(style)));
+    commit(next, true);
+}
+
+void Bar::setStyle(const QString &key, const QVariant &value) {
+    QJsonObject next = m_cfg;
+    QJsonObject style = next.value("style").toObject();
+    const QJsonValue json = QJsonValue::fromVariant(value);
+    if (!value.isValid() || value.isNull() || (json.isString() && json.toString().isEmpty()))
+        style.remove(key);
+    else
+        style.insert(key, json);
+    // Segments with no fill setting are solid, as in omabar16.
+    if (key == "shape" && json.toString() != "none" && !style.contains("solid"))
+        style.insert("solid", true);
+    next.insert("style", style);
+    commit(next, key == "shape" || key == "bg" || key == "minContrast" || key == "fg");
+}
+
+void Bar::setColor(const QString &part, const QString &hex) {
+    if (!isHex(hex)) {
+        clearColor(part);
+        return;
+    }
+    QJsonObject next = m_cfg;
+    QJsonObject style = next.value("style").toObject();
+    if (part == "bg" || part == "fg" || part == "accent" || part == "outlineColor" || part == "hoverColor") {
+        style.insert(part, hex);
+    } else if (part.startsWith("pal:")) {
+        QJsonArray palette = style.value("palette").toArray();
+        const int index = part.mid(4).toInt();
+        // Theme colour names become what they show now, so one can change.
+        const auto colors = Theme::readColors(m_home + "/.local/state/omarchy/current/theme/colors.toml");
+        for (int i = 0; i < palette.size(); ++i)
+            if (!isHex(palette.at(i)))
+                palette.replace(i, colors.value(palette.at(i).toString(), "#888888"));
+        while (palette.size() <= index)
+            palette.append(hex);
+        palette.replace(index, hex);
+        style.insert("palette", palette);
+    } else if (part.startsWith("region:") || part.startsWith("module:")) {
+        const QString group = part.startsWith("region:") ? "regions" : "modules";
+        QJsonObject map = style.value(group).toObject();
+        map.insert(part.section(':', 1), hex);
+        style.insert(group, map);
+    } else {
+        return;
+    }
+    if (style.value("shape").toString("none") == "none" && part != "bg" && part != "fg" && part != "hoverColor")
+        style.insert("shape", "arrow");
+    next.insert("style", style);
+    commit(next, part == "bg" || part == "fg");
+}
+
+void Bar::clearColor(const QString &part) {
+    QJsonObject next = m_cfg;
+    QJsonObject style = next.value("style").toObject();
+    if (part == "bg" || part == "fg" || part == "accent" || part == "outlineColor" || part == "hoverColor") {
+        style.remove(part);
+    } else if (part.startsWith("pal:")) {
+        style.remove("palette");
+    } else if (part.startsWith("region:") || part.startsWith("module:")) {
+        const QString group = part.startsWith("region:") ? "regions" : "modules";
+        QJsonObject map = style.value(group).toObject();
+        map.remove(part.section(':', 1));
+        if (map.isEmpty())
+            style.remove(group);
+        else
+            style.insert(group, map);
+    }
+    next.insert("style", style);
+    commit(next, part == "bg" || part == "fg");
+}
+
+QJsonArray Bar::userThemes() const {
+    QFile file(m_home + "/.config/omarchy/omabar16/themes.json");
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
+    return QJsonDocument::fromJson(file.readAll()).array();
+}
+
+void Bar::saveUserThemes(const QJsonArray &themes) {
+    QString problem;
+    if (!Proc::writeAtomically(m_home + "/.config/omarchy/omabar16/themes.json",
+                               QJsonDocument(themes).toJson(QJsonDocument::Indented), &problem)) {
+        setError("Couldn't save your bar themes: " + problem);
+        return;
+    }
+    // Read back at once, rather than when the watcher gets to it.
+    m_presetsStamp.clear();
+    reload();
+}
+
+bool Bar::saveTheme(const QString &name) {
+    const QString label = name.trimmed().left(40);
+    if (label.isEmpty())
+        return false;
+    const QString id = "user-" + (slug(label).isEmpty() ? "theme" : slug(label));
+    QJsonArray themes;
+    for (const auto &value : userThemes())
+        if (value.toObject().value("id").toString() != id)
+            themes.append(value);
+    themes.append(QJsonObject{{"id", id}, {"label", label}, {"desc", "Your theme"}, {"user", true},
+                              {"style", m_cfg.value("style").toObject()}});
+    saveUserThemes(themes);
+    setNotice("Saved the bar's look as “" + label + "”, under Yours.");
+    return true;
+}
+
+void Bar::deleteTheme(const QString &id) {
+    QJsonArray themes;
+    for (const auto &value : userThemes())
+        if (value.toObject().value("id").toString() != id)
+            themes.append(value);
+    saveUserThemes(themes);
+}
+
+void Bar::exportTheme(const QString &id) {
+    QJsonObject theme{{"label", "My bar"}, {"desc", "Exported look"}, {"style", sanitizeStyle(m_cfg.value("style").toObject())}};
+    if (!id.isEmpty()) {
+        const auto found = std::find_if(m_themes.begin(), m_themes.end(), [&id](const QVariant &v) { return v.toMap().value("id") == id; });
+        if (found == m_themes.end())
+            return;
+        const auto map = found->toMap();
+        theme = {{"label", map.value("label").toString()}, {"desc", map.value("desc").toString()},
+                 {"style", sanitizeStyle(QJsonObject::fromVariantMap(map.value("style").toMap()))}};
+    }
+    const QByteArray json = QJsonDocument(QJsonObject{{"omabar16", 1}, {"themes", QJsonArray{theme}}}).toJson(QJsonDocument::Indented);
+    const QString path = m_home + "/.config/omarchy/omabar16/exports/" + (slug(theme.value("label").toString()).isEmpty() ? "theme" : slug(theme.value("label").toString())) + ".json";
+    QString problem;
+    if (!Proc::writeAtomically(path, json, &problem)) {
+        setError("Couldn't export: " + problem);
+        return;
+    }
+    QString shown = path;
+    shown.replace(m_home, "~");
+    setNotice("Exported to " + shown + (m_runCommands && !Proc::which("wl-copy").isEmpty() ? ", and copied." : "."));
+    if (m_runCommands && !Proc::which("wl-copy").isEmpty())
+        Proc::run(this, "sh", {"-c", "wl-copy < " + Proc::shellQuote(path)});
+}
+
+void Bar::importThemes(const QString &textOrPath) {
+    QByteArray json = textOrPath.trimmed().toUtf8();
+    if (!json.startsWith('{') && !json.startsWith('[')) {
+        QString path = Proc::expandHome(QString::fromUtf8(json), m_home);
+        if (path.startsWith("file://"))
+            path = path.mid(7);
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly)) {
+            setError("Couldn't read " + path + ".");
+            return;
         }
-        m_debounce.start();
-    }, 15000);
+        json = file.readAll();
+    }
+    const QJsonArray found = parseThemes(json);
+    if (found.isEmpty()) {
+        setError("That has no bar themes in it.");
+        return;
+    }
+    QJsonArray themes = userThemes();
+    for (const auto &value : found) {
+        const auto theme = value.toObject();
+        const QString label = theme.value("label").toString();
+        const QString id = "user-" + (slug(label).isEmpty() ? "imported" : slug(label));
+        for (int i = themes.size() - 1; i >= 0; --i)
+            if (themes.at(i).toObject().value("id").toString() == id)
+                themes.removeAt(i);
+        themes.append(QJsonObject{{"id", id}, {"label", label}, {"desc", "Imported"}, {"user", true}, {"style", theme.value("style")}});
+    }
+    saveUserThemes(themes);
+    setNotice(QString("Imported %1 %2, under Yours.").arg(found.size()).arg(found.size() == 1 ? "theme" : "themes"));
+}
+
+QJsonObject Bar::sanitizeStyle(const QJsonObject &style) {
+    static const QSet<QString> colours{"bg", "fg", "accent", "outlineColor", "hoverColor"};
+    static const QSet<QString> words{"shape", "colors", "fontFamily", "iconFont"};
+    static const QSet<QString> flags{"solid", "flatEnds"};
+    static const QSet<QString> numbers{"tint", "gap", "inset", "depth", "edge", "float", "pad", "size", "radius",
+                                       "minContrast", "outline", "shadow", "backdrop", "barOpacity",
+                                       "segmentOpacity", "hoverOpacity"};
+    QJsonObject out;
+    for (auto it = style.begin(); it != style.end(); ++it) {
+        const QString key = it.key();
+        const QJsonValue v = it.value();
+        if (colours.contains(key) && isHex(v))
+            out.insert(key, v);
+        else if (words.contains(key) && v.isString() && !v.toString().isEmpty())
+            out.insert(key, v.toString().left(80));
+        else if (flags.contains(key) && v.isBool())
+            out.insert(key, v);
+        else if (numbers.contains(key) && v.isDouble())
+            out.insert(key, v);
+        else if (key == "palette" && v.isArray()) {
+            QJsonArray palette;
+            for (const auto &entry : v.toArray())
+                if (entry.isString())
+                    palette.append(entry.toString().left(24));
+            if (!palette.isEmpty())
+                out.insert(key, palette);
+        } else if ((key == "regions" || key == "modules") && v.isObject()) {
+            QJsonObject map;
+            const auto source = v.toObject();
+            for (auto m = source.begin(); m != source.end(); ++m)
+                if (isHex(m.value()))
+                    map.insert(m.key(), m.value());
+            if (!map.isEmpty())
+                out.insert(key, map);
+        }
+    }
+    return out;
+}
+
+QJsonArray Bar::parseThemes(const QByteArray &json) {
+    const QJsonDocument doc = QJsonDocument::fromJson(json);
+    QJsonArray list;
+    if (doc.isArray())
+        list = doc.array();
+    else if (doc.object().value("themes").isArray())
+        list = doc.object().value("themes").toArray();
+    else if (doc.isObject())
+        list.append(doc.object());
+    QJsonArray out;
+    for (const auto &value : list) {
+        const auto theme = value.toObject();
+        if (!theme.value("style").isObject())
+            continue;
+        QString label = theme.value("label").toString(theme.value("name").toString()).trimmed().left(32);
+        out.append(QJsonObject{{"label", label.isEmpty() ? "Imported" : label},
+                               {"style", sanitizeStyle(theme.value("style").toObject())}});
+    }
+    return out;
+}
+
+QString Bar::underlineInk(const QJsonObject &bar, const QHash<QString, QString> &themeColors) {
+    const QJsonObject style = bar.value("style").toObject();
+    // A transparent bar's text is omabar16's to fit to the wallpaper.
+    if (style.value("shape").toString() != "underline" || bar.value("transparent").toBool())
+        return {};
+    static const QRegularExpression hex("^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$");
+    auto color = [](const QString &value) { return hex.match(value).hasMatch() ? QColor(value.left(7)) : QColor(); };
+    QColor background = color(style.value("bg").toString());
+    if (!background.isValid())
+        background = color(themeColors.value("background"));
+    const QColor themeText = color(themeColors.value("foreground"));
+    QColor text = color(style.value("fg").toString());
+    if (!text.isValid())
+        text = themeText;
+    if (!background.isValid() || !text.isValid())
+        return {};
+    // The bar's own minimum, held between "just legible" and AAA.
+    const double minimum = std::clamp(style.value("minContrast").toDouble(4.5), 3.0, 7.0);
+    if (Theme::contrastRatio(text, background) >= minimum)
+        return {};
+    // The theme's text colour, moved toward black or white only as far as it
+    // has to go.
+    return Theme::readable(themeText.isValid() ? themeText : text, background, minimum).name();
+}
+
+// --- layout ---
+
+void Bar::applyLayout(const QString &id) {
+    const auto found = std::find_if(m_layouts.begin(), m_layouts.end(), [&id](const QVariant &v) { return v.toMap().value("id") == id; });
+    if (found == m_layouts.end())
+        return;
+    const auto preset = found->toMap();
+    QSet<QString> known;
+    for (const auto &widget : m_widgets)
+        known.insert(widget.toMap().value("id").toString());
+
+    const QJsonObject current = m_cfg.value("layout").toObject();
+    auto mine = [&current](const QString &widget) -> QJsonObject {
+        for (const auto &lane : kLanes)
+            for (const auto &entry : current.value(lane).toArray())
+                if (entry.toObject().value("id").toString() == widget)
+                    return entry.toObject();
+        return {};
+    };
+    QJsonObject next_layout;
+    QSet<QString> present;
+    const auto lanes = preset.value("layout").toMap();
+    for (const auto &lane : kLanes) {
+        QJsonArray entries;
+        for (const auto &value : lanes.value(lane).toList()) {
+            const QJsonObject entry = QJsonObject::fromVariantMap(value.toMap());
+            const QString widget = entry.value("id").toString();
+            if (!known.isEmpty() && !known.contains(widget))
+                continue;
+            // A widget already on the bar keeps its own settings (clock
+            // format, custom icon…); the preset only decides where it goes.
+            const QJsonObject own = mine(widget);
+            entries.append(own.isEmpty() ? entry : own);
+            present.insert(widget);
+        }
+        next_layout.insert(lane, entries);
+    }
+    // Widgets from other plugins (folder trays, the dock…) follow you into
+    // every layout, on the right.
+    QJsonArray right = next_layout.value("right").toArray();
+    for (const auto &lane : kLanes)
+        for (const auto &entry : current.value(lane).toArray()) {
+            const QString widget = entry.toObject().value("id").toString();
+            if (!widget.startsWith("omarchy.") && !present.contains(widget))
+                right.append(entry);
+        }
+    next_layout.insert("right", right);
+
+    QJsonObject next = m_cfg;
+    next.insert("layout", next_layout);
+    next.insert("centerAnchor", preset.value("anchor").toString());
+    const QString edge = preset.value("position").toString();
+    if (!edge.isEmpty())
+        next.insert("position", edge);
+    fixAnchor(next);
+    commit(next);
+}
+
+void Bar::setPosition(const QString &position) {
+    static const QStringList edges{"top", "bottom", "left", "right"};
+    if (!edges.contains(position))
+        return;
+    QJsonObject next = m_cfg;
+    next.insert("position", position);
+    commit(next);
+}
+
+void Bar::setTransparent(bool on) {
+    QJsonObject next = m_cfg;
+    next.insert("transparent", on);
+    commit(next, true);
+}
+
+void Bar::setCenterAnchor(const QString &id) {
+    QJsonObject next = m_cfg;
+    next.insert("centerAnchor", id);
+    fixAnchor(next);
+    commit(next);
+}
+
+void Bar::addWidget(const QString &id, const QString &lane, int index) {
+    if (id.isEmpty() || !kLanes.contains(lane))
+        return;
+    QJsonObject next = m_cfg;
+    QJsonObject layout = next.value("layout").toObject();
+    QJsonArray entries = layout.value(lane).toArray();
+    const int at = index < 0 ? entries.size() : std::min<int>(index, entries.size());
+    entries.insert(at, newEntry(id));
+    layout.insert(lane, entries);
+    next.insert("layout", layout);
+    fixAnchor(next);
+    commit(next);
+}
+
+void Bar::removeWidget(const QString &lane, int index) {
+    QJsonObject next = m_cfg;
+    QJsonObject layout = next.value("layout").toObject();
+    QJsonArray entries = layout.value(lane).toArray();
+    if (index < 0 || index >= entries.size())
+        return;
+    entries.removeAt(index);
+    layout.insert(lane, entries);
+    next.insert("layout", layout);
+    fixAnchor(next);
+    commit(next);
+}
+
+void Bar::moveWidget(const QString &fromLane, int fromIndex, const QString &toLane, int toIndex) {
+    if (!kLanes.contains(fromLane) || !kLanes.contains(toLane))
+        return;
+    QJsonObject next = m_cfg;
+    QJsonObject layout = next.value("layout").toObject();
+    QJsonArray from = layout.value(fromLane).toArray();
+    if (fromIndex < 0 || fromIndex >= from.size())
+        return;
+    const QJsonValue entry = from.at(fromIndex);
+    from.removeAt(fromIndex);
+    if (fromLane == toLane && toIndex > fromIndex)
+        --toIndex;
+    layout.insert(fromLane, from);
+    QJsonArray to = layout.value(toLane).toArray();
+    to.insert(std::clamp<int>(toIndex, 0, to.size()), entry);
+    layout.insert(toLane, to);
+    next.insert("layout", layout);
+    fixAnchor(next);
+    commit(next);
+}
+
+void Bar::setEntry(const QString &lane, int index, const QString &key, const QVariant &value) {
+    if (key == "id")
+        return;
+    QJsonObject entry = entryAt(lane, index);
+    if (entry.isEmpty())
+        return;
+    const QJsonValue json = QJsonValue::fromVariant(value);
+    if (!value.isValid() || value.isNull() || (json.isString() && json.toString().isEmpty()))
+        entry.remove(key);
+    else
+        entry.insert(key, json);
+    QJsonObject next = m_cfg;
+    QJsonObject layout = next.value("layout").toObject();
+    QJsonArray entries = layout.value(lane).toArray();
+    entries.replace(index, entry);
+    layout.insert(lane, entries);
+    next.insert("layout", layout);
+    commit(next);
+}
+
+// --- history ---
+
+void Bar::undo() {
+    if (m_undo.isEmpty() || !editable())
+        return;
+    m_burst.stop();
+    m_redo.append(m_cfg);
+    m_cfg = m_undo.takeLast();
+    m_pendingWrite = true;
+    m_writeTimer.start();
+    emit changed();
+}
+
+void Bar::redo() {
+    if (m_redo.isEmpty() || !editable())
+        return;
+    m_burst.stop();
+    m_undo.append(m_cfg);
+    m_cfg = m_redo.takeLast();
+    m_pendingWrite = true;
+    m_writeTimer.start();
+    emit changed();
+}
+
+void Bar::revert() {
+    if (m_snapshot.isEmpty() || m_snapshot == m_cfg)
+        return;
+    m_burst.stop();
+    if (commit(m_snapshot))
+        setNotice("The bar is back to how it was when OMAcraft opened. Undo brings your changes back.");
 }
 
 void Bar::useAsBar() {
@@ -252,59 +970,6 @@ void Bar::useAsBar() {
     });
 }
 
-void Bar::applyTheme(const QString &id) { ipc({"theme", id}); }
-void Bar::applyLayout(const QString &id) { ipc({"layout", id}); }
-void Bar::setPosition(const QString &position) { ipc({"position", position}); }
-
-void Bar::setTransparent(bool on) {
-    if (!m_runCommands)
-        return;
-    Proc::run(this, "omarchy-bar", {"transparent", on ? "true" : "false"}, [this](const Proc::Result &result) {
-        if (!result.ok())
-            setError(result.message());
-        m_debounce.start();
-    });
-}
-
-void Bar::setStyle(const QString &key, const QVariant &value) {
-    QString text;
-    if (value.typeId() == QMetaType::Bool)
-        text = value.toBool() ? "true" : "false";
-    else if (value.isValid() && !value.isNull())
-        text = value.toString();
-    ipc({"style", key, text});
-}
-
-void Bar::setColor(const QString &part, const QString &hex) { ipc({"color", part, hex}); }
-
-void Bar::addWidget(const QString &id, const QString &lane) {
-    const int end = layout().value(lane).toList().size();
-    ipc({"add", id, lane, QString::number(end)});
-}
-
-void Bar::removeWidget(const QString &lane, int index) { ipc({"remove", lane, QString::number(index)}); }
-
-void Bar::moveWidget(const QString &fromLane, int fromIndex, const QString &toLane, int toIndex) {
-    ipc({"move", fromLane, QString::number(fromIndex), toLane, QString::number(toIndex)});
-}
-
-void Bar::undo() { ipc({"undo"}); }
-void Bar::redo() { ipc({"redo"}); }
-void Bar::revert() { ipc({"revert"}, "Reverted the bar to how it was when the customizer last opened."); }
-
-void Bar::exportTheme(const QString &id) {
-    ipc({"exportTheme", id}, "Exported. omabar16 saves exports beside your themes in ~/.config/omarchy/omabar16.");
-}
-
-void Bar::openCustomizer(const QString &tab) {
-    if (!inUse()) {
-        setError("omabar16 isn't your bar right now. Use it as the bar first.");
-        return;
-    }
-    const QString payload = tab.isEmpty() ? "{}" : QString(R"({"tab":"%1"})").arg(tab);
-    Proc::run(this, "omarchy-shell", {"shell", "summon", "omabar16", payload});
-}
-
 void Bar::dismissMessages() {
     m_error.clear();
     m_notice.clear();
@@ -314,5 +979,11 @@ void Bar::dismissMessages() {
 void Bar::setError(const QString &message) {
     m_error = message;
     m_notice.clear();
+    emit messageChanged();
+}
+
+void Bar::setNotice(const QString &message) {
+    m_notice = message;
+    m_error.clear();
     emit messageChanged();
 }

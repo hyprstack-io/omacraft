@@ -132,7 +132,7 @@ Item {
                         Label {
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
-                            color: "#8a8a93"
+                            color: theme.textMuted
                             font.pixelSize: 12
                             text: (page.anyEffect ? "Every effect is in play: each "
                                                   : "Pick one or more; each ")
@@ -174,8 +174,8 @@ Item {
                                     Layout.fillWidth: true
                                     implicitHeight: 168
                                     radius: 9
-                                    color: picked ? Qt.rgba(tone.r, tone.g, tone.b, 0.12) : hover.hovered ? "#1b1b1f" : "#111113"
-                                    border.color: picked ? theme.accent : "#26262b"
+                                    color: picked ? Qt.rgba(tone.r, tone.g, tone.b, 0.12) : hover.hovered ? theme.hover : theme.inset
+                                    border.color: picked ? theme.accent : theme.border
                                     border.width: picked && !page.anyEffect ? 2 : 1
 
                                     EffectPreview {
@@ -200,14 +200,14 @@ Item {
                                             Label {
                                                 Layout.fillWidth: true
                                                 text: tile.modelData.name
-                                                color: tile.picked ? theme.accent : "white"
+                                                color: tile.picked ? theme.accent : theme.text
                                                 font.weight: Font.DemiBold
                                                 elide: Text.ElideRight
                                             }
                                             Label {
                                                 visible: tile.modelData.source === "omacraft"
                                                 text: "new"
-                                                color: "#8a8a93"
+                                                color: theme.textMuted
                                                 font.pixelSize: 9
                                             }
                                             Label { visible: tile.picked && !page.anyEffect; text: "✓"; color: theme.accent }
@@ -215,7 +215,7 @@ Item {
                                         Label {
                                             Layout.fillWidth: true
                                             text: tile.modelData.description || ""
-                                            color: "#8a8a93"
+                                            color: theme.textMuted
                                             font.pixelSize: 10
                                             elide: Text.ElideRight
                                         }
@@ -257,7 +257,7 @@ Item {
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
-                            Label { Layout.preferredWidth: 120; text: "Colour"; color: "#d6d6da" }
+                            Label { Layout.preferredWidth: 120; text: "Colour"; color: theme.textSoft }
                             Chip { text: "Each effect's own"; chosen: burn.color === "effect"; onClicked: burn.setColor("effect") }
                             Chip { text: "Theme accent"; chosen: burn.color === "theme"; onClicked: burn.setColor("theme") }
                             Repeater {
@@ -267,11 +267,18 @@ Item {
                                     readonly property bool picked: burn.color.toLowerCase() === modelData
                                     width: 24; height: 24; radius: 12
                                     color: modelData
-                                    border.color: picked ? "white" : "#26262b"
+                                    border.color: picked ? theme.text : theme.border
                                     border.width: picked ? 2 : 1
                                     HoverHandler { cursorShape: Qt.PointingHandCursor }
                                     TapHandler { onTapped: burn.setColor(modelData) }
                                 }
+                            }
+                            ColorButton {
+                                value: burn.color
+                                title: "Effect colour"
+                                border.width: isHex && page.swatches.indexOf(burn.color.toLowerCase()) < 0 ? 2 : 1
+                                border.color: border.width > 1 ? theme.accent : theme.border
+                                onPicked: hex => burn.setColor(hex)
                             }
                             Item { Layout.fillWidth: true }
                         }
@@ -300,7 +307,7 @@ Item {
                             checked: burn.skipFullscreen
                             onToggled: on => burn.setSkipFullscreen(on)
                         }
-                        Label { text: "Never for these window classes"; color: "#d6d6da" }
+                        Label { text: "Never for these window classes"; color: theme.textSoft }
                         Flow {
                             Layout.fillWidth: true
                             spacing: 6
@@ -315,7 +322,7 @@ Item {
                             Label {
                                 visible: burn.exclude.length === 0
                                 text: "None"
-                                color: "#5f5f68"
+                                color: theme.textFaint
                             }
                         }
                         RowLayout {
@@ -361,7 +368,7 @@ Item {
                 Label {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    color: "#5f5f68"
+                    color: theme.textFaint
                     font.pixelSize: 11
                     text: "27 effects after Burn My Windows by Simon Schneegans, plus ASCII and Warp Speed of OMAcraft's own. "
                           + "From a terminal: omarchy-burn list | preview EFFECT | close effects ID... | open speed N."
@@ -380,8 +387,8 @@ Item {
         property real progress: 0.3
         property real time: 0.6
         radius: 6
-        color: "#08080a"
-        border.color: "#202026"
+        color: theme.dark ? theme.sunken : theme.borderStrong
+        border.color: theme.border
         clip: true
 
         readonly property real winW: Math.min(width * 0.46, height * 0.62)
@@ -394,8 +401,9 @@ Item {
             width: ep.winW
             height: ep.winH
             visible: false
-            color: "#16161a"
-            Rectangle { width: parent.width; height: 9; color: "#222228" }
+            // Lighter than the backdrop on a dark theme, whiter on a light one.
+            color: theme.dark ? theme.hover : theme.window
+            Rectangle { width: parent.width; height: 9; color: theme.border }
             Rectangle { x: 4; y: 2.5; width: 4; height: 4; radius: 2; color: theme.accent }
             Column {
                 x: 6; y: 15; spacing: 4
@@ -406,7 +414,7 @@ Item {
                         width: [0.7, 0.5, 0.82, 0.38, 0.6][index] * (ep.winW - 12)
                         height: 4
                         radius: 2
-                        color: index === 0 ? theme.accent : "#4a4a55"
+                        color: index === 0 ? theme.accent : theme.borderStrong
                     }
                 }
             }

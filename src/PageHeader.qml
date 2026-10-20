@@ -28,11 +28,11 @@ RowLayout {
     ColumnLayout {
         Layout.fillWidth: true
         spacing: 0
-        Label { text: title; color: "white"; font.pixelSize: 19; font.weight: Font.DemiBold }
+        Label { text: title; color: theme.text; font.pixelSize: 19; font.weight: Font.DemiBold }
         Label {
             Layout.fillWidth: true
             text: subtitle
-            color: "#8a8a93"
+            color: theme.textMuted
             font.pixelSize: 12
             elide: Text.ElideRight
         }

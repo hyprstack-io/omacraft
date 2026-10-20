@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=OMAcraft
-Comment=Install, enable and set up your Omarchy plugins, HyprCraft and the ISO builder in one place
+Comment=Install, enable and set up your Omarchy plugins, HyprFIGZ and HyprBUILDZ in one place
 Exec=omacraft %U
 Icon=omacraft
 Terminal=false

@@ -112,7 +112,7 @@ Item {
 
                         Layout.fillWidth: true
                         implicitHeight: body.implicitHeight + 32
-                        border.color: chosen ? theme.accent : "#26262b"
+                        border.color: chosen ? theme.accent : theme.border
 
                         TapHandler { onTapped: page.selected = card.index }
 
@@ -127,19 +127,19 @@ Item {
                                 spacing: 10
                                 Label {
                                     text: card.modelData.name
-                                    color: "white"
+                                    color: theme.text
                                     font.pixelSize: 15
                                     font.weight: Font.DemiBold
                                 }
                                 Label {
                                     visible: card.modelData.version !== ""
                                     text: "v" + card.modelData.version
-                                    color: "#5f5f68"
+                                    color: theme.textFaint
                                     font.pixelSize: 11
                                 }
                                 Label {
                                     text: card.modelData.id
-                                    color: "#5f5f68"
+                                    color: theme.textFaint
                                     font.pixelSize: 11
                                     font.family: "monospace"
                                 }
@@ -155,13 +155,13 @@ Item {
                             Label {
                                 Layout.fillWidth: true
                                 text: card.modelData.summary
-                                color: "#b4b4bc"
+                                color: theme.textSoft
                                 wrapMode: Text.WordWrap
                             }
 
                             Label {
                                 Layout.fillWidth: true
-                                color: "#74747d"
+                                color: theme.textDim
                                 font.pixelSize: 11
                                 font.family: "monospace"
                                 elide: Text.ElideMiddle
@@ -197,7 +197,7 @@ Item {
                                 Label {
                                     visible: card.modelData.installed && card.modelData.barWidget
                                     text: "On the bar:"
-                                    color: "#8a8a93"
+                                    color: theme.textMuted
                                     font.pixelSize: 12
                                     Layout.leftMargin: 8
                                 }
@@ -216,7 +216,7 @@ Item {
                                     visible: card.modelData.installed && card.modelData.barWidget && card.modelData.enabled
                                              && card.modelData.section === ""
                                     text: "not placed"
-                                    color: "#74747d"
+                                    color: theme.textDim
                                     font.pixelSize: 11
                                 }
 
@@ -248,7 +248,7 @@ Item {
                                 visible: card.showSource
                                 Layout.fillWidth: true
                                 spacing: 8
-                                Label { text: "Code in"; color: "#8a8a93"; font.pixelSize: 12 }
+                                Label { text: "Code in"; color: theme.textMuted; font.pixelSize: 12 }
                                 TextField {
                                     id: sourceField
                                     Layout.fillWidth: true
@@ -260,7 +260,7 @@ Item {
                                 }
                                 Label {
                                     text: card.modelData.sourceExists ? "found" : "no manifest.json there"
-                                    color: card.modelData.sourceExists ? theme.accent : "#ff8a8a"
+                                    color: card.modelData.sourceExists ? theme.accent : theme.danger
                                     font.pixelSize: 11
                                 }
                             }
@@ -279,8 +279,8 @@ Item {
                         spacing: 8
                         RowLayout {
                             Layout.fillWidth: true
-                            Label { text: "ISO Builder"; color: "white"; font.pixelSize: 15; font.weight: Font.DemiBold }
-                            Label { text: "hyprbuildz"; color: "#5f5f68"; font.pixelSize: 11; font.family: "monospace" }
+                            Label { text: "HyprBUILDZ"; color: theme.text; font.pixelSize: 15; font.weight: Font.DemiBold }
+                            Label { text: "hyprbuildz"; color: theme.textFaint; font.pixelSize: 11; font.family: "monospace" }
                             Item { Layout.fillWidth: true }
                             StatePill { text: "Built in"; on: true }
                         }
@@ -288,8 +288,8 @@ Item {
                             Layout.fillWidth: true
                             Label {
                                 Layout.fillWidth: true
-                                text: "Custom Arch Linux ISOs with archiso, written to USB. It's part of OMAcraft rather than a shell plugin, so there's nothing to enable. HyprCraft's configurator is built in too; its plugin above only adds the bar dropdown."
-                                color: "#b4b4bc"
+                                text: "Custom Arch Linux ISOs with archiso, written to USB. It's part of OMAcraft rather than a shell plugin, so there's nothing to enable. HyprFIGZ's configurator is built in too; its plugin above only adds the bar dropdown."
+                                color: theme.textSoft
                                 wrapMode: Text.WordWrap
                             }
                             Button { text: "Open"; focusPolicy: Qt.NoFocus; onClicked: page.openPage("iso") }

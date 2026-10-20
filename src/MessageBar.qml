@@ -17,8 +17,8 @@ Rectangle {
     visible: error !== "" || notice !== ""
     implicitHeight: row.implicitHeight + 18
     radius: 8
-    color: bad ? "#2a1416" : Qt.rgba(tone.r, tone.g, tone.b, 0.10)
-    border.color: bad ? "#6b2a2f" : Qt.rgba(tone.r, tone.g, tone.b, 0.45)
+    color: bad ? theme.dangerFill : Qt.rgba(tone.r, tone.g, tone.b, 0.10)
+    border.color: bad ? theme.dangerBorder : Qt.rgba(tone.r, tone.g, tone.b, 0.45)
 
     RowLayout {
         id: row
@@ -29,7 +29,7 @@ Rectangle {
         Label {
             Layout.fillWidth: true
             text: bar.bad ? bar.error : bar.notice
-            color: bar.bad ? "#ffb4b4" : "white"
+            color: bar.bad ? theme.dangerText : theme.text
             wrapMode: Text.WordWrap
         }
         Button {

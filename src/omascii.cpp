@@ -70,7 +70,7 @@ void Omascii::refresh() {
         m_config = status.value("config").toObject().toVariantMap();
         QVariantMap options;
         for (const auto &key : {"layouts", "styles", "effects", "coreEffects", "charsets", "flips", "shadows", "borders",
-                                "colorModes", "gradients", "effectGroups", "palettes"})
+                                "colorModes", "gradients", "effectGroups", "palettes", "inkBgs", "presets"})
             options.insert(key, status.value(key).toArray().toVariantList());
         options["paletteStops"] = status.value("paletteStops").toObject().toVariantMap();
         options["fontCount"] = status.value("fontCount").toInt();
@@ -112,6 +112,17 @@ void Omascii::setOption(const QString &key, const QVariant &value) {
         next["source"] = "text";
     else if (key == "image")
         next["source"] = "image";
+    change(next);
+}
+
+void Omascii::applyPreset(const QVariantMap &options, const QString &font) {
+    QVariantMap next = m_config;
+    for (auto it = options.begin(); it != options.end(); ++it)
+        next.insert(it.key(), it.value());
+    if (!font.isEmpty()) {
+        next["font"] = font;
+        next["source"] = "text";
+    }
     change(next);
 }
 

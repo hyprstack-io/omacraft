@@ -1,12 +1,30 @@
 // Theme watching follows Omacut (MIT, David Heinemeier Hansson).
 #include "theme.h"
 
-#include <QColor>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QRegularExpression>
 #include <cmath>
+
+namespace {
+
+double luminance(const QColor &c) {
+    auto linear = [](double v) { return v <= .04045 ? v / 12.92 : std::pow((v + .055) / 1.055, 2.4); };
+    return .2126 * linear(c.redF()) + .7152 * linear(c.greenF()) + .0722 * linear(c.blueF());
+}
+
+double contrast(const QColor &a, const QColor &b) {
+    const double la = luminance(a), lb = luminance(b);
+    return (std::max(la, lb) + .05) / (std::min(la, lb) + .05);
+}
+
+QColor named(const QHash<QString, QString> &colors, const QString &key, const QColor &fallback) {
+    const QColor c(colors.value(key));
+    return c.isValid() ? c : fallback;
+}
+
+} // namespace
 
 Theme::Theme(const QString &directory, QObject *parent)
     : QObject(parent),
@@ -19,24 +37,54 @@ Theme::Theme(const QString &directory, QObject *parent)
     reload();
 }
 
-QString Theme::readAccent(const QString &path) {
+QHash<QString, QString> Theme::readColors(const QString &path) {
+    QHash<QString, QString> out;
     QFile file(path);
-    if (file.open(QIODevice::ReadOnly)) {
-        const QRegularExpression expression(R"re(^\s*accent\s*=\s*["'](#[0-9a-fA-F]{6})["'])re",
-                                            QRegularExpression::MultilineOption);
-        const auto match = expression.match(QString::fromUtf8(file.readAll()));
-        if (match.hasMatch())
-            return match.captured(1);
+    if (!file.open(QIODevice::ReadOnly))
+        return out;
+    static const QRegularExpression line(R"re(^\s*([a-z_]+)\s*=\s*["']([^"']*)["'])re",
+                                         QRegularExpression::MultilineOption);
+    auto it = line.globalMatch(QString::fromUtf8(file.readAll()));
+    while (it.hasNext()) {
+        const auto match = it.next();
+        out.insert(match.captured(1), match.captured(2).trimmed());
     }
-    return "#FFD60A";
+    return out;
 }
+
+QString Theme::readAccent(const QString &path) {
+    const QColor accent(readColors(path).value("accent"));
+    return accent.isValid() && QString(readColors(path).value("accent")).startsWith('#')
+               ? accent.name(QColor::HexRgb)
+               : QString("#FFD60A");
+}
+
+bool Theme::isDark(const QHash<QString, QString> &colors) {
+    const QString mode = colors.value("mode").toLower();
+    if (mode == "dark" || mode == "light")
+        return mode == "dark";
+    const QColor background(colors.value("background"));
+    return !background.isValid() || luminance(background) < .4;
+}
+
+QColor Theme::mix(const QColor &a, const QColor &b, double t) {
+    return QColor::fromRgbF(a.redF() + (b.redF() - a.redF()) * t, a.greenF() + (b.greenF() - a.greenF()) * t,
+                            a.blueF() + (b.blueF() - a.blueF()) * t);
+}
+
+QColor Theme::readable(const QColor &color, const QColor &against, double minimum) {
+    QColor out = color;
+    const QColor goal = luminance(against) > .4 ? QColor(Qt::black) : QColor(Qt::white);
+    for (int i = 1; i <= 20 && contrast(out, against) < minimum; ++i)
+        out = mix(color, goal, i * .05);
+    return out;
+}
+
+double Theme::contrastRatio(const QColor &a, const QColor &b) { return contrast(a, b); }
 
 // Black or white, whichever reads on the accent (WCAG relative luminance).
 QString Theme::accentForeground() const {
-    const QColor c(m_accent);
-    auto linear = [](double v) { return v <= .04045 ? v / 12.92 : std::pow((v + .055) / 1.055, 2.4); };
-    const double luminance = .2126 * linear(c.redF()) + .7152 * linear(c.greenF()) + .0722 * linear(c.blueF());
-    return luminance > .179 ? "black" : "white";
+    return luminance(QColor(m_accent)) > .179 ? "black" : "white";
 }
 
 void Theme::reload() {
@@ -57,9 +105,27 @@ void Theme::reload() {
         if (QFileInfo::exists(path))
             m_watcher.addPath(path);
 
-    const auto accent = readAccent(m_directory + "/theme/colors.toml");
-    if (accent != m_accent) {
-        m_accent = accent;
-        emit changed();
-    }
+    const auto colors = readColors(m_directory + "/theme/colors.toml");
+    const bool dark = isDark(colors);
+    // Without a theme: OMAcraft's own dark look.
+    const QColor background = named(colors, "background", dark ? QColor("#0e0e10") : QColor("#f4f4f5"));
+    QColor foreground = named(colors, "foreground", dark ? QColor("#f2f2f4") : QColor("#18181b"));
+    // A theme's foreground is meant for body text; make sure it stays clear.
+    foreground = readable(foreground, background, 7);
+    const QString accent = readAccent(m_directory + "/theme/colors.toml");
+    const QColor red = readable(named(colors, "red", QColor("#e5534b")), background, 3.5);
+    const QColor yellow = readable(named(colors, "yellow", QColor("#c9a227")), background, 3);
+    const QColor green = readable(named(colors, "green", QColor("#57ab5a")), background, 3);
+
+    if (accent == m_accent && dark == m_dark && background == m_background && foreground == m_foreground
+        && red == m_red && yellow == m_yellow && green == m_green)
+        return;
+    m_accent = accent;
+    m_dark = dark;
+    m_background = background;
+    m_foreground = foreground;
+    m_red = red;
+    m_yellow = yellow;
+    m_green = green;
+    emit changed();
 }

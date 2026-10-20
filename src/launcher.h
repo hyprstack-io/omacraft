@@ -7,7 +7,7 @@
 #include <QVariantList>
 #include <functional>
 
-// OMArofi, the Omarchy launcher that lives in the Studio plugin. Its layouts,
+// HyprLAUNCH, the Omarchy launcher that lives in the Studio plugin. Its layouts,
 // colour schemes and transitions come from the plugin's own
 // LauncherStyles.js, so OMAcraft lists exactly what the launcher draws. The
 // choice lives in ~/.config/omarchy/launcher-style.json, which the launcher

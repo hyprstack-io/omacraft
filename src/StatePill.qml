@@ -11,13 +11,13 @@ Rectangle {
     implicitWidth: label.implicitWidth + 16
     implicitHeight: 22
     radius: 11
-    color: warn ? "#2a1416" : on ? Qt.rgba(tone.r, tone.g, tone.b, 0.16) : "#1d1d21"
-    border.color: warn ? "#6b2a2f" : on ? Qt.rgba(tone.r, tone.g, tone.b, 0.6) : "#2c2c32"
+    color: warn ? theme.dangerFill : on ? Qt.rgba(tone.r, tone.g, tone.b, 0.16) : theme.hover
+    border.color: warn ? theme.dangerBorder : on ? Qt.rgba(tone.r, tone.g, tone.b, 0.6) : theme.border
     Label {
         id: label
         anchors.centerIn: parent
         text: parent.text
-        color: parent.warn ? "#ffb4b4" : parent.on ? theme.accent : "#9a9aa3"
+        color: parent.warn ? theme.dangerText : parent.on ? theme.accent : theme.textMuted
         font.pixelSize: 11
     }
 }

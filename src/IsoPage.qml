@@ -3,8 +3,10 @@ import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
 
-// hyprbuildz, the ISO builder, as one of OMAcraft's pages. Its keys work
-// while the page is showing; the window asks before quitting mid-build.
+// HyprBUILDZ: hyprbuildz, the ISO builder. The stage is the build itself,
+// step by step from the profile to the USB drive, with the Build button and
+// its progress; each step opens the tab that sets it. Its keys work while
+// the page is showing; the window asks before quitting mid-build.
 Item {
     id: win
 
@@ -14,9 +16,9 @@ Item {
 
     readonly property color accent: theme.accent
     readonly property color accentForeground: theme.accentForeground
-    readonly property color surface: "#151518"
-    readonly property color line: "#26262b"
+    readonly property color line: theme.border
 
+    property int tab: startTab === "contents" ? 1 : startTab === "options" ? 2 : startTab === "log" ? 3 : 0
     property bool flashVisible: false
     property bool editorVisible: false
     property bool cancelConfirmVisible: false
@@ -26,6 +28,13 @@ Item {
     // Letter shortcuts stand down while a text field has the keyboard.
     readonly property bool typing: Window.activeFocusItem !== null && Window.activeFocusItem.cursorPosition !== undefined
     readonly property bool keysFreeHere: active && keysFree && !overlayOpen
+    readonly property bool building: iso.state === "building" || iso.state === "checking" || iso.state === "measuring"
+    readonly property var profiles: [
+        { id: "releng", name: "Live installer", glyph: "\u{f08c7}", detail: "The official Arch ISO, with archinstall.", art: ["archinstall", "pacstrap", "grub"] },
+        { id: "baseline", name: "Minimal", glyph: "\u{f0a4f}", detail: "A bare live system to build on.", art: ["bash", "pacman", "systemd"] },
+        { id: "replica", name: "This desktop", glyph: "\u{f0379}", detail: "Boots into a copy of this desktop.", art: ["your apps", "your theme", "your home"] }
+    ]
+    readonly property var profileInfo: profiles.find(p => p.id === iso.profile) || profiles[0]
     readonly property var shortcuts: [
         { keys: "Space", action: "Build the ISO" },
         { keys: "Esc", action: "Cancel the build, leave a field, close" },
@@ -45,17 +54,17 @@ Item {
 
     // Text fields save when they lose focus, so take it before anything reads
     // the config.
-    function commitFields() {
-        keySink.forceActiveFocus();
-    }
-
+    function commitFields() { keySink.forceActiveFocus(); }
     function build() {
         commitFields();
         iso.build();
+        tab = 3;
     }
-
-    function home(path) {
-        return path.replace(/^\/home\/[^/]+/, "~");
+    function home(path) { return path.replace(/^\/home\/[^/]+/, "~"); }
+    // Opens a tab, then puts the keyboard in one of its fields.
+    function focusOn(index, field) {
+        tab = index;
+        Qt.callLater(() => field.forceActiveFocus());
     }
 
     function handleEscape() {
@@ -87,11 +96,11 @@ Item {
     Shortcut { sequence: "Space"; context: Qt.ApplicationShortcut; enabled: win.keysFreeHere && !win.typing && !iso.busy; onActivated: win.build() }
     Shortcut { sequence: "Ctrl+Z"; context: Qt.ApplicationShortcut; enabled: win.keysFreeHere && !win.typing; onActivated: iso.undo() }
     Shortcut { sequences: ["Ctrl+Shift+Z", "Ctrl+Y"]; context: Qt.ApplicationShortcut; enabled: win.keysFreeHere && !win.typing; onActivated: iso.redo() }
-    Shortcut { sequence: "P"; context: Qt.ApplicationShortcut; enabled: win.keysFreeHere && !win.typing; onActivated: iso.profile = ({ releng: "baseline", baseline: "replica", replica: "releng" })[iso.profile] }
-    Shortcut { sequence: "N"; context: Qt.ApplicationShortcut; enabled: win.keysFreeHere && !win.typing; onActivated: isoNameField.forceActiveFocus() }
-    Shortcut { sequence: "H"; context: Qt.ApplicationShortcut; enabled: win.keysFreeHere && !win.typing; onActivated: hostnameField.forceActiveFocus() }
-    Shortcut { sequence: "E"; context: Qt.ApplicationShortcut; enabled: win.keysFreeHere && !win.typing; onActivated: packagesArea.forceActiveFocus() }
-    Shortcut { sequence: "O"; context: Qt.ApplicationShortcut; enabled: win.keysFreeHere && !win.typing && iso.profile !== "replica"; onActivated: iso.chooseOverlay() }
+    Shortcut { sequence: "P"; context: Qt.ApplicationShortcut; enabled: win.keysFreeHere && !win.typing; onActivated: { win.tab = 0; iso.profile = ({ releng: "baseline", baseline: "replica", replica: "releng" })[iso.profile]; } }
+    Shortcut { sequence: "N"; context: Qt.ApplicationShortcut; enabled: win.keysFreeHere && !win.typing; onActivated: win.focusOn(1, isoNameField) }
+    Shortcut { sequence: "H"; context: Qt.ApplicationShortcut; enabled: win.keysFreeHere && !win.typing; onActivated: win.focusOn(1, hostnameField) }
+    Shortcut { sequence: "E"; context: Qt.ApplicationShortcut; enabled: win.keysFreeHere && !win.typing; onActivated: win.focusOn(1, packagesArea) }
+    Shortcut { sequence: "O"; context: Qt.ApplicationShortcut; enabled: win.keysFreeHere && !win.typing && iso.profile !== "replica"; onActivated: { win.tab = 1; iso.chooseOverlay(); } }
     Shortcut { sequence: "Shift+O"; context: Qt.ApplicationShortcut; enabled: win.keysFreeHere && !win.typing && iso.profile !== "replica"; onActivated: iso.clearOverlays() }
     Shortcut { sequence: "T"; context: Qt.ApplicationShortcut; enabled: win.keysFreeHere && !win.typing && iso.profile !== "replica"; onActivated: win.editorVisible = true }
     Shortcut { sequence: "M"; context: Qt.ApplicationShortcut; enabled: win.keysFreeHere && !win.typing && iso.profile !== "replica"; onActivated: iso.omarchySetup = !iso.omarchySetup }
@@ -117,35 +126,27 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        spacing: 0
+        anchors.margins: 20
+        spacing: 12
 
         PageHeader {
-            Layout.margins: 20
-            Layout.bottomMargin: 12
-            title: "ISO Builder"
-            subtitle: "hyprbuildz: custom Arch Linux ISOs, built with archiso"
+            title: "HyprBUILDZ"
+            subtitle: "hyprbuildz: custom Arch Linux ISOs, built with archiso and written to USB"
             glyph: "\u{f0a4f}"
-            Label {
-                visible: iso.canUndo || iso.canRedo
-                text: "Ctrl Z undo · Ctrl Shift Z redo"
-                color: "#5f5f68"
-                font.pixelSize: 11
-            }
+            Button { text: "Undo"; flat: true; focusPolicy: Qt.NoFocus; enabled: iso.canUndo; onClicked: iso.undo() }
+            Button { text: "Redo"; flat: true; focusPolicy: Qt.NoFocus; enabled: iso.canRedo; onClicked: iso.redo() }
+            Button { text: "Write to USB…"; flat: true; focusPolicy: Qt.NoFocus; enabled: !iso.busy; onClicked: win.flashVisible = true }
         }
 
         // --- what's wrong, or what just happened ---
         Rectangle {
             Layout.fillWidth: true
-            Layout.leftMargin: 20
-            Layout.rightMargin: 20
-            Layout.bottomMargin: 12
             visible: message.text !== ""
             implicitHeight: messageRow.implicitHeight + 20
             radius: 8
             readonly property bool bad: iso.error !== "" || (iso.notice === "" && iso.missing !== "")
-            color: bad ? "#2a1416" : Qt.rgba(win.accent.r, win.accent.g, win.accent.b, 0.10)
-            border.color: bad ? "#6b2a2f" : Qt.rgba(win.accent.r, win.accent.g, win.accent.b, 0.45)
-
+            color: bad ? theme.dangerFill : Qt.rgba(win.accent.r, win.accent.g, win.accent.b, 0.10)
+            border.color: bad ? theme.dangerBorder : Qt.rgba(win.accent.r, win.accent.g, win.accent.b, 0.45)
             RowLayout {
                 id: messageRow
                 anchors.fill: parent
@@ -156,7 +157,7 @@ Item {
                     id: message
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    color: parent.parent.bad ? "#ffb4b4" : "white"
+                    color: parent.parent.bad ? theme.dangerText : theme.text
                     text: iso.error !== "" ? iso.error : iso.notice !== "" ? iso.notice : iso.missing
                 }
                 Button {
@@ -173,166 +174,358 @@ Item {
             }
         }
 
-        // Side by side when there's room; stacked in a narrow tile, since
-        // Hyprland's tiling ignores the minimum size.
-        GridLayout {
-            id: panes
-            readonly property bool wide: win.width >= 960
-            columns: wide ? 2 : 1
+        // --- the stage: the build, step by step ---
+        Stage {
+            id: stage
             Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.leftMargin: 20
-            Layout.rightMargin: 20
-            Layout.bottomMargin: 20
-            rowSpacing: 16
-            columnSpacing: 16
+            Layout.preferredHeight: 196
+            windows: false
+            previewing: iso.busy
+            caption: iso.busy ? (iso.cancelling ? "Stopping and cleaning up…" : iso.stage || "Working…")
+                   : iso.builtIso !== "" ? "Built " + win.home(iso.builtIso).split("/").pop() + " · F writes it to USB"
+                   : win.profileInfo.name + " · saved in " + win.home(iso.outputDir)
 
-            // --- the ISO's settings ---
-            Rectangle {
-                Layout.fillHeight: true
-                Layout.fillWidth: !panes.wide
-                Layout.preferredWidth: panes.wide ? 440 : -1
-                Layout.preferredHeight: panes.wide ? -1 : 1
-                radius: 12
-                color: win.surface
-                border.color: win.line
+            readonly property var steps: [
+                { name: win.profileInfo.name, label: "Profile", glyph: win.profileInfo.glyph, tab: 0,
+                  detail: iso.profile === "replica" ? iso.desktopUser + "'s desktop" : win.profileInfo.detail },
+                { name: iso.profile === "replica" ? (iso.nativeCount + iso.foreignPackages.length + iso.packageCount) + " packages"
+                                                  : iso.packageCount === 0 ? "No extras" : iso.packageCount + " extra",
+                  label: "Packages", glyph: "\u{f03d7}", tab: 1,
+                  detail: iso.profile === "replica" ? iso.desktopKernel + " kernel" : "from your repositories" },
+                { name: iso.profile === "replica" ? (iso.sizing ? "measuring…" : iso.homeSize)
+                                                  : (iso.overlays.length + iso.editedFiles.length) === 0 ? "None" : iso.overlays.length + " folders · " + iso.editedFiles.length + " files",
+                  label: iso.profile === "replica" ? "Home" : "Files", glyph: "\u{f024b}", tab: 1,
+                  detail: iso.profile === "replica" ? (iso.replicaSecrets ? "with passwords" : "no passwords") : (iso.omarchySetup ? "+ Omarchy setup" : "your additions") },
+                { name: iso.timezone || "UTC", label: "Options", glyph: "\u{f0493}", tab: 2,
+                  detail: [iso.keymap, iso.compression].filter(x => x).join(" · ") },
+                { name: iso.isoName + ".iso", label: "ISO", glyph: "\u{f02ca}", tab: 3,
+                  detail: iso.builtIso !== "" && !iso.busy ? "ready" : iso.busy ? Math.round(iso.progress * 100) + "%" : win.home(iso.outputDir) },
+                { name: "USB drive", label: "Write", glyph: "\u{f0553}", tab: -1,
+                  detail: iso.state === "flashing" ? "writing…" : "F to write" }
+            ]
 
-                ScrollView {
-                    id: formScroll
-                    anchors.fill: parent
-                    anchors.margins: 1
-                    contentWidth: availableWidth
-                    clip: true
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 14
+                anchors.bottomMargin: 40
+                spacing: 14
 
-                    ColumnLayout {
-                        width: formScroll.availableWidth
-                        spacing: 22
-
-                        Item { implicitHeight: 2 }
-
-                        Field {
-                            Layout.leftMargin: 20; Layout.rightMargin: 20
-                            label: "Base profile"
-                            key: "P"
-                            RowLayout {
+                // The steps, joined by arrows; the one being built glows.
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: 4
+                    Repeater {
+                        model: stage.steps
+                        delegate: RowLayout {
+                            id: stepRow
+                            required property var modelData
+                            required property int index
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            Layout.preferredWidth: 1
+                            Layout.minimumWidth: 0
+                            spacing: 4
+                            Rectangle {
+                                id: stepCard
                                 Layout.fillWidth: true
-                                spacing: 8
-                                Repeater {
-                                    model: [
-                                        { id: "releng", name: "Live installer", detail: "The official Arch ISO, with archinstall." },
-                                        { id: "baseline", name: "Minimal", detail: "A bare live system to build on." },
-                                        { id: "replica", name: "This desktop", detail: "Boots into a copy of this desktop." }
-                                    ]
-                                    delegate: Rectangle {
-                                        required property var modelData
-                                        readonly property bool chosen: iso.profile === modelData.id
-                                        Layout.fillWidth: true
-                                        Layout.fillHeight: true
-                                        Layout.preferredWidth: 1
-                                        implicitHeight: profileText.implicitHeight + 22
-                                        radius: 8
-                                        color: chosen ? Qt.rgba(win.accent.r, win.accent.g, win.accent.b, 0.10) : "#111113"
-                                        border.color: chosen ? win.accent : win.line
-                                        ColumnLayout {
-                                            id: profileText
-                                            anchors.fill: parent
-                                            anchors.margins: 11
-                                            spacing: 3
-                                            Label {
-                                                text: modelData.name
-                                                color: chosen ? win.accent : "white"
-                                                font.weight: Font.DemiBold
-                                            }
-                                            Label {
-                                                Layout.fillWidth: true
-                                                text: modelData.detail
-                                                color: "#8a8a93"
-                                                font.pixelSize: 11
-                                                wrapMode: Text.WordWrap
-                                            }
-                                        }
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: iso.profile = modelData.id
-                                        }
+                                Layout.fillHeight: true
+                                Layout.preferredWidth: 1
+                                Layout.minimumWidth: 0
+                                radius: 10
+                                readonly property bool live: win.building && stepRow.index === 4 || iso.state === "flashing" && stepRow.index === 5
+                                readonly property bool done: iso.builtIso !== "" && !iso.busy && stepRow.index <= 4
+                                color: live ? Qt.rgba(win.accent.r, win.accent.g, win.accent.b, 0.28)
+                                     : stepHover.hovered ? Qt.rgba(0, 0, 0, 0.5) : Qt.rgba(0, 0, 0, 0.38)
+                                border.color: live || done ? win.accent : Qt.rgba(1, 1, 1, 0.1)
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 10
+                                    spacing: 3
+                                    RowLayout {
+                                        Label { text: stepRow.modelData.glyph; color: win.accent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 16 }
+                                        Label { text: stepRow.modelData.label.toUpperCase(); color: "#aaaaaa"; font.pixelSize: 9; font.letterSpacing: 1.2; Layout.fillWidth: true; elide: Text.ElideRight }
+                                        Label { visible: stepCard.done; text: "\u{f012c}"; color: win.accent; font.pixelSize: 12 }
+                                    }
+                                    Item { Layout.fillHeight: true }
+                                    Label { Layout.fillWidth: true; text: stepRow.modelData.name; color: "#f0f0f0"; font.pixelSize: 13; font.weight: Font.DemiBold; elide: Text.ElideRight }
+                                    Label { Layout.fillWidth: true; text: stepRow.modelData.detail || ""; color: "#b8b8b8"; font.pixelSize: 10; elide: Text.ElideRight }
+                                }
+                                HoverHandler { id: stepHover; cursorShape: Qt.PointingHandCursor }
+                                TapHandler {
+                                    onTapped: {
+                                        if (stepRow.modelData.tab >= 0) win.tab = stepRow.modelData.tab;
+                                        else if (!iso.busy) win.flashVisible = true;
                                     }
                                 }
                             }
+                            Label {
+                                visible: stepRow.index < stage.steps.length - 1
+                                text: "\u{f0142}"
+                                color: Qt.rgba(1, 1, 1, 0.35)
+                                font.pixelSize: 14
+                            }
                         }
+                    }
+                }
 
-                        Field {
-                            Layout.leftMargin: 20; Layout.rightMargin: 20
-                            visible: iso.profile === "replica"
-                            label: "What comes along"
-                            hint: "The live ISO signs in as you and starts your desktop. Changes made while it runs last until it shuts down."
+                // The main action: build, or cancel while building.
+                Rectangle {
+                    id: buildButton
+                    Layout.preferredWidth: 170
+                    Layout.fillHeight: true
+                    radius: 12
+                    opacity: (iso.busy && !win.building) || iso.cancelling ? 0.5 : 1
+                    color: win.building ? Qt.rgba(0, 0, 0, 0.45) : buildHover.hovered ? Qt.lighter(win.accent, 1.08) : win.accent
+                    border.color: win.building ? win.accent : "transparent"
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 6
+                        Label {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: iso.cancelling ? "Cancelling…" : win.building ? "Cancel build" : "Build ISO"
+                            color: win.building ? "#f0f0f0" : win.accentForeground
+                            font.pixelSize: 16
+                            font.weight: Font.DemiBold
+                        }
+                        Label {
+                            Layout.alignment: Qt.AlignHCenter
+                            visible: iso.busy
+                            text: iso.elapsed + (iso.remaining !== "" ? " · " + iso.remaining : "")
+                            color: "#dddddd"
+                            font.family: "monospace"
+                            font.pixelSize: 11
+                        }
+                        KeyCap {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: win.building ? "Esc" : "Space"
+                            tint: win.building ? "#dddddd" : win.accentForeground
+                        }
+                    }
+                    HoverHandler { id: buildHover; cursorShape: Qt.PointingHandCursor }
+                    TapHandler {
+                        onTapped: {
+                            if (win.building) {
+                                if (!iso.cancelling)
+                                    win.cancelConfirmVisible = true;
+                            } else if (!iso.busy) {
+                                win.build();
+                            }
+                        }
+                    }
+                }
+            }
 
+            // How far along, across the bottom of the stage.
+            Rectangle {
+                id: track
+                visible: iso.busy || iso.stage !== ""
+                readonly property bool indeterminate: iso.busy && iso.progress <= 0.01
+                anchors.left: parent.left
+                anchors.bottom: parent.bottom
+                anchors.leftMargin: 14
+                anchors.bottomMargin: 15
+                width: parent.width * 0.55
+                height: 8
+                radius: 4
+                color: Qt.rgba(0, 0, 0, 0.4)
+                clip: true
+                Rectangle {
+                    visible: !track.indeterminate
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    width: Math.max(radius * 2, parent.width * Math.min(1, iso.progress))
+                    radius: 4
+                    color: iso.cancelling ? "#888888" : win.accent
+                    Behavior on width { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
+                }
+                // Waiting for the password or pacman's check: a sweep.
+                Rectangle {
+                    id: sweep
+                    visible: track.indeterminate
+                    width: parent.width * 0.25
+                    height: parent.height
+                    radius: 4
+                    color: win.accent
+                    opacity: 0.7
+                    SequentialAnimation on x {
+                        running: sweep.visible
+                        loops: Animation.Infinite
+                        NumberAnimation { from: -sweep.width; to: track.width; duration: 1400; easing.type: Easing.InOutQuad }
+                    }
+                }
+            }
+            Label {
+                visible: track.visible && !track.indeterminate
+                anchors.left: track.right
+                anchors.leftMargin: 8
+                anchors.verticalCenter: track.verticalCenter
+                text: Math.round(iso.progress * 100) + "%"
+                color: win.accent
+                font.family: "monospace"
+                font.pixelSize: 12
+                font.weight: Font.DemiBold
+            }
+        }
+
+        TabBar {
+            Layout.fillWidth: true
+            currentIndex: win.tab
+            onCurrentIndexChanged: win.tab = currentIndex
+            background: null
+            Repeater {
+                model: ["Profile", "Contents", "Options", "Build log" + (logModel.count > 0 ? " · " + logModel.count : "")]
+                TabButton {
+                    required property string modelData
+                    text: modelData
+                    focusPolicy: Qt.NoFocus
+                    width: implicitWidth + 24
+                }
+            }
+        }
+
+        StackLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            currentIndex: win.tab
+
+            // ================= Profile =================
+            ScrollView {
+                id: profileScroll
+                contentWidth: availableWidth
+                clip: true
+                ColumnLayout {
+                    width: profileScroll.availableWidth
+                    spacing: 12
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Label { text: "What the ISO starts from"; color: theme.textDim; font.pixelSize: 11; Layout.fillWidth: true }
+                        KeyCap { text: "P" }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        Repeater {
+                            model: win.profiles
+                            delegate: Rectangle {
+                                id: profileTile
+                                required property var modelData
+                                readonly property bool chosen: iso.profile === modelData.id
+                                readonly property color tone: Qt.color(theme.accent)
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 1
+                                implicitHeight: 176
+                                radius: 12
+                                color: chosen ? Qt.rgba(tone.r, tone.g, tone.b, 0.12) : profileHover.hovered ? theme.hover : theme.inset
+                                border.color: chosen ? theme.accent : profileHover.hovered ? theme.borderStrong : theme.border
+                                border.width: chosen ? 2 : 1
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 12
+                                    spacing: 8
+                                    // A little picture of what boots: a screen with its layers.
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 84
+                                        radius: 8
+                                        color: theme.sunken
+                                        Label {
+                                            x: 14
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: profileTile.modelData.glyph
+                                            color: profileTile.chosen ? theme.accent : theme.textMuted
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 40
+                                        }
+                                        Column {
+                                            anchors.right: parent.right
+                                            anchors.rightMargin: 12
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            spacing: 4
+                                            Repeater {
+                                                model: profileTile.modelData.art
+                                                Rectangle {
+                                                    required property string modelData
+                                                    required property int index
+                                                    width: 110 - index * 8
+                                                    height: 18
+                                                    radius: 4
+                                                    anchors.right: parent.right
+                                                    color: Qt.rgba(profileTile.tone.r, profileTile.tone.g, profileTile.tone.b, profileTile.chosen ? 0.35 - index * 0.08 : 0.14)
+                                                    Label { anchors.centerIn: parent; text: modelData; color: theme.text; font.pixelSize: 10; font.family: "monospace" }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Label { text: profileTile.modelData.name; color: profileTile.chosen ? theme.accent : theme.text; font.weight: Font.DemiBold; font.pixelSize: 14 }
+                                    Label { Layout.fillWidth: true; text: profileTile.modelData.detail; color: theme.textMuted; font.pixelSize: 11; wrapMode: Text.WordWrap }
+                                }
+                                HoverHandler { id: profileHover; cursorShape: Qt.PointingHandCursor }
+                                TapHandler { onTapped: iso.profile = profileTile.modelData.id }
+                            }
+                        }
+                    }
+
+                    // This desktop: what comes along.
+                    Card {
+                        visible: iso.profile === "replica"
+                        Layout.fillWidth: true
+                        implicitHeight: replicaCol.implicitHeight + 28
+                        ColumnLayout {
+                            id: replicaCol
+                            anchors.fill: parent
+                            anchors.margins: 14
+                            spacing: 8
+                            SectionLabel { text: "What comes along" }
+                            Label {
+                                Layout.fillWidth: true
+                                text: "The live ISO signs in as you and starts your desktop. Changes made while it runs last until it shuts down."
+                                color: theme.textDim
+                                font.pixelSize: 11
+                                wrapMode: Text.WordWrap
+                            }
                             Label {
                                 visible: iso.desktopError !== ""
                                 Layout.fillWidth: true
                                 text: iso.desktopError
-                                color: "#ff8a8a"
+                                color: theme.danger
                                 wrapMode: Text.WordWrap
                             }
-
                             Repeater {
                                 model: iso.desktopError !== "" ? [] : [
                                     iso.nativeCount + " packages from your repositories, and the " + iso.desktopKernel + " kernel",
                                     iso.foreignPackages.length === 0 ? "" :
                                         iso.foreignPackages.length + " AUR packages, rebuilt from what's installed: " + iso.foreignPackages.join(", "),
                                     "Your changed and added system settings in /etc, and /usr/local",
-                                    iso.desktopUser + ", signed in automatically, with "
-                                        + (iso.sizing ? "…" : iso.homeSize) + " from your home folder"
+                                    iso.desktopUser + ", signed in automatically, with " + (iso.sizing ? "…" : iso.homeSize) + " from your home folder"
                                 ].filter(line => line !== "")
                                 delegate: RowLayout {
                                     required property string modelData
                                     Layout.fillWidth: true
                                     spacing: 8
                                     Label { text: "•"; color: win.accent; Layout.alignment: Qt.AlignTop }
-                                    Label {
-                                        Layout.fillWidth: true
-                                        text: modelData
-                                        color: "#d6d6da"
-                                        wrapMode: Text.WordWrap
-                                    }
+                                    Label { Layout.fillWidth: true; text: modelData; color: theme.textSoft; wrapMode: Text.WordWrap }
                                 }
                             }
-
                             Rectangle {
                                 Layout.fillWidth: true
                                 Layout.topMargin: 6
                                 implicitHeight: groups.implicitHeight + 16
                                 radius: 8
-                                color: "#111113"
+                                color: theme.inset
                                 border.color: win.line
                                 ColumnLayout {
                                     id: groups
                                     anchors.fill: parent
                                     anchors.margins: 8
                                     spacing: 4
-                                    HomeGroup {
-                                        kind: "settings"
-                                        title: "Settings"
-                                        detail: "Your desktop, theme, shell, and apps' configuration."
-                                    }
-                                    HomeGroup {
-                                        kind: "secret"
-                                        title: "Sign-ins and secrets"
-                                        detail: "Browser profiles, keys, tokens, and history. Anyone with the drive can read them."
-                                    }
-                                    HomeGroup {
-                                        kind: "personal"
-                                        title: "Personal folders"
-                                        detail: "Documents, pictures, projects."
-                                    }
-                                    HomeGroup {
-                                        kind: "cache"
-                                        title: "Caches and toolchains"
-                                        detail: "Rebuilt or re-downloaded as needed."
-                                    }
+                                    HomeGroup { kind: "settings"; title: "Settings"; detail: "Your desktop, theme, shell, and apps' configuration." }
+                                    HomeGroup { kind: "secret"; title: "Sign-ins and secrets"; detail: "Browser profiles, keys, tokens, and history. Anyone with the drive can read them." }
+                                    HomeGroup { kind: "personal"; title: "Personal folders"; detail: "Documents, pictures, projects." }
+                                    HomeGroup { kind: "cache"; title: "Caches and toolchains"; detail: "Rebuilt or re-downloaded as needed." }
                                 }
                             }
-
                             RowLayout {
                                 Layout.fillWidth: true
                                 Layout.topMargin: 4
@@ -340,7 +533,7 @@ Item {
                                     Layout.fillWidth: true
                                     spacing: 2
                                     RowLayout {
-                                        Label { text: "Include passwords"; color: "white" }
+                                        Label { text: "Include passwords"; color: theme.text }
                                         KeyCap { text: "W" }
                                     }
                                     Label {
@@ -348,7 +541,7 @@ Item {
                                         text: iso.replicaSecrets
                                               ? "Your login password, Wi-Fi networks, and SSH and VPN keys are on the ISO."
                                               : "Left out: the live user has no password and sudo doesn't ask; Wi-Fi is set up again."
-                                        color: "#74747d"
+                                        color: theme.textDim
                                         font.pixelSize: 11
                                         wrapMode: Text.WordWrap
                                     }
@@ -360,490 +553,347 @@ Item {
                                 }
                             }
                         }
+                    }
 
+                    // The others: Omarchy on top.
+                    Card {
+                        visible: iso.profile !== "replica"
+                        Layout.fillWidth: true
+                        implicitHeight: omarchyRow.implicitHeight + 28
                         RowLayout {
-                            Layout.leftMargin: 20; Layout.rightMargin: 20
-                            Layout.fillWidth: true
-                            spacing: 14
-                            Field {
-                                label: "ISO name"
-                                key: "N"
-                                TextField {
-                                    id: isoNameField
-                                    Layout.fillWidth: true
-                                    text: iso.isoName
-                                    font.family: "monospace"
-                                    onEditingFinished: iso.isoName = text
-                                }
-                            }
-                            Field {
-                                label: "Hostname"
-                                key: "H"
-                                TextField {
-                                    id: hostnameField
-                                    Layout.fillWidth: true
-                                    text: iso.hostname
-                                    font.family: "monospace"
-                                    onEditingFinished: iso.hostname = text
-                                }
-                            }
-                        }
-
-                        Field {
-                            Layout.leftMargin: 20; Layout.rightMargin: 20
-                            label: "Extra packages"
-                            key: "E"
-                            hint: "From your enabled repositories, separated by spaces or lines. # starts a comment. Esc when done."
-                            Rectangle {
+                            id: omarchyRow
+                            anchors.fill: parent
+                            anchors.margins: 14
+                            spacing: 12
+                            Label { text: "\u{f08c7}"; color: win.accent; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 24 }
+                            ColumnLayout {
                                 Layout.fillWidth: true
-                                implicitHeight: 130
-                                radius: 8
-                                color: "#111113"
-                                border.color: packagesArea.activeFocus ? win.accent : win.line
-                                ScrollView {
-                                    anchors.fill: parent
-                                    anchors.margins: 2
-                                    TextArea {
-                                        id: packagesArea
-                                        text: iso.packages
-                                        placeholderText: "git neovim btop\nnetworkmanager"
-                                        font.family: "monospace"
-                                        font.pixelSize: 13
-                                        wrapMode: TextEdit.Wrap
-                                        background: null
-                                        onActiveFocusChanged: if (!activeFocus && text !== iso.packages) iso.packages = text
+                                spacing: 2
+                                RowLayout {
+                                    Label { text: "Set up Omarchy after installing Arch"; color: theme.text }
+                                    KeyCap { text: "M" }
+                                }
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: "Adds an <b>omarchy-setup</b> command to the live ISO. It runs archinstall, then sets the Omarchy installer to start when the new user first logs in."
+                                    color: theme.textDim
+                                    font.pixelSize: 11
+                                    wrapMode: Text.WordWrap
+                                }
+                            }
+                            Switch {
+                                checked: iso.omarchySetup
+                                focusPolicy: Qt.NoFocus
+                                onToggled: iso.omarchySetup = checked
+                            }
+                        }
+                    }
+                    Item { implicitHeight: 4 }
+                }
+            }
+
+            // ================= Contents =================
+            ScrollView {
+                id: contentScroll
+                contentWidth: availableWidth
+                clip: true
+                GridLayout {
+                    width: contentScroll.availableWidth
+                    columns: width > 940 ? 2 : 1
+                    columnSpacing: 14
+                    rowSpacing: 14
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignTop
+                        spacing: 14
+                        Card {
+                            Layout.fillWidth: true
+                            implicitHeight: identity.implicitHeight + 28
+                            RowLayout {
+                                id: identity
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                spacing: 14
+                                Field {
+                                    label: "ISO name"
+                                    key: "N"
+                                    TextField { id: isoNameField; Layout.fillWidth: true; text: iso.isoName; font.family: "monospace"; onEditingFinished: iso.isoName = text }
+                                }
+                                Field {
+                                    label: "Hostname"
+                                    key: "H"
+                                    TextField { id: hostnameField; Layout.fillWidth: true; text: iso.hostname; font.family: "monospace"; onEditingFinished: iso.hostname = text }
+                                }
+                            }
+                        }
+                        Card {
+                            Layout.fillWidth: true
+                            implicitHeight: packagesField.implicitHeight + 28
+                            Field {
+                                id: packagesField
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.margins: 14
+                                label: "Extra packages · " + iso.packageCount
+                                key: "E"
+                                hint: "From your enabled repositories, separated by spaces or lines. # starts a comment. Esc when done."
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    implicitHeight: 170
+                                    radius: 8
+                                    color: theme.inset
+                                    border.color: packagesArea.activeFocus ? win.accent : win.line
+                                    ScrollView {
+                                        anchors.fill: parent
+                                        anchors.margins: 2
+                                        TextArea {
+                                            id: packagesArea
+                                            text: iso.packages
+                                            placeholderText: "git neovim btop\nnetworkmanager"
+                                            font.family: "monospace"
+                                            font.pixelSize: 13
+                                            wrapMode: TextEdit.Wrap
+                                            background: null
+                                            onActiveFocusChanged: if (!activeFocus && text !== iso.packages) iso.packages = text
+                                        }
                                     }
                                 }
                             }
                         }
+                    }
 
-                        Field {
-                            Layout.leftMargin: 20; Layout.rightMargin: 20
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignTop
+                        spacing: 14
+                        Card {
                             visible: iso.profile !== "replica"
-                            label: "Folders to include"
-                            key: "O"
-                            hint: "Each folder's contents go into the live system at the path beside it. / merges into the root, so <i>folder</i>/etc/issue becomes /etc/issue. Shift O removes them all."
-                            Label {
-                                visible: iso.overlays.length === 0
-                                text: "None"
-                                color: "#74747d"
-                                font.family: "monospace"
-                            }
-                            Repeater {
-                                model: iso.overlays
-                                delegate: ColumnLayout {
-                                    required property var modelData
-                                    required property int index
-                                    Layout.fillWidth: true
-                                    spacing: 2
-                                    RowLayout {
+                            Layout.fillWidth: true
+                            implicitHeight: foldersField.implicitHeight + 28
+                            Field {
+                                id: foldersField
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.margins: 14
+                                label: "Folders to include"
+                                key: "O"
+                                hint: "Each folder's contents go into the live system at the path beside it. / merges into the root, so <i>folder</i>/etc/issue becomes /etc/issue. Shift O removes them all."
+                                Label { visible: iso.overlays.length === 0; text: "None"; color: theme.textDim; font.family: "monospace" }
+                                Repeater {
+                                    model: iso.overlays
+                                    delegate: Rectangle {
+                                        required property var modelData
+                                        required property int index
                                         Layout.fillWidth: true
-                                        Label {
-                                            Layout.fillWidth: true
-                                            text: win.home(modelData.source)
-                                            color: modelData.exists ? "white" : "#ff8a8a"
-                                            font.family: "monospace"
-                                            elide: Text.ElideMiddle
-                                            ToolTip.visible: !modelData.exists && missingHover.hovered
-                                            ToolTip.text: "This folder doesn't exist any more."
-                                            HoverHandler { id: missingHover }
-                                        }
-                                        Button {
-                                            text: "Remove"
-                                            flat: true
-                                            focusPolicy: Qt.NoFocus
-                                            onClicked: iso.removeOverlay(index)
+                                        implicitHeight: overlayCol.implicitHeight + 16
+                                        radius: 8
+                                        color: theme.inset
+                                        border.color: win.line
+                                        ColumnLayout {
+                                            id: overlayCol
+                                            anchors.fill: parent
+                                            anchors.margins: 8
+                                            spacing: 2
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                Label { text: "\u{f024b}"; color: win.accent; font.family: "JetBrainsMono Nerd Font" }
+                                                Label {
+                                                    Layout.fillWidth: true
+                                                    text: win.home(modelData.source)
+                                                    color: modelData.exists ? theme.text : theme.danger
+                                                    font.family: "monospace"
+                                                    elide: Text.ElideMiddle
+                                                    ToolTip.visible: !modelData.exists && missingHover.hovered
+                                                    ToolTip.text: "This folder doesn't exist any more."
+                                                    HoverHandler { id: missingHover }
+                                                }
+                                                ToolButton { text: "\u{f0156}"; focusPolicy: Qt.NoFocus; onClicked: iso.removeOverlay(index); ToolTip.visible: hovered; ToolTip.text: "Remove" }
+                                            }
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 8
+                                                Label { text: "goes to"; color: theme.textDim; font.pixelSize: 12 }
+                                                TextField {
+                                                    Layout.fillWidth: true
+                                                    text: modelData.target
+                                                    font.family: "monospace"
+                                                    font.pixelSize: 12
+                                                    onEditingFinished: if (text !== modelData.target) iso.setOverlayTarget(index, text)
+                                                }
+                                            }
                                         }
                                     }
-                                    RowLayout {
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Item { Layout.fillWidth: true }
+                                    Button { text: "Add folder…"; flat: true; focusPolicy: Qt.NoFocus; onClicked: iso.chooseOverlay() }
+                                }
+                            }
+                        }
+                        Card {
+                            visible: iso.profile !== "replica"
+                            Layout.fillWidth: true
+                            implicitHeight: filesField.implicitHeight + 28
+                            Field {
+                                id: filesField
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.margins: 14
+                                label: "Configuration files"
+                                key: "T"
+                                hint: "Change any file on the live system, or the profile's own (pacman.conf, boot menus), in an editor with syntax colouring. These win over the folders."
+                                Label { visible: iso.editedFiles.length === 0; text: "None edited"; color: theme.textDim; font.family: "monospace" }
+                                Repeater {
+                                    model: iso.editedFiles
+                                    delegate: RowLayout {
+                                        required property var modelData
                                         Layout.fillWidth: true
                                         spacing: 8
-                                        Label { text: "goes to"; color: "#74747d"; font.pixelSize: 12 }
-                                        TextField {
-                                            Layout.fillWidth: true
-                                            text: modelData.target
-                                            font.family: "monospace"
-                                            font.pixelSize: 12
-                                            onEditingFinished: if (text !== modelData.target) iso.setOverlayTarget(index, text)
-                                        }
+                                        Label { text: "\u{f0219}"; color: win.accent; font.family: "JetBrainsMono Nerd Font" }
+                                        Label { Layout.fillWidth: true; text: modelData.name; color: theme.text; font.family: "monospace"; elide: Text.ElideMiddle }
+                                        Label { text: modelData.lines + (modelData.lines === 1 ? " line" : " lines"); color: theme.textDim; font.pixelSize: 12 }
+                                        Button { text: "Edit"; flat: true; focusPolicy: Qt.NoFocus; onClicked: { win.editorVisible = true; editorPanel.openFile(modelData.path); } }
                                     }
                                 }
-                            }
-                            RowLayout {
-                                Layout.fillWidth: true
-                                Item { Layout.fillWidth: true }
-                                Button {
-                                    text: "Add folder…"
-                                    flat: true
-                                    focusPolicy: Qt.NoFocus
-                                    onClicked: iso.chooseOverlay()
-                                }
-                            }
-                        }
-
-                        Field {
-                            Layout.leftMargin: 20; Layout.rightMargin: 20
-                            visible: iso.profile !== "replica"
-                            label: "Configuration files"
-                            key: "T"
-                            hint: "Change any file on the live system, or the profile's own (pacman.conf, boot menus), in an editor with syntax colouring. These win over the folders above."
-                            Label {
-                                visible: iso.editedFiles.length === 0
-                                text: "None edited"
-                                color: "#74747d"
-                                font.family: "monospace"
-                            }
-                            Repeater {
-                                model: iso.editedFiles
-                                delegate: RowLayout {
-                                    required property var modelData
+                                RowLayout {
                                     Layout.fillWidth: true
-                                    spacing: 8
-                                    Label {
-                                        Layout.fillWidth: true
-                                        text: modelData.name
-                                        color: "white"
-                                        font.family: "monospace"
-                                        elide: Text.ElideMiddle
-                                    }
-                                    Label {
-                                        text: modelData.lines + (modelData.lines === 1 ? " line" : " lines")
-                                        color: "#74747d"
-                                        font.pixelSize: 12
-                                    }
-                                    Button {
-                                        text: "Edit"
-                                        flat: true
-                                        focusPolicy: Qt.NoFocus
-                                        onClicked: { win.editorVisible = true; editorPanel.openFile(modelData.path); }
-                                    }
-                                }
-                            }
-                            RowLayout {
-                                Layout.fillWidth: true
-                                Item { Layout.fillWidth: true }
-                                Button {
-                                    text: "Edit a file…"
-                                    flat: true
-                                    focusPolicy: Qt.NoFocus
-                                    onClicked: win.editorVisible = true
+                                    Item { Layout.fillWidth: true }
+                                    Button { text: "Edit a file…"; flat: true; focusPolicy: Qt.NoFocus; onClicked: win.editorVisible = true }
                                 }
                             }
                         }
-
-                        Field {
-                            Layout.leftMargin: 20; Layout.rightMargin: 20
-                            visible: iso.profile !== "replica"
-                            label: "Omarchy"
-                            key: "M"
-                            hint: "Adds an <b>omarchy-setup</b> command to the live ISO. It runs archinstall, then sets the Omarchy installer to start when the new user first logs in."
-                            RowLayout {
-                                Layout.fillWidth: true
-                                Label {
-                                    Layout.fillWidth: true
-                                    text: "Set up Omarchy after installing Arch"
-                                    color: "white"
-                                }
-                                Switch {
-                                    checked: iso.omarchySetup
-                                    focusPolicy: Qt.NoFocus
-                                    onToggled: iso.omarchySetup = checked
-                                }
-                            }
-                        }
-
-                        OptionsSection {
+                        Card {
+                            visible: iso.profile === "replica"
                             Layout.fillWidth: true
-                            accent: win.accent
-                            line: win.line
-                        }
-
-                        Field {
-                            Layout.leftMargin: 20; Layout.rightMargin: 20
-                            label: "Save ISO in"
-                            key: "D"
-                            RowLayout {
-                                Layout.fillWidth: true
-                                Label {
-                                    Layout.fillWidth: true
-                                    text: win.home(iso.outputDir)
-                                    color: "white"
-                                    font.family: "monospace"
-                                    elide: Text.ElideMiddle
-                                }
-                                Button {
-                                    text: "Choose…"
-                                    flat: true
-                                    focusPolicy: Qt.NoFocus
-                                    onClicked: iso.chooseOutput()
-                                }
+                            implicitHeight: replicaNote.implicitHeight + 28
+                            Label {
+                                id: replicaNote
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.margins: 14
+                                text: "A copy of this desktop takes your system as it is, so there are no folders or files to add here. Extra packages still go on top."
+                                color: theme.textMuted
+                                wrapMode: Text.WordWrap
                             }
                         }
-
-                        Item { implicitHeight: 6 }
                     }
                 }
             }
 
-            // --- building ---
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                Layout.preferredHeight: panes.wide ? -1 : 1
-                radius: 12
-                color: win.surface
-                border.color: win.line
-
+            // ================= Options =================
+            ScrollView {
+                id: optionsScroll
+                contentWidth: availableWidth
+                clip: true
                 ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 20
+                    width: optionsScroll.availableWidth
                     spacing: 14
-
-                    RowLayout {
+                    Card {
                         Layout.fillWidth: true
-                        spacing: 14
-
-                        // The main action: build, or cancel while building.
-                        Rectangle {
-                            id: buildButton
-                            readonly property bool building: iso.state === "building" || iso.state === "checking" || iso.state === "measuring"
-                            Layout.preferredWidth: 200
-                            implicitHeight: 48
-                            radius: 10
-                            opacity: (iso.busy && !building) || iso.cancelling ? 0.5 : 1
-                            color: building ? "#2a2a30" : buildHover.hovered ? Qt.lighter(win.accent, 1.08) : win.accent
+                        implicitHeight: saveRow.implicitHeight + 28
+                        Field {
+                            id: saveRow
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.margins: 14
+                            label: "Save ISO in"
+                            key: "D"
                             RowLayout {
-                                anchors.centerIn: parent
-                                spacing: 10
-                                Label {
-                                    text: iso.cancelling ? "Cancelling…" : buildButton.building ? "Cancel build" : "Build ISO"
-                                    color: buildButton.building ? "white" : win.accentForeground
-                                    font.pixelSize: 15
-                                    font.weight: Font.DemiBold
-                                }
-                                KeyCap {
-                                    text: buildButton.building ? "Esc" : "Space"
-                                    tint: buildButton.building ? "#c8c8cf" : win.accentForeground
-                                }
-                            }
-                            HoverHandler { id: buildHover; cursorShape: Qt.PointingHandCursor }
-                            TapHandler {
-                                onTapped: {
-                                    if (buildButton.building) {
-                                        if (!iso.cancelling)
-                                            win.cancelConfirmVisible = true;
-                                    } else if (!iso.busy) {
-                                        win.build();
-                                    }
-                                }
-                            }
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 2
-                            Label {
                                 Layout.fillWidth: true
-                                text: ({ releng: "Live installer", baseline: "Minimal", replica: "This desktop" })[iso.profile]
-                                color: "white"
-                                font.weight: Font.DemiBold
-                                elide: Text.ElideRight
+                                Label { Layout.fillWidth: true; text: win.home(iso.outputDir); color: theme.text; font.family: "monospace"; elide: Text.ElideMiddle }
+                                Button { text: "Choose…"; flat: true; focusPolicy: Qt.NoFocus; onClicked: iso.chooseOutput() }
                             }
-                            Label {
-                                Layout.fillWidth: true
-                                text: iso.profile === "replica"
-                                      ? [(iso.nativeCount + iso.foreignPackages.length + iso.packageCount) + " packages",
-                                         iso.sizing ? "measuring home…" : iso.homeSize + " from home",
-                                         iso.replicaSecrets ? "with passwords" : "no passwords"].join(" · ")
-                                      : [iso.packageCount === 0 ? "no extra packages"
-                                          : iso.packageCount + " extra package" + (iso.packageCount === 1 ? "" : "s"),
-                                       iso.overlays.length === 0 ? ""
-                                           : iso.overlays.length + " folder" + (iso.overlays.length === 1 ? "" : "s"),
-                                       iso.editedFiles.length === 0 ? ""
-                                           : iso.editedFiles.length + " edited file" + (iso.editedFiles.length === 1 ? "" : "s"),
-                                       iso.timezone,
-                                       iso.omarchySetup ? "Omarchy setup" : ""].filter(s => s !== "").join(" · ")
-                                color: "#8a8a93"
-                                font.pixelSize: 12
-                                elide: Text.ElideRight
-                            }
-                        }
-
-                        Label {
-                            visible: iso.busy
-                            text: iso.elapsed
-                            color: "#8a8a93"
-                            font.family: "monospace"
-                            font.pixelSize: 14
                         }
                     }
-
-                    // How far along: the stage, a bar, the percentage, and a
-                    // rough estimate of what's left once there's enough to go on.
-                    ColumnLayout {
+                    Card {
                         Layout.fillWidth: true
-                        spacing: 8
-                        visible: iso.busy || iso.stage !== ""
-                        readonly property bool indeterminate: iso.busy && iso.progress <= 0.01
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 12
-                            Label {
-                                Layout.fillWidth: true
-                                text: iso.cancelling ? "Stopping and cleaning up…" : iso.stage
-                                color: "white"
-                                elide: Text.ElideRight
-                            }
-                            Label {
-                                visible: iso.remaining !== ""
-                                text: iso.remaining
-                                color: "#8a8a93"
-                                font.pixelSize: 12
-                            }
-                            Label {
-                                visible: !parent.parent.indeterminate
-                                text: Math.round(iso.progress * 100) + "%"
-                                color: win.accent
-                                font.family: "monospace"
-                                font.pixelSize: 14
-                                font.weight: Font.DemiBold
-                            }
-                        }
-
-                        Rectangle {
-                            id: track
-                            Layout.fillWidth: true
-                            implicitHeight: 10
-                            radius: 5
-                            color: "#0b0b0d"
-                            border.color: win.line
-                            clip: true
-
-                            Rectangle {
-                                visible: !parent.parent.indeterminate
-                                anchors.left: parent.left
-                                anchors.top: parent.top
-                                anchors.bottom: parent.bottom
-                                width: Math.max(radius * 2, parent.width * Math.min(1, iso.progress))
-                                radius: 5
-                                color: iso.cancelling ? "#6b6b74" : win.accent
-                                Behavior on width { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
-                            }
-
-                            // Waiting for the password or pacman's check: a sweep.
-                            Rectangle {
-                                id: sweep
-                                visible: parent.parent.indeterminate
-                                width: parent.width * 0.25
-                                height: parent.height
-                                radius: 5
-                                color: win.accent
-                                opacity: 0.7
-                                SequentialAnimation on x {
-                                    running: sweep.visible
-                                    loops: Animation.Infinite
-                                    NumberAnimation { from: -sweep.width; to: track.width; duration: 1400; easing.type: Easing.InOutQuad }
-                                }
-                            }
+                        implicitHeight: options.implicitHeight + 36
+                        OptionsSection {
+                            id: options
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.topMargin: 18
+                            accent: win.accent
+                            line: win.line
                         }
                     }
+                    Item { implicitHeight: 4 }
+                }
+            }
 
-                    // The finished ISO, ready to write to a drive.
-                    Rectangle {
-                        Layout.fillWidth: true
-                        visible: iso.builtIso !== "" && !iso.busy
-                        implicitHeight: resultRow.implicitHeight + 20
-                        radius: 8
-                        color: "#111113"
-                        border.color: win.line
-                        RowLayout {
-                            id: resultRow
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            anchors.leftMargin: 14
-                            spacing: 10
-                            Label {
-                                Layout.fillWidth: true
-                                text: win.home(iso.builtIso)
-                                color: "white"
-                                font.family: "monospace"
-                                elide: Text.ElideMiddle
-                            }
-                            Button {
-                                text: "Write to USB…"
-                                flat: true
-                                focusPolicy: Qt.NoFocus
-                                onClicked: win.flashVisible = true
-                            }
-                            KeyCap { text: "F" }
-                        }
-                    }
-
-                    // mkarchiso's output, as it comes.
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        radius: 8
-                        color: "#0b0b0d"
-                        border.color: win.line
-                        clip: true
-
-                        ListView {
-                            id: logView
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            clip: true
-                            model: logModel
-                            boundsBehavior: Flickable.StopAtBounds
-                            property bool following: true
-                            onMovementEnded: following = atYEnd
-                            onCountChanged: if (following) Qt.callLater(positionViewAtEnd)
-                            ScrollBar.vertical: ScrollBar {}
-                            delegate: Text {
-                                required property string line
-                                width: logView.width - 12
-                                text: line
-                                color: line.indexOf("ERROR") >= 0 || line.indexOf("error:") >= 0 ? "#ff8a8a"
-                                     : line.indexOf("hyprbuildz:") === 0 ? win.accent
-                                     : line.indexOf("WARNING") >= 0 ? "#e6c06a" : "#a9a9b2"
-                                font.family: "monospace"
-                                font.pixelSize: 11
-                                wrapMode: Text.WrapAnywhere
-                            }
-                        }
-
-                        Label {
-                            anchors.centerIn: parent
-                            width: parent.width - 40
-                            visible: logModel.count === 0 && parent.height > implicitHeight + 24
-                            horizontalAlignment: Text.AlignHCenter
-                            wrapMode: Text.WordWrap
-                            text: iso.profile === "replica"
-                                  ? "The build log appears here.\nA copy of this desktop installs every package you have, so it downloads several gigabytes and can take an hour.\nIt asks for your password once, to run mkarchiso as root."
-                                  : "The build log appears here.\nA build downloads around a gigabyte and takes 10–30 minutes.\nIt asks for your password once, to run mkarchiso as root."
-                            color: "#5f5f68"
-                            lineHeight: 1.3
-                        }
-                    }
-
+            // ================= Build log =================
+            ColumnLayout {
+                spacing: 10
+                // The finished ISO, ready to write to a drive.
+                Rectangle {
+                    Layout.fillWidth: true
+                    visible: iso.builtIso !== "" && !iso.busy
+                    implicitHeight: resultRow.implicitHeight + 20
+                    radius: 10
+                    color: Qt.rgba(win.accent.r, win.accent.g, win.accent.b, 0.1)
+                    border.color: win.accent
                     RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-                        Label { text: "Have an ISO already?"; color: "#74747d"; font.pixelSize: 12 }
-                        Label {
-                            text: "Write it to a USB drive"
-                            color: win.accent
-                            font.pixelSize: 12
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                enabled: !iso.busy
-                                onClicked: win.flashVisible = true
-                            }
-                        }
+                        id: resultRow
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        anchors.leftMargin: 14
+                        spacing: 10
+                        Label { text: "\u{f012c}"; color: win.accent; font.pixelSize: 16 }
+                        Label { Layout.fillWidth: true; text: win.home(iso.builtIso); color: theme.text; font.family: "monospace"; elide: Text.ElideMiddle }
+                        AccentButton { text: "Write to USB…"; onClicked: win.flashVisible = true }
                         KeyCap { text: "F" }
-                        Item { Layout.fillWidth: true }
+                    }
+                }
+                // mkarchiso's output, as it comes.
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    radius: 10
+                    color: theme.sidebar
+                    border.color: win.line
+                    clip: true
+                    ListView {
+                        id: logView
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        clip: true
+                        model: logModel
+                        boundsBehavior: Flickable.StopAtBounds
+                        property bool following: true
+                        onMovementEnded: following = atYEnd
+                        onCountChanged: if (following) Qt.callLater(positionViewAtEnd)
+                        ScrollBar.vertical: ScrollBar {}
+                        delegate: Text {
+                            required property string line
+                            width: logView.width - 12
+                            text: line
+                            color: line.indexOf("ERROR") >= 0 || line.indexOf("error:") >= 0 ? theme.danger
+                                 : line.indexOf("hyprbuildz:") === 0 ? win.accent
+                                 : line.indexOf("WARNING") >= 0 ? theme.warning : theme.textMuted
+                            font.family: "monospace"
+                            font.pixelSize: 11
+                            wrapMode: Text.WrapAnywhere
+                        }
+                    }
+                    Label {
+                        anchors.centerIn: parent
+                        width: parent.width - 40
+                        visible: logModel.count === 0 && parent.height > implicitHeight + 24
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.WordWrap
+                        text: iso.profile === "replica"
+                              ? "The build log appears here.\nA copy of this desktop installs every package you have, so it downloads several gigabytes and can take an hour.\nIt asks for your password once, to run mkarchiso as root."
+                              : "The build log appears here.\nA build downloads around a gigabyte and takes 10–30 minutes.\nIt asks for your password once, to run mkarchiso as root."
+                        color: theme.textFaint
+                        lineHeight: 1.3
                     }
                 }
             }

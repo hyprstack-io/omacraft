@@ -4,13 +4,16 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QPainter>
 #include <QTemporaryDir>
 #include <QtTest>
 #include <sys/stat.h>
 
 #include "agentdock.h"
 #include "animations.h"
+#include "asciiview.h"
 #include "bar.h"
+#include "bootsplash.h"
 #include "burn.h"
 #include "hyprcraft.h"
 #include "launcher.h"
@@ -18,6 +21,9 @@
 #include "plugins.h"
 #include "proc.h"
 #include "theme.h"
+#include "themesync.h"
+#include "wallpaper.h"
+#include "folders.h"
 #include "omacraft_tests.h"
 
 namespace {
@@ -227,6 +233,26 @@ void OmacraftTests::readsAnimationStatus()
     QVERIFY(!animations.readStatus("not json"));
 }
 
+void OmacraftTests::animationPresetsCarryTheirMotion()
+{
+    QTemporaryDir home;
+    const QString plugin = home.path() + "/plugin";
+    writeFile(plugin + "/presets.json", R"({"curves":{"snap":{"type":"bezier","points":[[0.05,0.9],[0.1,1.05]]}},
+        "presets":[{"id":"pop","animations":{"windowsIn":[3,"snap","popin 80%"]}},{"id":"mine","animations":{"windowsIn":[9,"snap","slide"]}}]})");
+    // Yours win over a built-in with the same id.
+    writeFile(home.path() + "/.config/omarchy/animation-presets.json",
+              R"({"curves":{"soft":{"type":"spring","mass":1}},"presets":[{"id":"mine","animations":{"windowsIn":[4,"soft","gnomed"]}}]})");
+    Animations animations([plugin] { return plugin; }, home.path());
+    QVERIFY(animations.readStatus(R"({"preset":"pop","speed":1,"last":"pop","file":"/x.lua",
+        "presets":[{"id":"pop","name":"Pop"},{"id":"mine","name":"Mine","custom":true},{"id":"off","name":"Off"}]})"));
+    const auto presets = animations.presets();
+    QCOMPARE(presets.at(0).toMap().value("animations").toMap().value("windowsIn").toList().at(2).toString(), QString("popin 80%"));
+    QCOMPARE(presets.at(1).toMap().value("animations").toMap().value("windowsIn").toList().at(2).toString(), QString("gnomed"));
+    QVERIFY(!presets.at(2).toMap().contains("animations"));
+    QCOMPARE(animations.curves().value("snap").toMap().value("type").toString(), QString("bezier"));
+    QVERIFY(animations.curves().contains("soft"));
+}
+
 void OmacraftTests::readsAnimationLookOverrides()
 {
     Animations animations({});
@@ -359,22 +385,27 @@ var DEFAULT_PALETTE = ["accent", "blue"]
 var THEMES = [{ id: "pills", label: "Pills", desc: "Round", style: { shape: "round", gap: 6 } }]
 var JAKOOLIT = [{ id: "jk", label: "JK", style: { shape: "block", palette: ["#112233"] } }]
 var BASE16 = [].map(function(d) { return d })
-var LAYOUTS = [{ id: "min", label: "Minimal", layout: { left: [{ id: "a" }], center: [], right: [{ id: "b" }, { id: "c" }] } }]
+var LAYOUTS = [{ id: "min", label: "Minimal", layout: { left: [{ id: "a" }], center: [], right: [{ id: "b" }, { id: "c" }] } },
+               { id: "jk-x", label: "JK", layout: { left: [], center: [], right: [] } },
+               { id: "rail", label: "Rail", position: "left", layout: { left: [], center: [], right: [] } }]
 var GLYPHS = { "omarchy.clock": "\u{F0954}" }
 )");
     writeFile(home.path() + "/.config/omarchy/omabar16/themes.json", R"([{"id":"user-x","label":"Mine","style":{"shape":"arrow"}}])");
     writeFile(home.path() + "/.local/state/omarchy/current/theme/colors.toml", "accent = \"#abcdef\"\nblue = \"#0000ff\"\n");
     writeFile(home.path() + "/.config/omarchy/shell.json", R"({"bar":{"id":"omabar16","style":{"shape":"round","gap":6}}})");
 
-    Bar bar([plugin] { return plugin; }, home.path(), false);
+    Bar bar([plugin] { return plugin; }, {}, home.path(), false);
     QVERIFY2(bar.available(), qPrintable(bar.error()));
     QCOMPARE(bar.themes().size(), 3);
     const auto pills = bar.themes().at(0).toMap();
-    QCOMPARE(pills.value("group").toString(), QString("Looks"));
+    QCOMPARE(pills.value("group").toString(), QString("Originals"));
     QCOMPARE(pills.value("swatches").toStringList(), QStringList({"#abcdef", "#0000ff"}));
     QCOMPARE(bar.themes().at(1).toMap().value("swatches").toStringList(), QStringList({"#112233"}));
     QCOMPARE(bar.themes().at(2).toMap().value("group").toString(), QString("Yours"));
+    QVERIFY(bar.themes().at(2).toMap().value("user").toBool());
     QCOMPARE(bar.layouts().at(0).toMap().value("counts").toString(), QString("1 · 0 · 2"));
+    QCOMPARE(bar.layouts().at(1).toMap().value("group").toString(), QString("JaKooLit"));
+    QCOMPARE(bar.layouts().at(2).toMap().value("group").toString(), QString("Side rails"));
     QCOMPARE(bar.glyphFor("omarchy.clock"), QString::fromUcs4(U"\U000F0954"));
     QVERIFY(bar.inUse());
     QCOMPARE(bar.currentTheme(), QString("pills"));
@@ -383,12 +414,149 @@ var GLYPHS = { "omarchy.clock": "\u{F0954}" }
 void OmacraftTests::barSaysWhenItIsNotTheBar()
 {
     QTemporaryDir home;
-    Bar bar({}, home.path(), false);
+    Bar bar({}, {}, home.path(), false);
     QVERIFY(!bar.available());
     QVERIFY(!bar.inUse());
     QCOMPARE(bar.barId(), QString("omarchy.bar"));
     bar.applyTheme("pills");
     QVERIFY(bar.error().contains("isn't your bar"));
+}
+
+void OmacraftTests::barReadsStudioPresetsWithImports()
+{
+    QTemporaryDir home;
+    const QString plugin = home.path() + "/omabar16", studio = home.path() + "/studio";
+    writeFile(plugin + "/data/Presets.js", "var THEMES = [{ id: \"own\", label: \"Own\", style: {} }]\nvar LAYOUTS = []\n");
+    // Studio's copy pulls the HANCORE set in with a QML import.
+    writeFile(studio + "/bar/data/Hancore.js", R"(.pragma library
+var THEMES = [{ id: "hc-v1", label: "HANCORE V1", style: { shape: "block" } }]
+var LAYOUTS = [{ id: "hc-v1", label: "HANCORE V1", layout: { left: [], center: [], right: [] } }]
+)");
+    writeFile(studio + "/bar/data/Presets.js", R"(.pragma library
+.import "Hancore.js" as Hancore
+var THEMES = [{ id: "a", label: "A", style: { shape: "arrow" } }]
+var JAKOOLIT = []
+var BASE16 = []
+var HANCORE = Hancore.THEMES
+var LAYOUTS = [{ id: "default", label: "Default", layout: { left: [], center: [], right: [] } }]
+var ALL_LAYOUTS = LAYOUTS.concat(Hancore.LAYOUTS)
+)");
+    writeFile(studio + "/bar/data/Icons.js", "var RAW = {\n  fa: \"bell:f0f3;bell_o:f0a2;star:f005\",\n  oct: \"alert:f421\"\n}\n");
+    Bar bar([plugin] { return plugin; }, [studio] { return studio; }, home.path(), false);
+    QVERIFY2(bar.available(), qPrintable(bar.error()));
+    QCOMPARE(bar.themes().size(), 2);
+    QCOMPARE(bar.themes().at(1).toMap().value("group").toString(), QString("HANCORE"));
+    QCOMPARE(bar.layouts().size(), 2);
+    QCOMPARE(bar.layouts().at(1).toMap().value("group").toString(), QString("HANCORE"));
+    QVERIFY(bar.hasIcons());
+    const auto bells = bar.icons("fa", "bell");
+    QCOMPARE(bells.size(), 2);
+    QCOMPARE(bells.at(1).toMap().value("name").toString(), QString("bell o"));
+    QCOMPARE(bells.at(0).toMap().value("glyph").toString(), QString::fromUcs4(U"\U0000F0F3"));
+}
+
+void OmacraftTests::barEditsShellJsonInPlaceWithUndo()
+{
+    QTemporaryDir home;
+    const QString plugin = home.path() + "/plugin";
+    writeFile(plugin + "/data/Presets.js", "var THEMES = [{ id: \"pills\", label: \"Pills\", style: { shape: \"round\", gap: 6 } }]\nvar LAYOUTS = []\n");
+    const QString shell = home.path() + "/.config/omarchy/shell.json";
+    writeFile(shell, R"({"version":1,"other":{"keep":true},"bar":{"id":"omabar16","position":"top",
+        "layout":{"left":[{"id":"omarchy.menu"}],"center":[{"id":"omarchy.clock"}],"right":[]},"style":{"shape":"arrow"}}})");
+    Bar bar([plugin] { return plugin; }, {}, home.path(), false);
+
+    bar.applyTheme("pills");
+    bar.flush();
+    QJsonObject saved = readJson(shell);
+    QVERIFY(saved.value("other").toObject().value("keep").toBool());
+    QCOMPARE(saved.value("bar").toObject().value("style").toObject().value("gap").toInt(), 6);
+    QCOMPARE(saved.value("bar").toObject().value("id").toString(), QString("omabar16"));
+    QCOMPARE(bar.currentTheme(), QString("pills"));
+    QVERIFY(bar.canUndo());
+    QVERIFY(bar.edited());
+
+    bar.undo();
+    bar.flush();
+    QCOMPARE(readJson(shell).value("bar").toObject().value("style").toObject().value("shape").toString(), QString("arrow"));
+    QVERIFY(bar.canRedo());
+    bar.redo();
+    bar.flush();
+    QCOMPARE(readJson(shell).value("bar").toObject().value("style").toObject().value("shape").toString(), QString("round"));
+
+    // Widgets move between lanes; the anchor leaves with the clock.
+    bar.moveWidget("center", 0, "right", 0);
+    QCOMPARE(bar.centerAnchor(), QString());
+    bar.addWidget("omarchy.spacer", "left");
+    bar.setEntry("left", 1, "size", 30);
+    bar.setEntry("right", 0, "format", "HH:mm");
+    bar.flush();
+    const QJsonObject layout = readJson(shell).value("bar").toObject().value("layout").toObject();
+    QCOMPARE(layout.value("left").toArray().at(1).toObject().value("size").toInt(), 30);
+    QCOMPARE(layout.value("right").toArray().at(0).toObject().value("format").toString(), QString("HH:mm"));
+    bar.setEntry("right", 0, "format", "");
+    QVERIFY(!bar.layout().value("right").toList().at(0).toMap().contains("format"));
+
+    // Colours: a palette entry turns the named ones into what they show.
+    bar.setColor("pal:1", "#123456");
+    QCOMPARE(bar.style().value("palette").toList().at(1).toString(), QString("#123456"));
+    bar.setColor("module:omarchy.menu", "#ff0000");
+    QCOMPARE(bar.style().value("modules").toMap().value("omarchy.menu").toString(), QString("#ff0000"));
+    bar.clearColor("module:omarchy.menu");
+    QVERIFY(!bar.style().contains("modules"));
+
+    bar.revert();
+    bar.flush();
+    QCOMPARE(readJson(shell).value("bar").toObject().value("style").toObject(), QJsonObject({{"shape", "arrow"}}));
+    QVERIFY(!bar.edited());
+}
+
+void OmacraftTests::barLayoutsKeepWidgetSettings()
+{
+    QTemporaryDir home;
+    const QString plugin = home.path() + "/plugin";
+    writeFile(plugin + "/data/Presets.js", R"(var THEMES = [{ id: "a", label: "A", style: {} }]
+var LAYOUTS = [{ id: "rail", label: "Rail", anchor: "omarchy.clock", position: "left",
+  layout: { left: [{ id: "omarchy.menu" }], center: [{ id: "omarchy.clock", format: "HH:mm" }], right: [] } }]
+)");
+    const QString shell = home.path() + "/.config/omarchy/shell.json";
+    writeFile(shell, R"({"bar":{"id":"omabar16","layout":{"left":[],"center":[],
+        "right":[{"id":"omarchy.clock","format":"dddd"},{"id":"omacraft.folders","name":"Apps"}]}}})");
+    Bar bar([plugin] { return plugin; }, {}, home.path(), false);
+    bar.applyLayout("rail");
+    const auto layout = bar.layout();
+    QCOMPARE(bar.position(), QString("left"));
+    QCOMPARE(bar.centerAnchor(), QString("omarchy.clock"));
+    QCOMPARE(layout.value("center").toList().at(0).toMap().value("format").toString(), QString("dddd"));
+    // Another plugin's widget comes along, on the right.
+    QCOMPARE(layout.value("right").toList().at(0).toMap().value("id").toString(), QString("omacraft.folders"));
+    QCOMPARE(bar.currentLayout(), QString());
+}
+
+void OmacraftTests::barThemesSaveImportAndSanitize()
+{
+    const QJsonObject clean = Bar::sanitizeStyle(QJsonObject{
+        {"shape", "round"}, {"gap", 4}, {"bg", "#112233"}, {"fg", "red"}, {"solid", "yes"},
+        {"palette", QJsonArray{"accent", "#abcdef", 3}}, {"modules", QJsonObject{{"a", "#000000"}, {"b", "x"}}},
+        {"exec", "rm -rf ~"}});
+    QCOMPARE(clean, QJsonObject({{"shape", "round"}, {"gap", 4}, {"bg", "#112233"},
+                                 {"palette", QJsonArray{"accent", "#abcdef"}}, {"modules", QJsonObject{{"a", "#000000"}}}}));
+    QCOMPARE(Bar::parseThemes(R"({"omabar16":1,"themes":[{"label":"X","style":{"shape":"hex"}},{"label":"no style"}]})").size(), 1);
+    QCOMPARE(Bar::parseThemes(R"({"name":"Bare","style":{"gap":2}})").at(0).toObject().value("label").toString(), QString("Bare"));
+
+    QTemporaryDir home;
+    const QString plugin = home.path() + "/plugin";
+    writeFile(plugin + "/data/Presets.js", "var THEMES = [{ id: \"a\", label: \"A\", style: {} }]\nvar LAYOUTS = []\n");
+    writeFile(home.path() + "/.config/omarchy/shell.json", R"({"bar":{"id":"omabar16","style":{"shape":"hex","gap":3}}})");
+    Bar bar([plugin] { return plugin; }, {}, home.path(), false);
+    QVERIFY(bar.saveTheme("My Hex"));
+    QCOMPARE(bar.themes().last().toMap().value("id").toString(), QString("user-my-hex"));
+    QCOMPARE(bar.currentTheme(), QString("user-my-hex"));
+    bar.importThemes(R"([{"label":"Pasted","style":{"shape":"leaf"}}])");
+    QCOMPARE(bar.themes().size(), 3);
+    bar.exportTheme("");
+    QVERIFY(QFileInfo::exists(home.path() + "/.config/omarchy/omabar16/exports/my-bar.json"));
+    bar.deleteTheme("user-my-hex");
+    QCOMPARE(bar.themes().size(), 2);
 }
 
 // --- omascii ---
@@ -451,7 +619,7 @@ int runOmacraftTests(int argc, char **argv)
 }
 
 
-// --- launcher (OMArofi) ---
+// --- launcher (HyprLAUNCH) ---
 
 namespace {
 
@@ -596,4 +764,379 @@ void OmacraftTests::burnWritesInPlaceAndKeepsOtherKeys()
     QCOMPARE(saved.value("color").toString(), QString("#38ff6a"));
     // The shell watches this file, so it is rewritten, not replaced.
     QCOMPARE(inodeOf(path), inode);
+}
+
+void OmacraftTests::wallpaperKnowsAFavoriteByAnyName()
+{
+    // A Wallhaven wallpaper's id, page and downloaded file share one key.
+    QCOMPARE(Wallpaper::favoriteKey("0jk5vq"), QString("0jk5vq"));
+    QCOMPARE(Wallpaper::favoriteKey("https://wallhaven.cc/w/0jk5vq"), QString("0jk5vq"));
+    QCOMPARE(Wallpaper::favoriteKey("/home/me/Pictures/Wallhaven/wallhaven-0jk5vq.jpg"), QString("0jk5vq"));
+    QCOMPARE(Wallpaper::favoriteKey("https://w.wallhaven.cc/full/0j/wallhaven-0jk5vq.png"), QString("0jk5vq"));
+    // Anything else by its full path.
+    QTemporaryDir dir;
+    writeFile(dir.path() + "/sunset.png", "x");
+    QCOMPARE(Wallpaper::favoriteKey(dir.path() + "/sunset.png"), QFileInfo(dir.path() + "/sunset.png").canonicalFilePath());
+}
+
+void OmacraftTests::wallpaperMergesPagesWithoutRepeats()
+{
+    auto page = [](const QStringList &ids) {
+        QVariantList out;
+        for (const auto &id : ids)
+            out.append(QVariantMap{{"id", id}});
+        return out;
+    };
+    const QVariantList first = Wallpaper::mergeResults({}, page({"a", "b", "c"}), true);
+    QCOMPARE(first.size(), 3);
+    // A toplist shifts between pages: "c" comes round again and is dropped.
+    const QVariantList second = Wallpaper::mergeResults(first, page({"c", "d"}), false);
+    QCOMPARE(second.size(), 4);
+    QCOMPARE(second.last().toMap().value("id").toString(), QString("d"));
+    // A new search starts over.
+    QCOMPARE(Wallpaper::mergeResults(second, page({"z"}), true).size(), 1);
+}
+
+void OmacraftTests::wallpaperWritesInOrderAndFlipsAtOnce()
+{
+    // A stand-in hyprskin that logs every call.
+    QTemporaryDir dir;
+    const QString plugin = dir.path() + "/studio";
+    const QString log = dir.path() + "/calls.log";
+    writeFile(plugin + "/bin/hyprskin",
+              QString("import json, sys\n"
+                      "open(%1, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n"
+                      "print('[]' if sys.argv[1:2] in (['library'], ['favorites']) else '{}')\n")
+                  .arg("'" + log + "'").toUtf8());
+    Wallpaper wallpaper([plugin] { return plugin; });
+    QVERIFY(wallpaper.available());
+
+    wallpaper.toggleFavorite("0jk5vq", QVariantMap{{"url", "https://wallhaven.cc/w/0jk5vq"}, {"views", 9}});
+    // The heart answers before hyprskin does.
+    QVERIFY(wallpaper.isFavorite("https://wallhaven.cc/w/0jk5vq"));
+    QVERIFY(wallpaper.favoriteKeys().contains("0jk5vq"));
+    wallpaper.deleteFromLibrary("/lib/wallhaven-0jk5vq.jpg");
+    wallpaper.setOption("palette.scheme", "matugen");
+    wallpaper.setOption("rotation.interval", 15);
+    wallpaper.setOption("targets.terminals", false);
+
+    QStringList writes;
+    QTRY_VERIFY_WITH_TIMEOUT(([&] {
+        writes.clear();
+        QFile file(log);
+        if (file.open(QIODevice::ReadOnly))
+            for (const auto &line : QString::fromUtf8(file.readAll()).split('\n', Qt::SkipEmptyParts)) {
+                const QStringList call = QJsonDocument::fromJson(line.toUtf8()).toVariant().toStringList();
+                if (QStringList{"favorite", "delete", "set"}.contains(call.value(0)))
+                    writes << call.mid(0, 3).join(' ');
+            }
+        return writes.size() == 5;
+    }()), 15000);
+    QCOMPARE(writes, (QStringList{
+        "favorite add 0jk5vq",
+        "delete /lib/wallhaven-0jk5vq.jpg",
+        "set palette.scheme \"matugen\"",
+        "set rotation.interval 15",
+        "set targets.terminals false",
+    }));
+    // Only what a favourite needs is kept from the search result.
+    QFile file(log);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QVERIFY(file.readAll().contains(R"(\"url\":\"https://wallhaven.cc/w/0jk5vq\")"));
+}
+
+void OmacraftTests::hyprcraftKnowsAnOmarchyBundle()
+{
+    QVERIFY(HyprCraft::isOmarchyBundle("/home/me/Downloads/HyprCraft/hyprcraft-nord-omarchy.zip"));
+    QVERIFY(!HyprCraft::isOmarchyBundle("/home/me/Downloads/HyprCraft/hyprcraft-dotfiles.zip"));
+    QVERIFY(!HyprCraft::isOmarchyBundle("/home/me/Downloads/HyprCraft/hyprland.lua"));
+}
+
+namespace {
+// A bar with the tray, one folder and the clock, as shell.json has it.
+QByteArray shellWithAFolder() {
+    QJsonObject folder{{"id", "omacraft.folders"}, {"name", "Games"}, {"apps", QJsonArray{"steam"}}};
+    QJsonObject layout{{"left", QJsonArray{QJsonObject{{"id", "omarchy.menu"}}}},
+                       {"center", QJsonArray{QJsonObject{{"id", "omarchy.clock"}, {"format", "HH:mm"}}}},
+                       {"right", QJsonArray{QJsonObject{{"id", "omarchy.tray"}}, folder}}};
+    return QJsonDocument(QJsonObject{{"version", 1}, {"bar", QJsonObject{{"position", "top"}, {"layout", layout}}}})
+        .toJson();
+}
+}
+
+void OmacraftTests::foldersReadTheirBarEntries()
+{
+    const QVariantList found = Folders::foldersIn(QJsonDocument::fromJson(shellWithAFolder()).object());
+    QCOMPARE(found.size(), 1);
+    const QVariantMap folder = found.first().toMap();
+    QCOMPARE(folder.value("section").toString(), QString("right"));
+    QCOMPARE(folder.value("index").toInt(), 1);
+    QCOMPARE(folder.value("apps").toStringList(), QStringList{"steam"});
+}
+
+void OmacraftTests::foldersScanInstalledApps()
+{
+    QTemporaryDir dir;
+    const QString user = dir.path() + "/user/applications";
+    const QString system = dir.path() + "/system/applications";
+    writeFile(system + "/steam.desktop", "[Desktop Entry]\nType=Application\nName=Steam\nIcon=steam\nComment=Games\n");
+    writeFile(system + "/hidden.desktop", "[Desktop Entry]\nType=Application\nName=Hidden\nNoDisplay=true\n");
+    writeFile(system + "/link.desktop", "[Desktop Entry]\nType=Link\nName=A link\n");
+    // A user copy hides the system one with the same id.
+    writeFile(user + "/steam.desktop", "[Desktop Entry]\nType=Application\nName=Steam (mine)\nIcon=steam\n");
+    // Subfolders join with a dash, as the desktop-entry spec has it.
+    writeFile(system + "/kde/org.kde.dolphin.desktop", "[Desktop Entry]\nType=Application\nName=Dolphin\n[Desktop Action new]\nName=New window\n");
+    const QVariantList apps = Folders::scanApplications({user, system});
+    QStringList ids, names;
+    for (const auto &app : apps) {
+        ids << app.toMap().value("id").toString();
+        names << app.toMap().value("name").toString();
+    }
+    QCOMPARE(ids, (QStringList{"kde-org.kde.dolphin", "steam"}));
+    QCOMPARE(names, (QStringList{"Dolphin", "Steam (mine)"}));
+}
+
+void OmacraftTests::foldersEditShellJsonInPlace()
+{
+    QTemporaryDir home;
+    const QString shell = home.path() + "/.config/omarchy/shell.json";
+    writeFile(shell, shellWithAFolder());
+    const auto inode = inodeOf(shell);
+    Folders folders(home.path(), {home.path() + "/apps"});
+    QCOMPARE(folders.folders().size(), 1);
+
+    const int added = folders.add("Dev", "left");
+    QCOMPARE(added, 1);
+    folders.addApp("left", 1, "code.desktop");
+    folders.addApp("left", 1, "code");          // already there
+    folders.addApp("left", 1, "org.gnome.Nautilus");
+    folders.addCommand("left", 1, "Top", "", "alacritty -e btop");
+    folders.moveApp("left", 1, 2, -1);           // the command before Nautilus
+    folders.update("left", 1, {{"open", "hover"}, {"showLabel", true}, {"id", "evil.widget"}});
+    folders.removeApp("right", 1, 0);            // Games loses steam
+    folders.moveTo("right", 1, "center");        // Games after the clock
+
+    QCOMPARE(inodeOf(shell), inode);             // rewritten, not replaced
+    const QJsonObject saved = readJson(shell);
+    const QJsonObject layout = saved.value("bar").toObject().value("layout").toObject();
+    const QJsonObject dev = layout.value("left").toArray().at(1).toObject();
+    QCOMPARE(dev.value("id").toString(), QString("omacraft.folders"));   // id isn't editable
+    QCOMPARE(dev.value("name").toString(), QString("Dev"));
+    QCOMPARE(dev.value("open").toString(), QString("hover"));
+    QVERIFY(dev.value("showLabel").toBool());
+    const QJsonArray apps = dev.value("apps").toArray();
+    QCOMPARE(apps.size(), 3);
+    QCOMPARE(apps.at(0).toString(), QString("code"));
+    QCOMPARE(apps.at(1).toObject().value("command").toString(), QString("alacritty -e btop"));
+    QCOMPARE(apps.at(1).toObject().value("icon").toString(), QString("utilities-terminal"));
+    QCOMPARE(apps.at(2).toString(), QString("org.gnome.Nautilus"));
+    const QJsonArray center = layout.value("center").toArray();
+    QCOMPARE(center.size(), 2);
+    QCOMPARE(center.at(0).toObject().value("format").toString(), QString("HH:mm"));  // others untouched
+    QCOMPARE(center.at(1).toObject().value("name").toString(), QString("Games"));
+    QVERIFY(center.at(1).toObject().value("apps").toArray().isEmpty());
+    QCOMPARE(layout.value("right").toArray().size(), 1);
+    QCOMPARE(saved.value("version").toInt(), 1);
+
+    // Whatever is at a place that isn't a folder is refused, not overwritten.
+    folders.remove("right", 0);
+    QVERIFY(!folders.error().isEmpty());
+    QCOMPARE(readJson(shell).value("bar").toObject().value("layout").toObject().value("right").toArray().size(), 1);
+
+    folders.remove("center", 1);
+    QCOMPARE(folders.folders().size(), 1);
+}
+
+void OmacraftTests::themeFollowsLightAndDark()
+{
+    QTemporaryDir dir;
+    const QString colors = dir.path() + "/theme/colors.toml";
+    writeFile(colors, "mode = \"light\"\nbackground = \"#fffcf0\"\nforeground = \"#100f0f\"\naccent = \"#205ea6\"\nred = \"#af3029\"\n");
+    Theme light(dir.path());
+    QVERIFY(!light.dark());
+    QCOMPARE(light.window(), QColor("#fffcf0"));
+    QCOMPARE(light.text(), QColor("#100f0f"));
+    QCOMPARE(light.accent(), QString("#205ea6"));
+    // Surfaces step from the background towards the text, so on a light
+    // theme every layer is darker than the window, and text stays readable.
+    QVERIFY(light.card().lightnessF() < light.window().lightnessF());
+    QVERIFY(light.border().lightnessF() < light.card().lightnessF());
+    QVERIFY(light.textMuted().lightnessF() > light.text().lightnessF());
+
+    // No mode: told by the background.
+    writeFile(colors, "background = \"#1a1b26\"\nforeground = \"#c0caf5\"\naccent = \"#7aa2f7\"\n");
+    Theme dark(dir.path());
+    QVERIFY(dark.dark());
+    QVERIFY(dark.card().lightnessF() > dark.window().lightnessF());
+    // A missing red falls back, still readable on the background.
+    QVERIFY(dark.danger().isValid());
+
+    // A foreground too close to the background is pushed until it reads.
+    writeFile(colors, "mode = \"dark\"\nbackground = \"#202020\"\nforeground = \"#303030\"\n");
+    Theme murky(dir.path());
+    QVERIFY(murky.text().lightnessF() > 0.6);
+}
+
+// --- theme sync ---
+
+void OmacraftTests::barUnderlineTextReadsOnTheBar()
+{
+    const QHash<QString, QString> theme{{"background", "#1a1b26"}, {"foreground", "#c0caf5"}};
+    auto bar = [](const QJsonObject &style, bool transparent = false) {
+        return QJsonObject{{"id", "omabar16"}, {"style", style}, {"transparent", transparent}};
+    };
+    // A theme's dark segment ink on its own dark bar: moved to read there.
+    const QJsonObject dark{{"shape", "underline"}, {"bg", "#16161e"}, {"fg", "#16161e"}};
+    const QString ink = Bar::underlineInk(bar(dark), theme);
+    QVERIFY(!ink.isEmpty());
+    QVERIFY(Theme::contrastRatio(QColor(ink), QColor("#16161e")) >= 4.5);
+    // Already readable, or not underlined, or on the wallpaper: left alone.
+    QCOMPARE(Bar::underlineInk(bar({{"shape", "underline"}, {"bg", "#000000"}, {"fg", "#e8e8e8"}}), theme), QString());
+    QCOMPARE(Bar::underlineInk(bar({{"shape", "arrow"}, {"bg", "#16161e"}, {"fg", "#16161e"}}), theme), QString());
+    QCOMPARE(Bar::underlineInk(bar(dark, true), theme), QString());
+    // A light bar gets dark text, and a stricter minimum is kept.
+    const QString onLight = Bar::underlineInk(bar({{"shape", "underline"}, {"bg", "#dce2ea"}, {"fg", "#eeeeee"},
+                                                   {"minContrast", 7}}), theme);
+    QVERIFY(Theme::contrastRatio(QColor(onLight), QColor("#dce2ea")) >= 7);
+}
+
+void OmacraftTests::themeSyncBuildsABorderGradient()
+{
+    const QHash<QString, QString> colors{{"background", "#1a1b26"}, {"accent", "#7aa2f7"}, {"blue", "#7aa2f7"},
+                                         {"magenta", "#bb9af7"}, {"cyan", "#1a1c27"}, {"green", "#9ece6a"},
+                                         {"yellow", "#e0af68"}};
+    // The accent first, the blue that repeats it and the cyan lost in the
+    // background left out, four at most.
+    QCOMPARE(ThemeSync::borderColors(colors), (QStringList{"7aa2f7", "bb9af7", "9ece6a", "e0af68"}));
+    // One colour still makes a gradient.
+    QCOMPARE(ThemeSync::borderColors({{"background", "#000000"}, {"accent", "#ff0000"}}).size(), 2);
+
+    QTemporaryDir home;
+    const QString path = home.path() + "/.config/omarchy/animation-presets.json";
+    writeFile(path, R"({"curves": {"mine": {"type": "spring"}}, "presets": [{"id": "x"}], "borders": {"own": {"colors": ["ffffff"]}}})");
+    QVERIFY(ThemeSync::writeBorderRun(home.path(), colors));
+    QVERIFY(!ThemeSync::writeBorderRun(home.path(), colors)); // unchanged
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const auto saved = QJsonDocument::fromJson(file.readAll()).object();
+    QCOMPARE(saved.value("curves").toObject().value("mine").toObject().value("type").toString(), QString("spring"));
+    QCOMPARE(saved.value("presets").toArray().size(), 1);
+    QVERIFY(saved.value("borders").toObject().contains("own"));
+    QCOMPARE(saved.value("borders").toObject().value("wallpaper").toObject().value("colors").toArray().size(), 4);
+}
+
+void OmacraftTests::themeSyncFollowsAndPutsBack()
+{
+    QTemporaryDir home;
+    const QString burnPlugin = home.path() + "/burn";
+    writeBurnEffects(burnPlugin);
+    writeFile(home.path() + "/.config/omarchy/burn-my-windows.json", R"({"color": "#38ff6a"})");
+    Burn burn([burnPlugin] { return burnPlugin; }, home.path(), false);
+    const QString studio = home.path() + "/studio";
+    writeLauncherStyles(studio);
+    writeFile(home.path() + "/.config/omarchy/launcher-style.json", R"({"scheme": "nord"})");
+    Launcher launcher([studio] { return studio; }, home.path(), false);
+
+    ThemeSync sync(nullptr, nullptr, &burn, &launcher, nullptr, nullptr, home.path(), false);
+    QVERIFY(!sync.allFollow());
+    sync.followAll();
+    QCOMPARE(burn.color(), QString("theme"));
+    QCOMPARE(launcher.scheme(), QString("omarchy"));
+    QVERIFY(sync.allFollow());
+
+    // What each had is kept, and comes back when it stops following.
+    ThemeSync later(nullptr, nullptr, &burn, &launcher, nullptr, nullptr, home.path(), false);
+    later.setFollow("effects", false);
+    later.setFollow("launcher", false);
+    QCOMPARE(burn.color(), QString("#38ff6a"));
+    QCOMPARE(launcher.scheme(), QString("nord"));
+
+    // Following with nothing to go back to can't be turned off.
+    launcher.setScheme("omarchy");
+    for (const auto &part : later.parts())
+        if (part.toMap().value("id") == "launcher")
+            QVERIFY(part.toMap().value("fixed").toBool());
+}
+
+// TheDraw art: background-coloured spans, which crash a RichText Text on
+// Qt 6.12, painted by AsciiView instead, sized by the art and its zoom.
+void OmacraftTests::asciiViewPaintsBackgroundSpans() {
+    AsciiView view;
+    QCOMPARE(view.naturalWidth(), 0.0);
+    QString row;
+    for (int i = 0; i < 40; i++)
+        row += QString("<span style=\"color:#ff0000;background-color:#%1;\">\u2588\u2593</span>").arg(i % 2 ? "00aaaa" : "aa00aa");
+    view.setHtml("<pre>" + row + "<br>" + row + "</pre>");
+    QVERIFY(view.naturalWidth() > 0);
+    QVERIFY(view.naturalHeight() > 0);
+    QCOMPARE(view.implicitWidth(), view.naturalWidth());
+
+    view.setZoom(0.5);
+    QCOMPARE(view.implicitWidth(), view.naturalWidth() * 0.5);
+    view.setZoom(-3);
+    QVERIFY(view.zoom() > 0);
+    view.setZoom(1);
+
+    QImage image(view.naturalWidth(), view.naturalHeight(), QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    view.paint(&painter);
+    painter.end();
+    QCOMPARE(image.pixelColor(1, 1).alpha(), 255);
+}
+
+// A preset sets its whole look, and its font when asked, as one undo step.
+void OmacraftTests::omasciiPresetIsOneUndoStep() {
+    Omascii omascii([] { return QString(); });
+    omascii.setOption("font", "Graffiti");
+    omascii.setOption("colorMode", "solid");
+    omascii.applyPreset({{"colorMode", "palette"}, {"colorPalette", "acid"}, {"inkBg", "shade"}}, "TDF acidx");
+    QCOMPARE(omascii.config().value("colorPalette").toString(), QString("acid"));
+    QCOMPARE(omascii.config().value("inkBg").toString(), QString("shade"));
+    QCOMPARE(omascii.config().value("font").toString(), QString("TDF acidx"));
+    QCOMPARE(omascii.config().value("source").toString(), QString("text"));
+    omascii.undo();
+    QCOMPARE(omascii.config().value("colorMode").toString(), QString("solid"));
+    QCOMPARE(omascii.config().value("font").toString(), QString("Graffiti"));
+
+    // Without a font it keeps the one in use.
+    omascii.applyPreset({{"shadow", "glow"}});
+    QCOMPARE(omascii.config().value("font").toString(), QString("Graffiti"));
+}
+
+void OmacraftTests::bootSplashReadsTheThemeAndWhereToGoBack() {
+    QCOMPARE(BootSplash::themeIn("[Daemon]\nTheme=omascii\n"), QString("omascii"));
+    QCOMPARE(BootSplash::themeIn("[Daemon]\n# Theme=old\n  Theme = hyprstack-boot  \nShowDelay=0\n"), QString("hyprstack-boot"));
+    QCOMPARE(BootSplash::themeIn("[Daemon]\nShowDelay=0\n"), QString());
+
+    QTemporaryDir root;
+    const QString conf = root.path() + "/etc/plymouthd.conf";
+    const QString themes = root.path() + "/themes";
+    const QString previous = root.path() + "/state/previous-theme";
+    QVERIFY(Proc::writeAtomically(conf, "[Daemon]\nTheme=omascii\n"));
+    QVERIFY(QDir().mkpath(themes + "/omascii"));
+
+    BootSplash splash(conf, themes, previous);
+    QCOMPARE(splash.theme(), QString("omascii"));
+    QVERIFY(!splash.on());
+    QVERIFY(!splash.available());
+
+    QVERIFY(Proc::writeAtomically(themes + "/hyprstack-boot/hyprstack-boot.plymouth", "[Plymouth Theme]\n"));
+    QVERIFY(splash.available());
+
+    // Nothing recorded, or a theme that's gone, falls back to Omarchy's own.
+    QCOMPARE(splash.previousTheme(), QString("omarchy"));
+    QVERIFY(Proc::writeAtomically(previous, "solar\n"));
+    QCOMPARE(splash.previousTheme(), QString("omarchy"));
+    QVERIFY(Proc::writeAtomically(previous, "omascii\n"));
+    QCOMPARE(splash.previousTheme(), QString("omascii"));
+
+    QVERIFY(Proc::writeAtomically(conf, "[Daemon]\nTheme=hyprstack-boot\n"));
+    splash.reload();
+    QVERIFY(splash.on());
+
+    const QString command = BootSplash::switchCommand("hyprstack-boot");
+    QVERIFY(command.startsWith("sudo plymouth-set-default-theme 'hyprstack-boot' && "));
+    QVERIFY(command.contains("limine-mkinitcpio"));
+    QVERIFY(command.contains("mkinitcpio -P"));
 }

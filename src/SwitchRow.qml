@@ -14,12 +14,12 @@ RowLayout {
     ColumnLayout {
         Layout.fillWidth: true
         spacing: 1
-        Label { text: label; color: "white" }
+        Label { text: label; color: theme.text }
         Label {
             visible: hint !== ""
             Layout.fillWidth: true
             text: hint
-            color: "#74747d"
+            color: theme.textDim
             font.pixelSize: 11
             wrapMode: Text.WordWrap
         }

@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "omacraft.folders",
+  "name": "Folder trays",
+  "version": "1.0.0",
+  "author": "skll",
+  "license": "MIT",
+  "description": "App folders for the bar: a folder icon that opens into a row of the apps you picked, like the system tray's drawer. Put as many as you like on the bar; OMAcraft's Bar page makes and edits them.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "FolderTray.qml"
+  },
+  "barWidget": {
+    "displayName": "Folder tray",
+    "description": "A folder of apps that opens and closes on the bar",
+    "category": "Launchers",
+    "aliases": [
+      "folder",
+      "folders",
+      "apps",
+      "drawer"
+    ],
+    "allowMultiple": true,
+    "defaultSection": "right",
+    "defaults": {
+      "name": "Apps",
+      "icon": "󰉋",
+      "apps": []
+    },
+    "schema": [
+      { "key": "name", "type": "string", "label": "Name", "defaultValue": "Apps", "description": "Shown on hover, and beside the icon when showLabel is on." },
+      { "key": "icon", "type": "string", "label": "Icon", "defaultValue": "󰉋", "description": "A Nerd Font glyph, or an icon name or file." },
+      { "key": "apps", "type": "list", "label": "Apps", "defaultValue": [], "description": "Desktop ids (e.g. firefox, org.gnome.Nautilus), or {name, icon, command} for anything else." },
+      { "key": "open", "type": "enum", "label": "Opens on", "options": ["click", "hover"], "defaultValue": "click", "description": "click: the folder icon opens and closes it. hover: it opens while the pointer is over it." },
+      { "key": "side", "type": "enum", "label": "Opens towards", "options": ["auto", "before", "after"], "defaultValue": "auto", "description": "auto: towards the middle of the bar." },
+      { "key": "closeOnLaunch", "type": "boolean", "label": "Close after launching", "defaultValue": true, "description": "Fold the folder back up once an app is started." },
+      { "key": "showLabel", "type": "boolean", "label": "Show the name", "defaultValue": false, "description": "Write the folder's name beside its icon." },
+      { "key": "autoClose", "type": "number", "label": "Close after (s)", "defaultValue": 0, "description": "Fold up after this many seconds without the pointer over it; 0 never." }
+    ]
+  }
+}

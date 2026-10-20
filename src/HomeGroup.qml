@@ -40,20 +40,20 @@ ColumnLayout {
                 Layout.fillWidth: true
                 text: group.title + "  <font color=\"#74747d\">" + group.chosen + " of " + group.items.length + "</font>"
                 textFormat: Text.StyledText
-                color: "white"
+                color: theme.text
                 elide: Text.ElideRight
             }
             Label {
                 Layout.fillWidth: true
                 text: group.detail
-                color: "#74747d"
+                color: theme.textDim
                 font.pixelSize: 11
                 wrapMode: Text.WordWrap
             }
         }
         Label {
             text: group.open ? "▾" : "▸"
-            color: "#8a8a93"
+            color: theme.textMuted
             font.pixelSize: 14
             Layout.rightMargin: 4
         }
@@ -76,14 +76,14 @@ ColumnLayout {
             Label {
                 Layout.fillWidth: true
                 text: "~/" + modelData.path
-                color: modelData.on ? "#d6d6da" : "#74747d"
+                color: modelData.on ? theme.textSoft : theme.textDim
                 font.family: "monospace"
                 font.pixelSize: 12
                 elide: Text.ElideMiddle
             }
             Label {
                 text: modelData.size
-                color: "#74747d"
+                color: theme.textDim
                 font.pixelSize: 11
                 font.family: "monospace"
             }

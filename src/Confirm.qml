@@ -25,16 +25,16 @@ Rectangle {
         width: Math.min(460, parent.width - 40)
         height: confirmColumn.implicitHeight + 44
         radius: 12
-        color: "#1c1c1f"
-        border.color: "#2a2a30"
+        color: theme.raised
+        border.color: theme.borderStrong
         MouseArea { anchors.fill: parent }
         ColumnLayout {
             id: confirmColumn
             anchors.fill: parent
             anchors.margins: 22
             spacing: 12
-            Label { text: confirm.heading; color: "white"; font.pixelSize: 16; font.weight: Font.DemiBold }
-            Label { Layout.fillWidth: true; text: confirm.body; color: "#b4b4bc"; wrapMode: Text.WordWrap }
+            Label { text: confirm.heading; color: theme.text; font.pixelSize: 16; font.weight: Font.DemiBold }
+            Label { Layout.fillWidth: true; text: confirm.body; color: theme.textSoft; wrapMode: Text.WordWrap }
             RowLayout {
                 Layout.fillWidth: true
                 Layout.topMargin: 6
@@ -44,7 +44,7 @@ Rectangle {
                 Button {
                     text: confirm.action
                     focusPolicy: Qt.NoFocus
-                    Material.background: "#c94a4a"
+                    Material.background: theme.danger
                     Material.foreground: "white"
                     onClicked: confirm.accepted()
                 }

@@ -16,6 +16,8 @@ class HyprCraft : public QWebEngineUrlSchemeHandler {
     Q_PROPERTY(QString url READ url CONSTANT)
     Q_PROPERTY(QString storagePath READ storagePath CONSTANT)
     Q_PROPERTY(QString downloadDir READ downloadDir CONSTANT)
+    // The last Omarchy bundle downloaded (…-omarchy.zip), until it's installed.
+    Q_PROPERTY(QString bundle READ bundle NOTIFY bundleChanged)
 
 public:
     // candidates lists the folders that may hold the built app, best first;
@@ -41,11 +43,21 @@ public:
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void downloaded(const QString &path, bool ok, const QString &reason);
     Q_INVOKABLE void openDownloads();
+    QString bundle() const { return m_bundle; }
+    // Unpacks the bundle and runs its install.sh in a terminal, where its
+    // output (and Hyprland's config check) can be read.
+    Q_INVOKABLE void installBundle();
+    Q_INVOKABLE void dismissBundle();
+
+    // Whether a download is an Omarchy bundle HyprCraft made.
+    static bool isOmarchyBundle(const QString &path);
 
 signals:
     void changed();
+    void bundleChanged();
 
 private:
     std::function<QStringList()> m_candidates;
     QString m_appDir;
+    QString m_bundle;
 };

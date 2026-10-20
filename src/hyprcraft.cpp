@@ -90,11 +90,42 @@ void HyprCraft::requestStarted(QWebEngineUrlRequestJob *job) {
     job->reply(mimeType(path), file);
 }
 
+bool HyprCraft::isOmarchyBundle(const QString &path) {
+    return QFileInfo(path).fileName().endsWith("-omarchy.zip");
+}
+
 void HyprCraft::downloaded(const QString &path, bool ok, const QString &reason) {
+    if (ok && isOmarchyBundle(path)) {
+        m_bundle = path;
+        emit bundleChanged();
+    }
     if (ok)
-        Proc::detach("notify-send", {"-a", "OMAcraft", "HyprCraft export saved", path});
+        Proc::detach("notify-send", {"-a", "OMAcraft", "HyprFIGZ export saved", path});
     else
-        Proc::detach("notify-send", {"-a", "OMAcraft", "-u", "critical", "HyprCraft export failed", reason});
+        Proc::detach("notify-send", {"-a", "OMAcraft", "-u", "critical", "HyprFIGZ export failed", reason});
+}
+
+void HyprCraft::installBundle() {
+    if (m_bundle.isEmpty())
+        return;
+    // Unpacked beside OMAcraft's other HyprCraft data, one folder per bundle;
+    // python's zipfile refuses paths that leave the folder.
+    const QString dest = storagePath() + "/bundles/" + QFileInfo(m_bundle).completeBaseName();
+    const QString script = QString(
+        "set -e; rm -rf %2; mkdir -p %2; "
+        "python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' %1 %2; "
+        "dir=$(dirname \"$(find %2 -maxdepth 2 -name install.sh | head -1)\"); "
+        "bash \"$dir/install.sh\"; echo; read -r -p 'Press Enter to close' _")
+        .arg(Proc::shellQuote(m_bundle), Proc::shellQuote(dest));
+    if (Proc::inTerminal(script)) {
+        m_bundle.clear();
+        emit bundleChanged();
+    }
+}
+
+void HyprCraft::dismissBundle() {
+    m_bundle.clear();
+    emit bundleChanged();
 }
 
 void HyprCraft::openDownloads() {

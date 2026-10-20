@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
 
-// OMArofi, the launcher in the Studio plugin: its layouts, colour schemes
+// HyprLAUNCH, the launcher in the Studio plugin: its layouts, colour schemes
 // and how it moves. Every pick is written to launcher-style.json, which the
 // launcher follows straight away.
 Item {
@@ -54,7 +54,7 @@ Item {
         const s = find(launcher.schemes, id);
         if (s.id && s.id !== "omarchy")
             return s;
-        return { bg: "#141417", alt: "#1e1e23", fg: "#e6e6ea", sel: theme.accent, active: theme.accent, urgent: "#f7768e" };
+        return { bg: theme.inset, alt: theme.card, fg: theme.textSoft, sel: theme.accent, active: theme.accent, urgent: "#f7768e" };
     }
     readonly property var current: colorsOf(launcher.scheme)
     readonly property var transitionDef: find(launcher.transitions, launcher.transition)
@@ -77,7 +77,7 @@ Item {
         spacing: 14
 
         PageHeader {
-            title: "OMArofi"
+            title: "HyprLAUNCH"
             subtitle: "The launcher's layouts, colours and motion, saved to ~/.config/omarchy/launcher-style.json"
             glyph: "\u{f003b}"
             Button { text: "Surprise me"; flat: true; focusPolicy: Qt.NoFocus; visible: launcher.available; onClicked: launcher.randomize() }
@@ -89,7 +89,7 @@ Item {
         NotInstalled {
             visible: !launcher.available
             pluginId: "omacraft.studio"
-            what: "OMArofi is the launcher inside the Studio plugin."
+            what: "HyprLAUNCH is the launcher inside the Studio plugin."
         }
 
         MessageBar {
@@ -125,7 +125,7 @@ Item {
                             Label {
                                 Layout.fillWidth: true
                                 text: page.transitionDef.description || ""
-                                color: "#8a8a93"
+                                color: theme.textMuted
                                 font.pixelSize: 12
                                 elide: Text.ElideRight
                             }
@@ -135,7 +135,7 @@ Item {
                             visible: launcher.transitions.length === 0
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
-                            color: "#c9a227"
+                            color: theme.warning
                             text: "This copy of the Studio plugin has no transitions yet. Update it, then restart the shell."
                         }
                         GridLayout {
@@ -153,8 +153,8 @@ Item {
                                     Layout.fillWidth: true
                                     implicitHeight: 92
                                     radius: 9
-                                    color: chosen ? Qt.rgba(tone.r, tone.g, tone.b, 0.14) : thover.hovered ? "#1b1b1f" : "#111113"
-                                    border.color: chosen ? theme.accent : "#26262b"
+                                    color: chosen ? Qt.rgba(tone.r, tone.g, tone.b, 0.14) : thover.hovered ? theme.hover : theme.inset
+                                    border.color: chosen ? theme.accent : theme.border
                                     border.width: chosen ? 2 : 1
 
                                     // A small launcher card playing this transition.
@@ -175,7 +175,7 @@ Item {
                                         anchors.bottom: parent.bottom
                                         anchors.margins: 8
                                         text: (ttile.modelData.icon ? ttile.modelData.icon + "  " : "") + ttile.modelData.name
-                                        color: ttile.chosen ? theme.accent : "white"
+                                        color: ttile.chosen ? theme.accent : theme.text
                                         font.pixelSize: 12
                                         elide: Text.ElideRight
                                     }
@@ -246,8 +246,8 @@ Item {
                                     Layout.fillWidth: true
                                     implicitHeight: 148
                                     radius: 9
-                                    color: chosen ? Qt.rgba(tone.r, tone.g, tone.b, 0.14) : lhover.hovered ? "#1b1b1f" : "#111113"
-                                    border.color: chosen ? theme.accent : "#26262b"
+                                    color: chosen ? Qt.rgba(tone.r, tone.g, tone.b, 0.14) : lhover.hovered ? theme.hover : theme.inset
+                                    border.color: chosen ? theme.accent : theme.border
                                     border.width: chosen ? 2 : 1
                                     LayoutSketch {
                                         anchors.left: parent.left
@@ -267,14 +267,14 @@ Item {
                                         Label {
                                             Layout.fillWidth: true
                                             text: ltile.modelData.icon + "  " + ltile.modelData.name
-                                            color: ltile.chosen ? theme.accent : "white"
+                                            color: ltile.chosen ? theme.accent : theme.text
                                             font.weight: Font.DemiBold
                                             elide: Text.ElideRight
                                         }
                                         Label {
                                             Layout.fillWidth: true
                                             text: ltile.modelData.description || ""
-                                            color: "#8a8a93"
+                                            color: theme.textMuted
                                             font.pixelSize: 10
                                             elide: Text.ElideRight
                                         }
@@ -317,7 +317,7 @@ Item {
                                     implicitHeight: 74
                                     radius: 9
                                     color: c.bg
-                                    border.color: chosen ? theme.accent : shover.hovered ? c.sel : "#26262b"
+                                    border.color: chosen ? theme.accent : shover.hovered ? c.sel : theme.border
                                     border.width: chosen ? 2 : 1
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -357,7 +357,7 @@ Item {
                 Label {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    color: "#5f5f68"
+                    color: theme.textFaint
                     font.pixelSize: 11
                     text: "Inside the launcher, Ctrl+L and Ctrl+T cycle layouts and colours (Shift goes back). "
                           + "From a terminal: omarchy-launcher-style layout|scheme|transition|speed|morph."
@@ -373,8 +373,8 @@ Item {
         property var colors: ({})
         readonly property string base: def.base || def.id || "classic"
         radius: 6
-        color: "#08080a"
-        border.color: "#202026"
+        color: theme.sunken
+        border.color: theme.hover
         clip: true
 
         readonly property var rect: {
@@ -457,8 +457,8 @@ Item {
         property string layoutBase: "classic"
         property real p: 1
         radius: 5
-        color: "#08080a"
-        border.color: "#202026"
+        color: theme.sunken
+        border.color: theme.hover
         clip: true
 
         // "Layout's own" stands for the current layout's entrance.
@@ -494,7 +494,7 @@ Item {
             width: parent.width * 0.42
             height: parent.height * 0.66
             radius: 4
-            color: td.colors.bg || "#141417"
+            color: td.colors.bg || theme.inset
             border.color: td.colors.sel || theme.accent
             opacity: td.eff.ms === 1 ? 1 : Math.max(0, Math.min(1, td.p * 1.6))
             Column {
