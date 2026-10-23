@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
 
-// HyprLAUNCH, the launcher in the Studio plugin: its layouts, colour schemes
+// Launcher, the launcher in the Studio plugin: its layouts, colour schemes
 // and how it moves. Every pick is written to launcher-style.json, which the
 // launcher follows straight away.
 Item {
@@ -77,7 +77,7 @@ Item {
         spacing: 14
 
         PageHeader {
-            title: "HyprLAUNCH"
+            title: "Launcher"
             subtitle: "The launcher's layouts, colours and motion, saved to ~/.config/omarchy/launcher-style.json"
             glyph: "\u{f003b}"
             Button { text: "Surprise me"; flat: true; focusPolicy: Qt.NoFocus; visible: launcher.available; onClicked: launcher.randomize() }
@@ -89,7 +89,7 @@ Item {
         NotInstalled {
             visible: !launcher.available
             pluginId: "omacraft.studio"
-            what: "HyprLAUNCH is the launcher inside the Studio plugin."
+            what: "Launcher is the launcher inside the Studio plugin."
         }
 
         MessageBar {
@@ -377,7 +377,18 @@ Item {
         border.color: theme.hover
         clip: true
 
+        // Where the layout puts its card; an anchored one goes to its corner
+        // or edge instead.
         readonly property var rect: {
+            const r = placed;
+            const a = sk.def.anchor && sk.def.anchor !== "center" ? sk.def.anchor : "";
+            if (a === "") return r;
+            const w = width, h = height, g = 6;
+            return { x: a.indexOf("left") >= 0 ? g : a.indexOf("right") >= 0 ? w - r.w - g : (w - r.w) / 2,
+                     y: a.indexOf("top") >= 0 ? g : a.indexOf("bottom") >= 0 ? h - r.h - g : (h - r.h) / 2,
+                     w: r.w, h: r.h };
+        }
+        readonly property var placed: {
             const w = width, h = height, g = 5;
             const d = sk.def;
             const right = d.side === "right";
@@ -387,17 +398,21 @@ Item {
                     return { x: right ? w - w * 0.3 - 8 : 8, y: h * 0.12, w: w * 0.3, h: h * 0.76 };
                 return { x: right ? w - w * 0.32 - g : g, y: g, w: w * 0.32, h: h - 2 * g };
             case "spotlight": {
-                const cw = w * Math.min(0.85, (d.width || 700) / 1100);
+                const cw = d.width === "full" ? w - 12 : w * Math.min(0.85, (d.width || 700) / 1100);
                 const top = d.top === "center" ? (h - h * 0.4) / 2 : h * (Number(d.top) || 0.16);
                 return { x: (w - cw) / 2, y: top, w: cw, h: h * 0.4 };
             }
-            case "split":
-                return { x: w * 0.12, y: h * 0.16, w: w * 0.76, h: h * 0.68 };
+            case "split": {
+                const cw = d.width === "full" ? w - 12 : w * Math.min(0.9, (d.width || 900) / 1180);
+                const ch = d.height === "full" ? h - 12 : h * Math.min(0.86, (d.height || 540) / 800);
+                return { x: (w - cw) / 2, y: (h - ch) / 2, w: cw, h: ch };
+            }
             case "launchpad":
                 return { x: 0, y: 0, w: w, h: h };
             case "grid": {
-                const cw = w * Math.min(0.9, (d.width || 860) / 1300);
-                return { x: (w - cw) / 2, y: h * 0.14, w: cw, h: h * 0.72 };
+                const cw = d.width === "full" ? w - 12 : w * Math.min(0.9, (d.width || 860) / 1300);
+                const ch = d.height === "full" ? h - 12 : h * Math.min(0.86, (d.height || 600) / 830);
+                return { x: (w - cw) / 2, y: (h - ch) / 2, w: cw, h: ch };
             }
             case "dock":
                 return { x: w * 0.2, y: d.edge === "top" ? 7 : h - h * 0.26 - 7, w: w * 0.6, h: h * 0.26 };

@@ -6,7 +6,7 @@
 #include <functional>
 
 // HyprCraft is a React app. Its plugin hosts it in a separate PyQt process
-// because the shell can't embed QtWebEngine; OMAcraft is a normal Qt app, so
+// because the shell can't embed QtWebEngine; OmaCraft is a normal Qt app, so
 // it shows the same build in a WebEngineView, served from disk through the
 // private hyprcraft:// scheme (module scripts don't load from file://).
 class HyprCraft : public QWebEngineUrlSchemeHandler {

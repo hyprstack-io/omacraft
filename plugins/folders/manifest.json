@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "author": "skll",
   "license": "MIT",
-  "description": "App folders for the bar: a folder icon that opens into a row of the apps you picked, like the system tray's drawer. Put as many as you like on the bar; OMAcraft's Bar page makes and edits them.",
+  "description": "App folders for the bar: a folder icon that opens into a row of the apps you picked, like the system tray's drawer. Put as many as you like on the bar; OmaCraft's Bar page makes and edits them.",
   "kinds": [
     "bar-widget"
   ],

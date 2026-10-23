@@ -6,7 +6,7 @@ import QtQuick.Layouts
 // Everything for the keyboard lights: the live keyboard, the designs,
 // animations and paint canvas, the colours (or the theme's), and the
 // lighting service that puts it on the keys. AlienFlare's window and
-// OMAcraft's HyprKEYZ page both show this, so they work the same way.
+// OmaCraft's Alienflare page both show this, so they work the same way.
 Item {
     id: view
 
@@ -401,7 +401,7 @@ Item {
                         }
 
                         ColumnLayout {
-                            visible: lights.mode === "pattern" && lights.pattern === "word"
+                            visible: (lights.mode === "pattern" && lights.pattern === "word") || (lights.mode === "animation" && lights.animation === "typist")
                             Layout.fillWidth: true
                             spacing: 4
                             SectionLabel { text: "Word" }

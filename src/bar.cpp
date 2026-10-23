@@ -1,6 +1,7 @@
 #include "bar.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include <QColor>
 #include <QDateTime>
@@ -39,7 +40,7 @@ QString slug(const QString &label) {
     return out;
 }
 
-// The parts of the bar section OMAcraft edits, out of shell.json's "bar".
+// The parts of the bar section OmaCraft edits, out of shell.json's "bar".
 QJsonObject configOf(const QJsonObject &bar) {
     QJsonObject layout = bar.value("layout").toObject();
     for (const auto &lane : kLanes)
@@ -49,7 +50,97 @@ QJsonObject configOf(const QJsonObject &bar) {
                        {"transparent", bar.value("transparent").toBool()},
                        {"centerAnchor", bar.contains("centerAnchor") ? bar.value("centerAnchor").toString() : "omarchy.clock"},
                        {"layout", layout},
-                       {"style", bar.value("style").toObject()}};
+                       {"style", bar.value("style").toObject()},
+                       {"hidden", bar.value("hidden").toArray()}};
+}
+
+// A bar theme's id from its name: "Rosé Pine Moon" -> "rose-pine-moon".
+QString themeSlug(const QString &label) {
+    QString plain = label.normalized(QString::NormalizationForm_D);
+    plain.remove(QRegularExpression("[\\x{0300}-\\x{036f}]"));
+    return slug(plain);
+}
+
+// The themes OmaCraft ships beside the plugin's (:/data/bar-extras.json).
+QJsonObject barExtras() {
+    QFile file(":/data/bar-extras.json");
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
+    return QJsonDocument::fromJson(file.readAll()).object();
+}
+
+// The plugin's base16 themes and OmaCraft's, one of each name, A to Z.
+// Each row is [label, background, foreground, red, orange, yellow, green,
+// cyan, blue, purple], made a solid chevron theme as omabar16 makes its own.
+QVariantList withMoreBase16(QVariantList themes, const QJsonArray &rows) {
+    QSet<QString> have;
+    for (const auto &theme : themes)
+        have.insert(theme.toMap().value("label").toString().toLower());
+    for (const auto &value : rows) {
+        const QJsonArray d = value.toArray();
+        if (d.size() < 10 || have.contains(d.at(0).toString().toLower()))
+            continue;
+        const QString label = d.at(0).toString();
+        have.insert(label.toLower());
+        QVariantMap style{{"shape", "arrow"}, {"solid", true}, {"colors", "cycle"}, {"gap", 1}, {"flatEnds", true}, {"depth", 0.42},
+                          {"palette", QVariantList{d.at(7).toString(), d.at(8).toString(), d.at(6).toString(),
+                                                   d.at(5).toString(), d.at(4).toString(), d.at(3).toString()}},
+                          {"bg", d.at(1).toString()}, {"fg", d.at(1).toString()}, {"accent", d.at(7).toString()}};
+        themes << QVariantMap{{"id", "base16-" + themeSlug(label)}, {"label", label}, {"desc", "base16 · " + d.at(1).toString()},
+                              {"base16", true}, {"style", style}};
+    }
+    std::sort(themes.begin(), themes.end(), [](const QVariant &a, const QVariant &b) {
+        return a.toMap().value("label").toString().compare(b.toMap().value("label").toString(), Qt::CaseInsensitive) < 0;
+    });
+    return themes;
+}
+
+double relativeLuminance(const QColor &c) {
+    auto channel = [](double v) { return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * channel(c.redF()) + 0.7152 * channel(c.greenF()) + 0.0722 * channel(c.blueF());
+}
+double contrastOf(const QColor &a, const QColor &b) {
+    const double la = relativeLuminance(a), lb = relativeLuminance(b);
+    return (std::max(la, lb) + 0.05) / (std::min(la, lb) + 0.05);
+}
+
+// A bar theme for each of Omarchy's own themes: a look chosen for it, in
+// the colours its colors.toml has, so the bar matches the theme even while
+// another one is in use.
+QVariantList omarchyThemes(const QJsonObject &looks, const QString &themesDir) {
+    QVariantList out;
+    for (auto it = looks.begin(); it != looks.end(); ++it) {
+        const auto colors = Theme::readColors(themesDir + "/" + it.key() + "/colors.toml");
+        if (colors.isEmpty())
+            continue;
+        const QJsonObject look = it.value().toObject();
+        QVariantMap style = look.value("style").toObject().toVariantMap();
+        const QString accent = colors.value("accent", colors.value("blue", "#888888"));
+        const QString background = colors.value("background", "#111111");
+        QVariantList palette;
+        for (const auto &name : style.value("palette").toList())
+            palette << colors.value(name.toString(), accent);
+        if (palette.isEmpty())
+            palette << accent;
+        style["palette"] = palette;
+        style["bg"] = background;
+        style["accent"] = accent;
+        if (!style.contains("colors"))
+            style["colors"] = "cycle";
+        // Ink that reads: the background on filled segments when it can,
+        // otherwise near-black or near-white; the theme's text elsewhere.
+        const QString shape = style.value("shape").toString();
+        const bool fills = shape != "none" && shape != "underline" && style.value("solid", true).toBool();
+        const QColor first(palette.first().toString());
+        if (fills)
+            style["fg"] = contrastOf(QColor(background), first) >= 3 ? background
+                        : relativeLuminance(first) > 0.35 ? QString("#111111") : QString("#f5f5f5");
+        else
+            style["fg"] = colors.value("foreground", "#cccccc");
+        out << QVariantMap{{"id", "omarchy-theme-" + it.key()}, {"label", look.value("label").toString(it.key())},
+                           {"desc", look.value("desc").toString()}, {"omarchy", it.key()}, {"style", style}};
+    }
+    return out;
 }
 
 // The source of a QML JavaScript library, made plain JavaScript: ".pragma
@@ -159,7 +250,12 @@ bool Bar::loadPresets(const QString &path, QString *problem) {
     addThemes(global.property("JAKOOLIT").toVariant().toList(), "JaKooLit");
     if (global.hasProperty("HANCORE"))
         addThemes(global.property("HANCORE").toVariant().toList(), "HANCORE");
-    addThemes(global.property("BASE16").toVariant().toList(), "base16");
+    const QJsonObject extras = barExtras();
+    addThemes(omarchyThemes(extras.value("omarchy").toObject(),
+                            qEnvironmentVariable("OMACRAFT_OMARCHY_THEMES", "/usr/share/omarchy/themes")), "Omarchy");
+    // More base16 beside the plugin's own, when it has a base16 set.
+    const QVariantList base16 = global.property("BASE16").toVariant().toList();
+    addThemes(base16.isEmpty() ? base16 : withMoreBase16(base16, extras.value("base16").toArray()), "base16");
     QVariantList yours = userThemes().toVariantList();
     for (auto &theme : yours) {
         auto map = theme.toMap();
@@ -240,7 +336,7 @@ void Bar::setShellConfig(const QJsonObject &shell) {
     const QJsonObject next = configOf(shell.value("bar").toObject());
     if (next != m_cfg)
         m_cfg = next;
-    // The bar as OMAcraft first found it, for Revert.
+    // The bar as OmaCraft first found it, for Revert.
     if (m_snapshot.isEmpty() && !shell.isEmpty())
         m_snapshot = m_cfg;
     emit changed();
@@ -466,6 +562,9 @@ void Bar::write() {
     QJsonObject bar = shell.value("bar").toObject();
     for (auto it = m_cfg.begin(); it != m_cfg.end(); ++it)
         bar.insert(it.key(), it.value());
+    // omabar16 never reads "hidden"; it's only there while something is.
+    if (m_cfg.value("hidden").toArray().isEmpty())
+        bar.remove("hidden");
     bar.insert("id", "omabar16");
     shell.insert("bar", bar);
     // In place, not through a rename: the shell's file watcher stays on it.
@@ -799,6 +898,10 @@ void Bar::applyLayout(const QString &id) {
                     return entry.toObject();
         return {};
     };
+    // A hidden widget stays hidden, wherever the preset would put it.
+    QSet<QString> hidden;
+    for (const auto &value : m_cfg.value("hidden").toArray())
+        hidden.insert(value.toObject().value("entry").toObject().value("id").toString());
     QJsonObject next_layout;
     QSet<QString> present;
     const auto lanes = preset.value("layout").toMap();
@@ -807,7 +910,7 @@ void Bar::applyLayout(const QString &id) {
         for (const auto &value : lanes.value(lane).toList()) {
             const QJsonObject entry = QJsonObject::fromVariantMap(value.toMap());
             const QString widget = entry.value("id").toString();
-            if (!known.isEmpty() && !known.contains(widget))
+            if ((!known.isEmpty() && !known.contains(widget)) || hidden.contains(widget))
                 continue;
             // A widget already on the bar keeps its own settings (clock
             // format, custom icon…); the preset only decides where it goes.
@@ -908,6 +1011,48 @@ void Bar::moveWidget(const QString &fromLane, int fromIndex, const QString &toLa
     commit(next);
 }
 
+void Bar::hideWidget(const QString &lane, int index) {
+    const QJsonObject entry = entryAt(lane, index);
+    if (entry.isEmpty())
+        return;
+    QJsonObject next = m_cfg;
+    QJsonObject layout = next.value("layout").toObject();
+    QJsonArray entries = layout.value(lane).toArray();
+    entries.removeAt(index);
+    layout.insert(lane, entries);
+    next.insert("layout", layout);
+    // Where it was, so showing it puts it back there, anchor and all.
+    QJsonObject record{{"lane", lane}, {"index", index}, {"entry", entry}};
+    if (lane == "center" && next.value("centerAnchor").toString() == entry.value("id").toString())
+        record.insert("anchor", true);
+    QJsonArray hidden = next.value("hidden").toArray();
+    hidden.append(record);
+    next.insert("hidden", hidden);
+    fixAnchor(next);
+    commit(next);
+}
+
+void Bar::showWidget(int hiddenIndex, const QString &lane, int index) {
+    QJsonArray hidden = m_cfg.value("hidden").toArray();
+    if (hiddenIndex < 0 || hiddenIndex >= hidden.size())
+        return;
+    const QJsonObject record = hidden.at(hiddenIndex).toObject();
+    const QString to = kLanes.contains(lane) ? lane : kLanes.contains(record.value("lane").toString()) ? record.value("lane").toString() : "right";
+    QJsonObject next = m_cfg;
+    QJsonObject layout = next.value("layout").toObject();
+    QJsonArray entries = layout.value(to).toArray();
+    const int wanted = index >= 0 ? index : kLanes.contains(lane) ? entries.size() : record.value("index").toInt(entries.size());
+    entries.insert(std::clamp<int>(wanted, 0, entries.size()), record.value("entry").toObject());
+    layout.insert(to, entries);
+    next.insert("layout", layout);
+    hidden.removeAt(hiddenIndex);
+    next.insert("hidden", hidden);
+    if (to == "center" && record.value("anchor").toBool())
+        next.insert("centerAnchor", record.value("entry").toObject().value("id").toString());
+    fixAnchor(next);
+    commit(next);
+}
+
 void Bar::setEntry(const QString &lane, int index, const QString &key, const QVariant &value) {
     if (key == "id")
         return;
@@ -957,7 +1102,7 @@ void Bar::revert() {
         return;
     m_burst.stop();
     if (commit(m_snapshot))
-        setNotice("The bar is back to how it was when OMAcraft opened. Undo brings your changes back.");
+        setNotice("The bar is back to how it was when OmaCraft opened. Undo brings your changes back.");
 }
 
 void Bar::useAsBar() {

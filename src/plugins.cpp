@@ -46,8 +46,8 @@ Plugins::Plugins(const QString &home, bool runCommands, QObject *parent)
     connect(&m_reloadDebounce, &QTimer::timeout, this, [this] {
         Proc::run(this, "omarchy-shell", {"shell", "rescanPlugins"});
     });
-    // inotifywait runs for as long as OMAcraft does; the kernel stops it when
-    // OMAcraft goes, even when OMAcraft is killed and never runs ~Plugins.
+    // inotifywait runs for as long as OmaCraft does; the kernel stops it when
+    // OmaCraft goes, even when OmaCraft is killed and never runs ~Plugins.
     m_sourceWatch.setChildProcessModifier([] { prctl(PR_SET_PDEATHSIG, SIGTERM); });
     connect(&m_sourceWatch, &QProcess::readyReadStandardOutput, this, [this] {
         m_sourceWatch.readAllStandardOutput();
@@ -74,26 +74,30 @@ QList<Plugins::Definition> Plugins::definitions() {
          "Window open and close effects after the GNOME extension: fire, broken glass, the Doom melt, "
          "the Matrix, portals, an old TV switching off and more.",
          "effects", "~/Work/omacraft-burn/plugin"},
-        {"omacraft.agentdock", "HyprDOCKN",
+        {"omacraft.agentdock", "Side Dock",
          "A dock on the screen edge that opens into a side panel with a tab per AI agent.",
          "dock", "~/Work/skll-agentdock/plugin"},
         {"omabar16", "omabar16",
          "The bar itself: segment shapes, themes, layouts, and the drag-and-drop customizer.",
          "bar", ""},
-        {"omacraft.animations", "Animations",
+        {"omacraft.animations", "Window Transitions",
          "Hyprland animation presets with a speed control, from the bar.",
          "animations", ""},
         {"omacraft.omascii", "omascii",
          "FIGlet, TheDraw, system-font and image ASCII art for the Plymouth boot screen.",
          "ascii", "~/Projects/omascii"},
-        {"omacraft.studio", "Studio (HyprLAUNCH)",
-         "The HyprLAUNCH launcher: rofi-style layouts, colour schemes and transitions. Studio also brings "
+        {"omacraft.studio", "Studio (Launcher)",
+         "The Launcher launcher: rofi-style layouts, colour schemes and transitions. Studio also brings "
          "wallpapers and the bar customizer. Its own uninstall.sh puts the stock menu back best.",
          "launcher", "~/Work/skll-studio/plugin"},
         {"omacraft.folders", "Folder trays",
          "Folders on the bar that open into a row of the apps you pick, like the system tray's drawer.",
          "bar", "~/Work/omacraft/plugins/folders"},
-        {"omacraft.hyprcraft", "HyprFIGZ",
+        {"omacraft.wallpicker", "Wallpaper picker",
+         "Omarchy's background switcher with OmaCraft's wallpapers: theme backgrounds, Wallhaven search, the "
+         "library and favourites as tabs of slanted previews, opened from a key without OmaCraft's window.",
+         "wallpaper", "~/Work/omacraft/plugins/wallpicker"},
+        {"omacraft.hyprcraft", "Dotfile Generator",
          "Hyprland, Waybar, Rofi, SwayNC, GTK/Qt and terminal configurator, as a bar dropdown.",
          "hyprcraft", "~/Projects/HyprCraft/omarchy-plugin"},
     };

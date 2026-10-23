@@ -4,7 +4,7 @@ import QtQuick.Controls.Material
 import QtQuick.Layouts
 import QtWebEngine
 
-// The HyprFIGZ configurator, running inside OMAcraft. The web view only
+// The Dotfile Generator configurator, running inside OmaCraft. The web view only
 // starts the first time the page is opened, since Chromium is heavy.
 Item {
     id: page
@@ -17,12 +17,12 @@ Item {
     property bool started: false
     property string lastDownload: ""
     property string loadError: ""
-    // The web view takes the keyboard, so OMAcraft's letter keys stand down
+    // The web view takes the keyboard, so OmaCraft's letter keys stand down
     // on this page; Ctrl and number keys still switch pages.
     readonly property bool capturesKeys: true
     readonly property var shortcuts: [
-        { keys: "Ctrl R", action: "Reload HyprFIGZ (your work is kept)" },
-        { keys: "Ctrl 1…7", action: "Switch pages (letter keys go to HyprFIGZ here)" }
+        { keys: "Ctrl R", action: "Reload Dotfile Generator (your work is kept)" },
+        { keys: "Ctrl 1…7", action: "Switch pages (letter keys go to Dotfile Generator here)" }
     ]
 
     function handleEscape() { return false; }
@@ -52,7 +52,7 @@ Item {
         spacing: 14
 
         PageHeader {
-            title: "HyprFIGZ"
+            title: "Dotfile Generator"
             subtitle: "Hyprland and Omarchy configurator: pick Omarchy or plain Hyprland at the top · exports go to ~/Downloads/HyprCraft"
             glyph: "\u{f0b0b}"
             Label {
@@ -93,7 +93,7 @@ Item {
 
         MessageBar {
             visible: !hyprcraft.available
-            error: "HyprFIGZ's built app wasn't found. OMAcraft looks in the installed plugin's app folder, in ~/Projects/HyprCraft/omarchy-plugin/app, and in the copy the package installs. Build it with `npm run build:plugin` in ~/Projects/HyprCraft, or reinstall OMAcraft."
+            error: "Dotfile Generator's built app wasn't found. OmaCraft looks in the installed plugin's app folder, in ~/Projects/HyprCraft/omarchy-plugin/app, and in the copy the package installs. Build it with `npm run build:plugin` in ~/Projects/HyprCraft, or reinstall OmaCraft."
         }
 
         Card {
@@ -114,7 +114,7 @@ Item {
                     settings.javascriptCanAccessClipboard: true
                     settings.javascriptCanPaste: true
                     onPermissionRequested: permission => {
-                        // HyprFIGZ copies configs to the clipboard; nothing else.
+                        // Dotfile Generator copies configs to the clipboard; nothing else.
                         if (permission.permissionType === WebEnginePermission.PermissionType.ClipboardReadWrite)
                             permission.grant();
                         else
@@ -122,11 +122,11 @@ Item {
                     }
                     onLoadingChanged: info => {
                         if (info.status === WebEngineView.LoadFailedStatus) {
-                            page.loadError = "HyprFIGZ didn't load: " + info.errorString + " (" + info.url + ")";
+                            page.loadError = "Dotfile Generator didn't load: " + info.errorString + " (" + info.url + ")";
                             console.warn(page.loadError);
                         } else if (info.status === WebEngineView.LoadSucceededStatus) {
                             page.loadError = "";
-                            console.info("HyprFIGZ loaded from " + hyprcraft.appDir);
+                            console.info("Dotfile Generator loaded from " + hyprcraft.appDir);
                         }
                     }
                     onNewWindowRequested: request => Qt.openUrlExternally(request.requestedUrl)

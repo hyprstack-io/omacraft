@@ -8,6 +8,7 @@ class OmacraftTests : public QObject {
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void themeFallsBack();
     void themeReadsAccent();
     void themeFollowsLightAndDark();
@@ -34,6 +35,9 @@ private slots:
     void barReadsStudioPresetsWithImports();
     void barEditsShellJsonInPlaceWithUndo();
     void barLayoutsKeepWidgetSettings();
+    void barHidesWidgetsAndBringsThemBack();
+    void barAddsOmarchyAndBase16Themes();
+    void edgeTabFollowsThePointerRoundTheEdge();
     void barThemesSaveImportAndSanitize();
     void omasciiChecksBeforeApplying();
     void omasciiReadsEveryFontList();
@@ -43,6 +47,8 @@ private slots:
     void launcherReadsItsStyles();
     void launcherWritesInPlaceAndKeepsOtherKeys();
     void burnReadsItsEffects();
+    void wallPickerNormalizesKeys();
+    void wallPickerBindsThroughHyprlandLua();
     void burnWritesInPlaceAndKeepsOtherKeys();
     void foldersReadTheirBarEntries();
     void foldersScanInstalledApps();
@@ -56,4 +62,9 @@ private slots:
     void asciiViewPaintsBackgroundSpans();
     void omasciiPresetIsOneUndoStep();
     void bootSplashReadsTheThemeAndWhereToGoBack();
+    void screensaverNeverTouchesTheBootScreen();
+    void screensaverKeepsItsArtPlain();
+    void screensaverKnowsWhoseHookItIs();
+    void screensaverSetsTheIdleTimeInPlace();
+    void screensaverScriptsParse();
 };

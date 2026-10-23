@@ -107,7 +107,7 @@ void Theme::reload() {
 
     const auto colors = readColors(m_directory + "/theme/colors.toml");
     const bool dark = isDark(colors);
-    // Without a theme: OMAcraft's own dark look.
+    // Without a theme: OmaCraft's own dark look.
     const QColor background = named(colors, "background", dark ? QColor("#0e0e10") : QColor("#f4f4f5"));
     QColor foreground = named(colors, "foreground", dark ? QColor("#f2f2f4") : QColor("#18181b"));
     // A theme's foreground is meant for body text; make sure it stays clear.

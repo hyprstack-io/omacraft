@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 
-// HyprDOCKN drawn from its settings, the way the shell plugin draws it: the
+// Side Dock drawn from its settings, the way the shell plugin draws it: the
 // body in its shape, colour, opacity and border; the agents button, the dock
 // items as tiles in their shape (plates shown on hover, always, or as
 // outlines); magnification under the pointer; and, when open, the agents

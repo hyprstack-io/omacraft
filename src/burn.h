@@ -12,7 +12,7 @@
 // and close. The effects come from the plugin's effects.json (and its
 // compiled shaders, which the page draws its previews with). The choice
 // lives in ~/.config/omarchy/burn-my-windows.json, which the shell watches:
-// OMAcraft rewrites it in place and keeps any keys it doesn't know.
+// OmaCraft rewrites it in place and keeps any keys it doesn't know.
 class Burn : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool available READ available NOTIFY catalogChanged)
@@ -80,7 +80,7 @@ public:
     Q_INVOKABLE void setSkipFullscreen(bool on);
     // Routes SUPER+W / SUPER+Q through the effects, or gives them back.
     Q_INVOKABLE void setKeys(bool on);
-    // Plays an effect on the active window, which is OMAcraft itself.
+    // Plays an effect on the active window, which is OmaCraft itself.
     Q_INVOKABLE void preview(const QString &id, const QString &direction = "both");
     Q_INVOKABLE void dismissMessages();
 

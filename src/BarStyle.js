@@ -1,6 +1,6 @@
 .pragma library
 
-// The bar's colour maths, as omabar16 does it, so every preview in OMAcraft
+// The bar's colour maths, as omabar16 does it, so every preview in OmaCraft
 // matches the real bar; and the split of a style into its look (shape,
 // spacing, fill) and its colours, so the two can be mixed from different
 // themes, the way waybar themes keep a colour scheme apart from the layout.

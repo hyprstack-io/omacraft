@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
 
-// HyprDOCKN: the edge dock, its apps and commands, and a terminal tab per AI
+// Side Dock: the edge dock, its apps and commands, and a terminal tab per AI
 // agent. The stage draws the dock as it is (or as a hovered look would make
 // it), magnifying under the pointer; click an item on it to pick it.
 Item {
@@ -150,7 +150,7 @@ Item {
         spacing: 12
 
         PageHeader {
-            title: "HyprDOCKN"
+            title: "Side Dock"
             subtitle: "The edge dock, its apps and commands, and a terminal tab per AI agent"
             glyph: "\u{f06a9}"
             Button { text: "Show / hide panel"; flat: true; focusPolicy: Qt.NoFocus; enabled: dock.running; onClicked: dock.toggleDock() }
@@ -160,7 +160,7 @@ Item {
         NotInstalled {
             visible: !dock.available
             pluginId: "omacraft.agentdock"
-            what: "The dock is a shell panel from the HyprDOCKN plugin."
+            what: "The dock is a shell panel from the Side Dock plugin."
         }
 
         MessageBar {
@@ -171,7 +171,7 @@ Item {
 
         MessageBar {
             visible: dock.available && !dock.running
-            notice: "The dock isn't enabled. Changes here are saved and take effect when it starts. Enable it on the Plugins page."
+            notice: "The dock isn't enabled. Changes here are saved and take effect when it starts. Enable it on the Plugin Suite page."
         }
 
         // --- the stage: the dock on its edge ---

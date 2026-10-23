@@ -18,7 +18,7 @@ import qs.Ui
 //
 // Apps are desktop ids (the .desktop file name, with or without .desktop),
 // or a { name, icon, command } object for anything that has none.
-// OMAcraft's Bar page makes, edits and places folders.
+// OmaCraft's Bar page makes, edits and places folders.
 BarWidget {
   id: root
   moduleName: "omacraft.folders"
@@ -349,7 +349,7 @@ BarWidget {
         color: editMouse.containsMouse ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.1) : "transparent"
         Text {
           anchors.centerIn: parent
-          text: "Edit folders in OMAcraft"
+          text: "Edit folders in OmaCraft"
           color: Commons.Color.accent
           font.family: root.fontFamily
           font.pixelSize: Style.font.bodySmall

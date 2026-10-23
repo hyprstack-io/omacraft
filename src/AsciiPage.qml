@@ -140,7 +140,7 @@ Item {
         spacing: 14
 
         PageHeader {
-            title: "HyprSPLASH"
+            title: "Boot Splash"
             subtitle: "omascii: FIGlet, TheDraw, system-font or image art for the Plymouth boot screen"
             glyph: "\u{f0b9e}"
             StatePill {
@@ -195,7 +195,7 @@ Item {
 
         MessageBar {
             visible: !omascii.available
-            error: "omascii isn't installed: its command wasn't found in the plugin or on your PATH. Install the omascii plugin on the Plugins page, or run its install.sh."
+            error: "omascii isn't installed: its command wasn't found in the plugin or on your PATH. Install the omascii plugin on the Plugin Suite page, or run its install.sh."
         }
 
         MessageBar {

@@ -160,7 +160,7 @@ Item {
         spacing: 14
 
         PageHeader {
-            title: "Wallpaper"
+            title: "Wallpapers"
             subtitle: "Wallhaven, your library and folders, favourites, and the colours the wallpaper gives Omarchy"
             glyph: "\u{f08b9}"
             Button {
@@ -267,6 +267,83 @@ Item {
                             onClicked: page.tab = modelData.id
                         }
                     }
+                }
+            }
+        }
+
+        // ---- The picker key: these wallpapers over the desktop, without this window
+        Card {
+            id: pickerCard
+            Layout.fillWidth: true
+            visible: wallpaper.available
+            implicitHeight: pickerRow.implicitHeight + 24
+
+            readonly property var plugin: { plugins.plugins; return plugins.plugin("omacraft.wallpicker"); }
+            readonly property bool installed: plugin.installed === true
+            readonly property bool enabled: plugin.enabled === true
+
+            RowLayout {
+                id: pickerRow
+                anchors.fill: parent
+                anchors.margins: 12
+                spacing: 10
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    Label {
+                        text: "Picker key"
+                        color: theme.text
+                        font.weight: Font.DemiBold
+                    }
+                    Label {
+                        Layout.fillWidth: true
+                        text: wallPicker.error !== "" ? wallPicker.error
+                            : !pickerCard.installed ? "Omarchy's background switcher with these wallpapers in it: the theme's backgrounds, Wallhaven, the library and favourites. Install it to give it a key."
+                            : !pickerCard.enabled ? "Installed. Enable it so the shell can open it."
+                            : wallPicker.bound ? wallPicker.key + " opens it over the desktop; picking a wallpaper sets it and its colours. OmaCraft stays closed."
+                            : "No key yet. " + wallPicker.defaultKey + " is free in Omarchy's defaults."
+                        color: wallPicker.error !== "" ? theme.danger : theme.textMuted
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                    }
+                }
+
+                Button {
+                    visible: !pickerCard.installed || !pickerCard.enabled
+                    text: !pickerCard.installed ? "Install" : "Enable"
+                    enabled: !plugins.busy
+                    focusPolicy: Qt.NoFocus
+                    onClicked: pickerCard.installed ? plugins.setEnabled("omacraft.wallpicker", true) : plugins.install("omacraft.wallpicker")
+                }
+                TextField {
+                    id: pickerKey
+                    visible: pickerCard.installed && pickerCard.enabled
+                    Layout.preferredWidth: 190
+                    placeholderText: wallPicker.defaultKey
+                    text: wallPicker.key
+                    onAccepted: wallPicker.bind(text.trim() === "" ? wallPicker.defaultKey : text)
+                }
+                Button {
+                    visible: pickerKey.visible
+                    text: wallPicker.bound && pickerKey.text === wallPicker.key ? "Bound" : "Set key"
+                    enabled: !(wallPicker.bound && pickerKey.text === wallPicker.key)
+                    focusPolicy: Qt.NoFocus
+                    onClicked: pickerKey.accepted()
+                }
+                Button {
+                    visible: pickerKey.visible && wallPicker.bound
+                    text: "Remove key"
+                    flat: true
+                    focusPolicy: Qt.NoFocus
+                    onClicked: wallPicker.unbind()
+                }
+                Button {
+                    visible: pickerKey.visible
+                    text: "Open picker"
+                    flat: true
+                    focusPolicy: Qt.NoFocus
+                    onClicked: wallPicker.open(page.tab === "library" || page.tab === "favorites" || page.tab === "wallhaven" ? page.tab : "")
                 }
             }
         }
@@ -647,7 +724,7 @@ Item {
                     }
                 }
 
-                // OMAcraft's own parts: each keeps colours of its own unless
+                // OmaCraft's own parts: each keeps colours of its own unless
                 // it follows the theme the wallpaper builds.
                 Card {
                     Layout.fillWidth: true
@@ -659,7 +736,7 @@ Item {
                         spacing: 8
                         RowLayout {
                             Layout.fillWidth: true
-                            SectionLabel { text: "OMAcraft's parts that follow too" }
+                            SectionLabel { text: "OmaCraft's parts that follow too" }
                             Item { Layout.fillWidth: true }
                             Button {
                                 text: themeSync.allFollow ? "All follow" : "Make them all follow"
@@ -772,7 +849,7 @@ Item {
                         }
                         SwitchRow {
                             label: "Use pywal, matugen and flavours themselves when installed"
-                            hint: "Off: OMAcraft's built-in versions of those schemes, even when the programs are there. Either way the colours are held to the contrast below."
+                            hint: "Off: OmaCraft's built-in versions of those schemes, even when the programs are there. Either way the colours are held to the contrast below."
                             checked: page.paletteCfg.engine !== "builtin"
                             onToggled: on => wallpaper.setOption("palette.engine", on ? "auto" : "builtin", true)
                         }

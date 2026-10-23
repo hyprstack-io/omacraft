@@ -7,6 +7,9 @@
         <file alias="BarPage.qml">BarPage.qml</file>
         <file alias="Stage.qml">Stage.qml</file>
         <file alias="Segmented.qml">Segmented.qml</file>
+        <file alias="SearchBox.qml">SearchBox.qml</file>
+        <file alias="data/bar-extras.json">data/bar-extras.json</file>
+        <file alias="EdgeTab.qml">EdgeTab.qml</file>
         <file alias="EdgePicker.qml">EdgePicker.qml</file>
         <file alias="AnimStage.qml">AnimStage.qml</file>
         <file alias="CurveGraph.qml">CurveGraph.qml</file>
@@ -27,6 +30,7 @@
         <file alias="FoldersPanel.qml">FoldersPanel.qml</file>
         <file alias="BurnPage.qml">BurnPage.qml</file>
         <file alias="AsciiPage.qml">AsciiPage.qml</file>
+        <file alias="ScreensaverPage.qml">ScreensaverPage.qml</file>
         <file alias="HyprCraftPage.qml">HyprCraftPage.qml</file>
         <file alias="IsoPage.qml">IsoPage.qml</file>
         <file alias="AccentButton.qml">AccentButton.qml</file>
@@ -54,5 +58,8 @@
         <file alias="PresetTile.qml">PresetTile.qml</file>
         <file alias="build.sh">build.sh</file>
         <file alias="flash.sh">flash.sh</file>
+        <file alias="omasavr-screensaver.sh">omasavr-screensaver.sh</file>
+        <file alias="omasavr-native.py">omasavr-native.py</file>
+        <file alias="omasavr-hook.sh">omasavr-hook.sh</file>
     </qresource>
 </RCC>

@@ -243,7 +243,7 @@ void Burn::preview(const QString &id, const QString &direction) {
     const QString method = direction == "open" ? "previewOpen" : direction == "close" ? "previewClose" : "preview";
     Proc::run(this, "omarchy-shell", {"burn", method, id}, [this](const Proc::Result &result) {
         if (!result.ok())
-            setError("The shell isn't running the effects yet. Enable Burn My Windows on the Plugins page, "
+            setError("The shell isn't running the effects yet. Enable Burn My Windows on the Plugin Suite page, "
                      "or restart the shell if you just did.");
     });
 }

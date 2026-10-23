@@ -189,8 +189,8 @@ int ThemeSync::syncNow(const QString &homeIn) {
 
 QString ThemeSync::hookScript(const QString &program) {
     return QString(R"sh(#!/bin/bash
-# Installed by OMAcraft. After every theme switch, the wallpaper's colours
-# included, it rebuilds the window-border gradient OMAcraft makes from the
+# Installed by OmaCraft. After every theme switch, the wallpaper's colours
+# included, it rebuilds the window-border gradient OmaCraft makes from the
 # theme and keeps an underlined omabar16's text readable on the bar.
 omacraft="$(command -v omacraft 2>/dev/null)"
 [[ -n $omacraft ]] || omacraft=%1
@@ -270,11 +270,11 @@ QVariantList ThemeSync::parts() const {
         {"bar", {"Bar colours", "omabar16's segment, text and background colours, mapped onto the wallpaper's palette. "
                                 "An underlined bar's text is kept readable on the bar."}},
         {"borders", {"Window borders", "A gradient of the wallpaper's accent and hues, rebuilt with every wallpaper "
-                                       "(it spins if the Animations page says so). The theme's own border follows too."}},
-        {"dock", {"HyprDOCKN", "The dock and its accent take the theme's colours instead of a named colour."}},
-        {"effects", {"Window FX", "Opening and closing effects take the theme's accent instead of their own colours."}},
-        {"launcher", {"HyprLAUNCH", "The launcher uses the Omarchy theme's colours instead of a fixed scheme."}},
-        {"ascii", {"HyprSPLASH", "Its colours become the theme's accent and blue. The boot screen takes them the next "
+                                       "(it spins if the Window Transitions page says so). The theme's own border follows too."}},
+        {"dock", {"Side Dock", "The dock and its accent take the theme's colours instead of a named colour."}},
+        {"effects", {"Burn My Windows", "Opening and closing effects take the theme's accent instead of their own colours."}},
+        {"launcher", {"Launcher", "The launcher uses the Omarchy theme's colours instead of a fixed scheme."}},
+        {"ascii", {"Boot Splash", "Its colours become the theme's accent and blue. The boot screen takes them the next "
                                  "time you apply it to boot."}},
         {"keys", {"Keyboard lights", "AlienFlare's designs and animations take the theme's colours on the "
                                      "Alienware keyboard, and change with every wallpaper."}}};
@@ -396,7 +396,7 @@ void ThemeSync::followAll() {
         setFollow(id, true);
 }
 
-// The first time OMAcraft sees wallpaper colours in use, every part follows
+// The first time OmaCraft sees wallpaper colours in use, every part follows
 // them; after that each part is yours to switch.
 void ThemeSync::seedFromWallpaper() {
     if (m_config.value("seeded").toBool() || !m_wallpaper)

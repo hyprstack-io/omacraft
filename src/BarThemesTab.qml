@@ -3,10 +3,12 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "BarStyle.js" as S
 
-// Themes three ways. A complete theme is a look and its colours together.
-// Looks are the shapes and spacing alone, drawn in your colours; colour
-// schemes are the palettes alone, drawn on your look. Pick one of each from
-// anywhere, or shuffle. Every tile previews on the stage while hovered.
+// Themes three ways. A complete theme is a look and its colours together,
+// or, with "Omarchy theme" colours, its look in whatever Omarchy theme is
+// active (and every one after it). Looks are the shapes and spacing alone,
+// drawn in your colours; colour schemes are the palettes alone, drawn on
+// your look. Pick one of each from anywhere, or shuffle. Every tile
+// previews on the stage while hovered.
 Item {
     id: tab
     property var page
@@ -27,6 +29,10 @@ Item {
 
     readonly property var themes: bar.themes
     readonly property var current: bar.style
+    // Complete themes in their own colours, or in the Omarchy theme's. It
+    // starts on whichever the bar has: no colours of its own follows Omarchy.
+    property string colourSource: S.colourSignature(bar.style) === "" && Object.keys(bar.style).length > 0 ? "omarchy" : "own"
+    readonly property bool followOmarchy: mode === "complete" && colourSource === "omarchy"
 
     // Every distinct look, named after the first theme that has it.
     readonly property var looks: {
@@ -62,9 +68,9 @@ Item {
         return out;
     }
 
-    readonly property var groups: mode === "complete" ? ["All", "Originals", "JaKooLit", "HANCORE", "base16", "Yours"].filter(g => g === "All" || themes.some(t => t.group === g))
+    readonly property var groups: mode === "complete" ? ["All", "Originals", "Omarchy", "JaKooLit", "HANCORE", "base16", "Yours"].filter(g => g === "All" || themes.some(t => t.group === g))
         : mode === "looks" ? ["All"].concat(S.SHAPES.map(s => s.family).filter((f, i, a) => a.indexOf(f) === i && looks.some(l => l.group === f)))
-        : ["All", "Follow Omarchy", "Originals", "JaKooLit", "HANCORE", "base16", "Yours"].filter(g => g === "All" || colourSchemes.some(c => c.group === g))
+        : ["All", "Follow Omarchy", "Originals", "Omarchy", "JaKooLit", "HANCORE", "base16", "Yours"].filter(g => g === "All" || colourSchemes.some(c => c.group === g))
     onModeChanged: group = "All"
 
     function matches(item) {
@@ -83,11 +89,14 @@ Item {
     function styleOf(item) {
         if (mode === "looks") return S.compose(item.look, current);
         if (mode === "colours") return S.compose(current, item.colours);
+        // No colours of its own: the bar takes the Omarchy theme's, live.
+        if (followOmarchy) return S.compose(item.style, {});
         return item.style;
     }
     function isCurrent(item) {
         if (mode === "looks") return S.lookSignature(item.look) === S.lookSignature(current);
         if (mode === "colours") return S.colourSignature(item.colours) === S.colourSignature(current);
+        if (followOmarchy) return S.colourSignature(current) === "" && S.lookSignature(item.style) === S.lookSignature(current);
         return bar.currentTheme === item.id;
     }
     function subtitleOf(item) {
@@ -97,7 +106,7 @@ Item {
 
     function apply(item) {
         page.endPreview(item.label);
-        if (mode === "complete") bar.applyTheme(item.id);
+        if (mode === "complete" && !followOmarchy) bar.applyTheme(item.id);
         else bar.setWholeStyle(styleOf(item));
     }
 
@@ -126,11 +135,28 @@ Item {
                 current: tab.mode
                 onPicked: id => tab.mode = id
             }
+            // Where a complete theme's colours come from.
+            Label {
+                visible: tab.mode === "complete"
+                Layout.leftMargin: 10
+                text: "COLOURS"
+                color: theme.textFaint
+                font.pixelSize: 10
+                font.letterSpacing: 1.2
+                font.weight: Font.DemiBold
+            }
+            Segmented {
+                visible: tab.mode === "complete"
+                model: [{ id: "own", name: "Theme's own" }, { id: "omarchy", name: "\u{f03d8}  Omarchy theme" }]
+                current: tab.colourSource
+                onPicked: id => tab.colourSource = id
+            }
             Label {
                 Layout.leftMargin: 8
                 Layout.fillWidth: true
                 text: tab.mode === "looks" ? "Shape, fill and spacing; your colours stay."
                     : tab.mode === "colours" ? "Palettes only; your look stays."
+                    : tab.followOmarchy ? "Each look in your Omarchy theme's colours, following every theme change."
                     : "A look and its colours, together."
                 color: theme.textDim
                 font.pixelSize: 11
@@ -145,9 +171,23 @@ Item {
                 ToolTip.delay: 500
                 ToolTip.text: "A random look in random colours (R). Undo goes back."
             }
-            Button { text: "Save as theme…"; flat: true; focusPolicy: Qt.NoFocus; onClicked: saveDialog.open() }
-            Button { text: "Import…"; flat: true; focusPolicy: Qt.NoFocus; onClicked: importDialog.open() }
-            Button { text: "Export"; flat: true; focusPolicy: Qt.NoFocus; onClicked: bar.exportTheme("") }
+            ToolButton {
+                id: moreButton
+                text: "\u{f01d8}"
+                font.pixelSize: 16
+                focusPolicy: Qt.NoFocus
+                onClicked: moreMenu.open()
+                ToolTip.visible: hovered && !moreMenu.visible
+                ToolTip.delay: 500
+                ToolTip.text: "Save, import and export themes"
+                Menu {
+                    id: moreMenu
+                    y: moreButton.height
+                    MenuItem { text: "Save the bar as a theme…"; onTriggered: saveDialog.open() }
+                    MenuItem { text: "Import themes…"; onTriggered: importDialog.open() }
+                    MenuItem { text: "Export the bar's look"; onTriggered: bar.exportTheme("") }
+                }
+            }
         }
 
         RowLayout {
@@ -164,9 +204,8 @@ Item {
             }
             Item { Layout.fillWidth: true }
             Label { text: tab.items.length; color: theme.textFaint; font.pixelSize: 11 }
-            TextField {
+            SearchBox {
                 id: search
-                Layout.preferredWidth: 200
                 placeholderText: tab.mode === "colours" ? "Search colours" : tab.mode === "looks" ? "Search looks" : "Search themes"
             }
         }
@@ -179,7 +218,7 @@ Item {
             boundsBehavior: Flickable.StopAtBounds
             readonly property int columns: Math.max(2, Math.floor(width / 250))
             cellWidth: Math.floor(width / columns)
-            cellHeight: 112
+            cellHeight: 120
             model: tab.items
             ScrollBar.vertical: ScrollBar {}
             delegate: Item {
@@ -196,7 +235,7 @@ Item {
                     tag: tab.mode === "complete" ? cell.modelData.group : (cell.modelData.source || "")
                     subtitle: tab.subtitleOf(cell.modelData)
                     swatches: tab.mode === "looks" ? [] : tab.mode === "colours" ? S.swatches(cell.modelData.colours, bar.themeColors)
-                                                                                 : S.swatches(cell.modelData.style, bar.themeColors).slice(1)
+                                                                                 : S.swatches(cell.style, bar.themeColors).slice(1)
                     chosen: cell.chosen
                     removable: cell.modelData.user === true
                     exportable: tab.mode === "complete"

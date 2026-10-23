@@ -50,7 +50,7 @@ Lights::Lights(const QString &configDirectory, const QString &themeDirectory, co
     m_clock.start();
 
     connect(&m_store, &Store::changed, this, [this] {
-        // Edited elsewhere (OMAcraft, or the other window): take it as is.
+        // Edited elsewhere (OmaCraft, or the other window): take it as is.
         if (m_store.scene() == m_scene)
             return;
         m_scene = m_store.scene();
@@ -299,10 +299,14 @@ void Lights::setVivid(int vivid) {
 void Lights::setWord(const QString &word) {
     Scene next = m_scene;
     next.word = word.left(32);
-    next.mode = "pattern";
-    next.pattern = "word";
+    // The ghost typist types the word too; anywhere else it means the word design.
+    const bool typist = m_scene.mode == "animation" && m_scene.animation == "typist";
+    if (!typist) {
+        next.mode = "pattern";
+        next.pattern = "word";
+    }
     // Typing is one undo step per word, not per letter.
-    apply(next, m_scene.mode == "pattern" && m_scene.pattern == "word" && !m_undo.isEmpty());
+    apply(next, (typist || (m_scene.mode == "pattern" && m_scene.pattern == "word")) && !m_undo.isEmpty());
 }
 
 void Lights::setChassis(const QString &chassis) {

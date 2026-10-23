@@ -35,11 +35,18 @@ Rectangle {
 
         // The bar on a sliver of its own background, as it would sit on screen.
         Rectangle {
+            id: strip
             Layout.fillWidth: true
-            Layout.preferredHeight: 40
-            radius: 6
+            Layout.preferredHeight: 46
+            radius: 7
             clip: true
-            color: theme.sunken
+            readonly property color back: bar.themeColors.background || "#1a1b26"
+            readonly property color glow: bar.themeColors.accent || "#7aa2f7"
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop { position: 0; color: Qt.darker(strip.back, 1.25) }
+                GradientStop { position: 1; color: Qt.tint(strip.back, Qt.rgba(strip.glow.r, strip.glow.g, strip.glow.b, 0.14)) }
+            }
             BarPreview {
                 anchors.left: parent.left
                 anchors.right: parent.right
@@ -63,10 +70,10 @@ Rectangle {
                 elide: Text.ElideRight
             }
             Label {
-                visible: tile.tag !== ""
+                visible: tile.tag !== "" || tile.chosen
                 Layout.maximumWidth: tile.width * 0.42
-                text: tile.tag
-                color: theme.textFaint
+                text: tile.chosen ? "in use" : tile.tag
+                color: tile.chosen ? theme.accent : theme.textFaint
                 font.pixelSize: 10
                 elide: Text.ElideRight
             }

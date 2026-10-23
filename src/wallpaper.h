@@ -13,7 +13,7 @@ class FilePicker;
 // hyprskin command: Wallhaven search, the downloaded library, your own
 // folders, favourites, and the wallpaper-driven theme (Material, matugen,
 // wallbash, pywal, flavours) that recolours all of Omarchy. Every read and
-// write goes through hyprskin, so OMAcraft and the Studio hub always agree;
+// write goes through hyprskin, so OmaCraft and the Studio hub always agree;
 // the shell's Studio service draws the wallpaper and its transitions.
 class Wallpaper : public QObject {
     Q_OBJECT

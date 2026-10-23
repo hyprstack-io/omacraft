@@ -8,7 +8,7 @@
 #include <functional>
 
 // The omascii boot screen designer, through omascii's own command line, so
-// the shell overlay, the CLI and OMAcraft share one config and one library.
+// the shell overlay, the CLI and OmaCraft share one config and one library.
 // Every change is kept as it's made, as the overlay does.
 class Omascii : public QObject {
     Q_OBJECT

@@ -6,7 +6,7 @@
 #include <functional>
 
 // Hyprland animation presets, through the omacraft.animations plugin's own
-// omarchy-animations script, so the bar widget and OMAcraft always agree.
+// omarchy-animations script, so the bar widget and OmaCraft always agree.
 class Animations : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool available READ available NOTIFY changed)
@@ -38,7 +38,7 @@ class Animations : public QObject {
 
 public:
     // pluginDir finds the plugin's folder each time, since it can be
-    // installed, removed and moved while OMAcraft runs.
+    // installed, removed and moved while OmaCraft runs.
     explicit Animations(std::function<QString()> pluginDir, const QString &home = {}, QObject *parent = nullptr);
 
     bool available() const { return !script().isEmpty(); }

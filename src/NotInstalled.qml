@@ -34,7 +34,7 @@ Card {
             text: card.info.canInstall
                   ? card.what + " Install it to use this page."
                   : card.what + " Its code wasn't found at " + (card.info.source || "any known place")
-                    + ". Set where it lives on the Plugins page."
+                    + ". Set where it lives on the Plugin Suite page."
         }
         AccentButton {
             Layout.alignment: Qt.AlignHCenter

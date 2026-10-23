@@ -13,7 +13,7 @@
 // "name": …, "icon": …, "apps": […]}), so a bar can carry any number.
 //
 // `omarchy bar put` keeps a single copy of a widget, so it can't add a second
-// folder; OMAcraft edits those entries in shell.json itself, rewriting the
+// folder; OmaCraft edits those entries in shell.json itself, rewriting the
 // file in place so the shell's watcher stays on it and reloads the bar. Only
 // omacraft.folders entries are touched, and each change checks the entry it
 // was asked about is still the one at that place.

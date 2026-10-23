@@ -1,14 +1,14 @@
 pkgname=omacraft
 pkgver=0.1.0
 pkgrel=1
-pkgdesc='One home for the skll Omarchy plugins, HyprFIGZ and HyprBUILDZ (the hyprbuildz ISO builder)'
+pkgdesc='One home for the skll Omarchy plugins, Dotfile Generator and OmaBuilds (the hyprbuildz ISO builder)'
 arch=('x86_64')
 license=('MIT')
-depends=('qt6-base' 'qt6-declarative' 'qt6-wayland' 'qt6-webengine' 'xdg-desktop-portal'
+depends=('qt6-base' 'qt6-declarative' 'qt6-wayland' 'layer-shell-qt' 'qt6-webengine' 'xdg-desktop-portal'
          'python' 'archiso' 'polkit' 'util-linux' 'coreutils' 'pacman')
 optdepends=('nodejs: omascii, the boot screen designer'
             'plymouth: the HyprStack boot animation'
-            'libnotify: a notification when a HyprFIGZ export is saved')
+            'libnotify: a notification when a Dotfile Generator export is saved')
 makedepends=('gcc' 'make')
 options=('!debug')
 source=()
@@ -26,19 +26,19 @@ package() {
   install -Dm644 "$startdir/omacraft.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/omacraft.svg"
   install -Dm644 "$startdir/omacraft.desktop" "$pkgdir/usr/share/applications/omacraft.desktop"
 
-  # The HyprStack boot animation, which HyprSPLASH can make the boot screen.
+  # The HyprStack boot animation, which Boot Splash can make the boot screen.
   local splash="$pkgdir/usr/share/plymouth/themes/hyprstack-boot"
   install -dm755 "$splash/frames"
   install -m644 plymouth/hyprstack-boot/*.{plymouth,script,png} "$splash/"
   install -m644 plymouth/hyprstack-boot/frames/*.png "$splash/frames/"
 
-  # A copy of HyprFIGZ's built web app, for when the project or its plugin
-  # isn't on the machine. OMAcraft prefers the live plugin's build.
+  # A copy of Dotfile Generator's built web app, for when the project or its plugin
+  # isn't on the machine. OmaCraft prefers the live plugin's build.
   local hyprcraft="${HYPRCRAFT_APP:-$HOME/Projects/HyprCraft/omarchy-plugin/app}"
   if [[ -f $hyprcraft/index.html ]]; then
     install -dm755 "$pkgdir/usr/share/omacraft/hyprcraft"
     cp -r --no-preserve=ownership "$hyprcraft/." "$pkgdir/usr/share/omacraft/hyprcraft/"
   else
-    echo "No HyprFIGZ build at $hyprcraft; the package won't carry one." >&2
+    echo "No Dotfile Generator build at $hyprcraft; the package won't carry one." >&2
   fi
 }

@@ -2,7 +2,7 @@ import QtQuick
 import "BarStyle.js" as S
 
 // A faithful, scaled sketch of omabar16 for a config: the live stage at the
-// top of the Bar page, and every theme, look, colour and layout tile. Along
+// top of the Main Bar page, and every theme, look, colour and layout tile. Along
 // the left or right edge it draws the bar as a rail, as omabar16 does.
 Item {
     id: mb
@@ -20,6 +20,16 @@ Item {
     property bool trueSize: false
     signal segmentClicked(string lane, int index)
     signal backgroundClicked()
+
+    // Widgets dragged along the bar itself. The page follows the drag and
+    // asks dropTarget() where it would land; dropLane/dropIndex draw the gap.
+    property bool draggable: false
+    property string draggingKey: ""     // "lane:index", dimmed while it moves
+    property string dropLane: ""
+    property int dropIndex: -1
+    signal dragStarted(string lane, int index, point scenePos)
+    signal dragMoved(point scenePos)
+    signal dragEnded()
 
     readonly property var style: cfg && cfg.style ? cfg.style : ({})
     readonly property var res: S.resolve(style, themeColors)
@@ -74,6 +84,55 @@ Item {
         if (entry.id === "omarchy.workspaces") return labels ? "1 2 3 4" : "\u{f0570}";
         return bar.glyphs ? bar.glyphFor(entry.id) : "";
     }
+    // --- where a drop lands ---
+    readonly property var laneOrder: ["left", "center", "right"]
+    function laneBox(name) {
+        return vertical ? railLanes.itemAt(laneOrder.indexOf(name)) : ({ left: leftRow, center: centerRow, right: rightRow })[name];
+    }
+    function laneItems(name) {
+        const box = laneBox(name);
+        if (!box) return [];
+        const out = [];
+        for (let i = 0; i < box.children.length; i++) {
+            const c = box.children[i];
+            if (c.laneIndex !== undefined) out.push(c);
+        }
+        return out.sort((a, b) => a.laneIndex - b.laneIndex);
+    }
+    // Start and end of an item along the bar, in the bar's own coordinates.
+    function span(item) {
+        const host = vertical ? rail : canvas;
+        const a = item.mapToItem(host, 0, 0), b = item.mapToItem(host, item.width, item.height);
+        return vertical ? { start: a.y, end: b.y } : { start: a.x, end: b.x };
+    }
+    // {lane, index, at} for a point in the window, or null when it's off the bar.
+    function dropTarget(scenePos) {
+        if (!visible) return null;
+        const local = mb.mapFromItem(null, scenePos.x, scenePos.y);
+        if (local.x < -16 || local.y < -24 || local.x > width + 16 || local.y > height + 24) return null;
+        const host = vertical ? rail : canvas;
+        const p = host.mapFromItem(null, scenePos.x, scenePos.y);
+        const pos = vertical ? p.y : p.x;
+        const ext = laneOrder.map(l => span(laneBox(l)));
+        const b1 = (ext[0].end + ext[1].start) / 2, b2 = (ext[1].end + ext[2].start) / 2;
+        const lane = pos < b1 ? "left" : pos < b2 ? "center" : "right";
+        const items = laneItems(lane);
+        let index = 0;
+        for (const it of items) {
+            const sp = span(it);
+            if ((sp.start + sp.end) / 2 < pos) index++;
+        }
+        const ext2 = ext[laneOrder.indexOf(lane)];
+        const at = index < items.length ? span(items[index]).start : (items.length ? span(items[items.length - 1]).end : ext2.start);
+        return { lane: lane, index: index, at: at };
+    }
+    readonly property real dropAt: {
+        if (dropLane === "") return -1;
+        const items = laneItems(dropLane);
+        if (dropIndex < items.length) return span(items[dropIndex]).start;
+        return items.length ? span(items[items.length - 1]).end : span(laneBox(dropLane)).start;
+    }
+
     function fillFor(region, idx, count, id) {
         if (kind === "none") return "transparent";
         const c = Qt.color(S.segmentFill(res, S.segmentBase(res, region, idx, count, id), false));
@@ -89,6 +148,7 @@ Item {
         property int idx: 0
         property string region: ""
         property int count: 0
+        readonly property int laneIndex: idx
 
         kind: mb.kind
         h: mb.sh
@@ -111,7 +171,16 @@ Item {
         textColor: mb.textFor(entry)
         interactive: mb.interactive
         selected: mb.interactive && mb.selectedKey === region + ":" + idx
+        opacity: mb.draggingKey === region + ":" + idx ? 0.3 : itemOpacity
         onClicked: mb.segmentClicked(region, idx)
+        DragHandler {
+            target: null
+            enabled: mb.draggable
+            dragThreshold: 5
+            cursorShape: Qt.ClosedHandCursor
+            onActiveChanged: active ? mb.dragStarted(parent.region, parent.idx, centroid.scenePosition) : mb.dragEnded()
+            onCentroidChanged: if (active) mb.dragMoved(centroid.scenePosition)
+        }
     }
 
     // --- along the top or bottom ---
@@ -162,6 +231,16 @@ Item {
                 Seg { required property var modelData; required property int index; entry: modelData; idx: index; region: "right"; count: mb.lane("right").length }
             }
         }
+        // Where a dragged widget would go.
+        Rectangle {
+            visible: mb.dropLane !== "" && !mb.vertical
+            x: mb.dropAt - 2
+            y: mb.floatPx - 3
+            width: 3
+            height: mb.barH + 6
+            radius: 1.5
+            color: theme.accent
+        }
     }
 
     // --- down the left or right: a rail of tiles, glyphs only ---
@@ -181,6 +260,7 @@ Item {
         TapHandler { enabled: mb.interactive; onTapped: mb.backgroundClicked() }
 
         Repeater {
+            id: railLanes
             model: ["left", "center", "right"]
             delegate: Column {
                 id: railLane
@@ -199,12 +279,13 @@ Item {
                         id: tileItem
                         required property var modelData
                         required property int index
+                        readonly property int laneIndex: index
                         width: rail.tile
                         height: modelData.id === "omarchy.spacer" ? Math.max(4, (modelData.size || 12) * rail.tile / 26)
                               : modelData.id === "omarchy.workspaces" ? rail.tile * 2 : rail.tile
                         radius: mb.kind === "none" ? 4 : Math.min(width / 2, (mb.style.radius === undefined ? 4 : mb.style.radius) * mb.sh / 30)
                         color: mb.fillFor(railLane.modelData, index, railLane.entries.length, modelData.id)
-                        opacity: modelData.opacity === undefined ? 1 : Math.max(0.1, modelData.opacity)
+                        opacity: mb.draggingKey === railLane.modelData + ":" + index ? 0.3 : modelData.opacity === undefined ? 1 : Math.max(0.1, modelData.opacity)
                         border.width: mb.interactive && mb.selectedKey === railLane.modelData + ":" + index ? 2 : 0
                         border.color: theme.accent
                         Text {
@@ -220,9 +301,26 @@ Item {
                         }
                         HoverHandler { enabled: mb.interactive; cursorShape: Qt.PointingHandCursor }
                         TapHandler { enabled: mb.interactive; onTapped: mb.segmentClicked(railLane.modelData, tileItem.index) }
+                        DragHandler {
+                            target: null
+                            enabled: mb.draggable
+                            dragThreshold: 5
+                            cursorShape: Qt.ClosedHandCursor
+                            onActiveChanged: active ? mb.dragStarted(railLane.modelData, tileItem.index, centroid.scenePosition) : mb.dragEnded()
+                            onCentroidChanged: if (active) mb.dragMoved(centroid.scenePosition)
+                        }
                     }
                 }
             }
+        }
+        Rectangle {
+            visible: mb.dropLane !== "" && mb.vertical
+            x: -3
+            y: mb.dropAt - 2
+            width: parent.width + 6
+            height: 3
+            radius: 1.5
+            color: theme.accent
         }
     }
 }

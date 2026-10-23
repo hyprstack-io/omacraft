@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
 
-// Every plugin OMAcraft houses: installed or not, enabled or not, and where
+// Every plugin OmaCraft houses: installed or not, enabled or not, and where
 // it sits on the bar.
 Item {
     id: page
@@ -72,7 +72,7 @@ Item {
         spacing: 14
 
         PageHeader {
-            title: "Plugins"
+            title: "Plugin Suite"
             subtitle: "Install, enable and place each plugin in the Omarchy shell"
             glyph: "\u{f0ac6}"
             BusyIndicator { running: plugins.busy; visible: plugins.busy; implicitWidth: 28; implicitHeight: 28 }
@@ -87,7 +87,7 @@ Item {
         }
 
         MessageBar {
-            error: plugins.shellRunning ? "" : "The Omarchy shell isn't answering, so OMAcraft can't tell which plugins are enabled. Start it with omarchy-restart-shell, then Check again."
+            error: plugins.shellRunning ? "" : "The Omarchy shell isn't answering, so OmaCraft can't tell which plugins are enabled. Start it with omarchy-restart-shell, then Check again."
         }
 
         ScrollView {
@@ -268,7 +268,7 @@ Item {
                     }
                 }
 
-                // hyprbuildz isn't a shell plugin: it lives inside OMAcraft.
+                // hyprbuildz isn't a shell plugin: it lives inside OmaCraft.
                 Card {
                     Layout.fillWidth: true
                     implicitHeight: builtIn.implicitHeight + 32
@@ -279,7 +279,7 @@ Item {
                         spacing: 8
                         RowLayout {
                             Layout.fillWidth: true
-                            Label { text: "HyprBUILDZ"; color: theme.text; font.pixelSize: 15; font.weight: Font.DemiBold }
+                            Label { text: "OmaBuilds"; color: theme.text; font.pixelSize: 15; font.weight: Font.DemiBold }
                             Label { text: "hyprbuildz"; color: theme.textFaint; font.pixelSize: 11; font.family: "monospace" }
                             Item { Layout.fillWidth: true }
                             StatePill { text: "Built in"; on: true }
@@ -288,7 +288,7 @@ Item {
                             Layout.fillWidth: true
                             Label {
                                 Layout.fillWidth: true
-                                text: "Custom Arch Linux ISOs with archiso, written to USB. It's part of OMAcraft rather than a shell plugin, so there's nothing to enable. HyprFIGZ's configurator is built in too; its plugin above only adds the bar dropdown."
+                                text: "Custom Arch Linux ISOs with archiso, written to USB. It's part of OmaCraft rather than a shell plugin, so there's nothing to enable. Dotfile Generator's configurator is built in too; its plugin above only adds the bar dropdown."
                                 color: theme.textSoft
                                 wrapMode: Text.WordWrap
                             }

@@ -11,7 +11,7 @@
 #include <QVariantList>
 #include <functional>
 
-// The Omarchy shell plugins OMAcraft houses: whether each is installed in
+// The Omarchy shell plugins OmaCraft houses: whether each is installed in
 // ~/.config/omarchy/plugins, enabled in the shell, and where it sits on the
 // bar. Every change goes through Omarchy's own `omarchy plugin` and
 // `omarchy bar` commands, so the shell stays the one that owns shell.json.
@@ -28,7 +28,7 @@ public:
         QString id;
         QString name;
         QString summary;
-        QString page;          // the OMAcraft page that holds its settings
+        QString page;          // the OmaCraft page that holds its settings
         QString defaultSource; // where its code lives when it isn't installed
     };
 
@@ -46,7 +46,7 @@ public:
     QString notice() const { return m_notice; }
 
     // The folder a plugin's files are in right now: installed, set aside by
-    // OMAcraft, or its source. Empty when there is none.
+    // OmaCraft, or its source. Empty when there is none.
     QString pluginDir(const QString &id) const;
     QString installPath(const QString &id) const;
     QString stashPath(const QString &id) const;

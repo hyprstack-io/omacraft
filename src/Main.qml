@@ -1,3 +1,4 @@
+import QtCore
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -10,7 +11,7 @@ ApplicationWindow {
     minimumWidth: 900
     minimumHeight: 600
     visible: true
-    title: iso.busy && iso.progress > 0.01 ? "OMAcraft — ISO " + Math.round(iso.progress * 100) + "%" : "OMAcraft"
+    title: iso.busy && iso.progress > 0.01 ? "OmaCraft — ISO " + Math.round(iso.progress * 100) + "%" : "OmaCraft"
     color: theme.window
 
     // Follows the Omarchy theme: light themes get a light window.
@@ -20,22 +21,61 @@ ApplicationWindow {
     Material.foreground: theme.text
 
     readonly property var pages: [
-        { id: "plugins", name: "Plugins", glyph: "\u{f0ac6}", plugin: "", file: "PluginsPage.qml" },
-        { id: "wallpaper", name: "Wallpaper", glyph: "\u{f08b9}", plugin: "omacraft.studio", file: "WallpaperPage.qml" },
-        { id: "animations", name: "Animations", glyph: "\u{f0d6d}", plugin: "omacraft.animations", file: "AnimationsPage.qml" },
-        { id: "effects", name: "Window FX", glyph: "\u{f0238}", plugin: "omacraft.burn", file: "BurnPage.qml" },
-        { id: "dock", name: "HyprDOCKN", glyph: "\u{f06a9}", plugin: "omacraft.agentdock", file: "DockPage.qml" },
-        { id: "bar", name: "Bar", glyph: "\u{f0570}", plugin: "omabar16", file: "BarPage.qml" },
-        { id: "launcher", name: "HyprLAUNCH", glyph: "\u{f003b}", plugin: "omacraft.studio", file: "LauncherPage.qml" },
-        { id: "ascii", name: "HyprSPLASH", glyph: "\u{f0b9e}", plugin: "omacraft.omascii", file: "AsciiPage.qml" },
-        { id: "hyprcraft", name: "HyprFIGZ", glyph: "\u{f0b0b}", plugin: "omacraft.hyprcraft", file: "HyprCraftPage.qml" },
-        { id: "iso", name: "HyprBUILDZ", glyph: "\u{f0a4f}", plugin: "", file: "IsoPage.qml" },
-        { id: "lights", name: "HyprKEYZ", glyph: "\u{f030c}", plugin: "", file: "LightsPage.qml" }
+        { id: "plugins", name: "Plugin Suite", glyph: "\u{f0ac6}", plugin: "", file: "PluginsPage.qml" },
+        { id: "wallpaper", name: "Wallpapers", glyph: "\u{f08b9}", plugin: "omacraft.studio", file: "WallpaperPage.qml" },
+        { id: "animations", name: "Window Transitions", glyph: "\u{f0d6d}", plugin: "omacraft.animations", file: "AnimationsPage.qml" },
+        { id: "effects", name: "Burn My Windows", glyph: "\u{f0238}", plugin: "omacraft.burn", file: "BurnPage.qml" },
+        { id: "dock", name: "Side Dock", glyph: "\u{f06a9}", plugin: "omacraft.agentdock", file: "DockPage.qml" },
+        { id: "bar", name: "Main Bar", glyph: "\u{f0570}", plugin: "omabar16", file: "BarPage.qml" },
+        { id: "launcher", name: "Launcher", glyph: "\u{f003b}", plugin: "omacraft.studio", file: "LauncherPage.qml" },
+        { id: "ascii", name: "Boot Splash", glyph: "\u{f0b9e}", plugin: "omacraft.omascii", file: "AsciiPage.qml" },
+        { id: "saver", name: "Screensaver", glyph: "\u{f1104}", plugin: "", file: "ScreensaverPage.qml" },
+        { id: "hyprcraft", name: "Dotfile Generator", glyph: "\u{f0b0b}", plugin: "omacraft.hyprcraft", file: "HyprCraftPage.qml" },
+        { id: "iso", name: "OmaBuilds", glyph: "\u{f0a4f}", plugin: "", file: "IsoPage.qml" },
+        { id: "lights", name: "Alienflare", glyph: "\u{f030c}", plugin: "", file: "LightsPage.qml" }
     ]
     property int current: startPage
     property var visited: ({})
 
     property bool helpVisible: false
+    property bool navCollapsed: false
+    Settings {
+        location: StandardPaths.writableLocation(StandardPaths.GenericConfigLocation) + "/omacraft/window.ini"
+        property alias navCollapsed: win.navCollapsed
+    }
+
+    // Whether a page's plugin is on, off, or missing.
+    component StateDot: Rectangle {
+        property string pluginState
+        width: 7; height: 7; radius: 4
+        color: pluginState === "on" ? theme.accent : pluginState === "off" ? theme.textFaint : "transparent"
+        border.color: pluginState === "missing" ? theme.danger : "transparent"
+    }
+
+    // A small icon button for the sidebar.
+    component NavButton: Rectangle {
+        id: navButton
+        property string glyph
+        property string tip
+        signal clicked()
+        implicitWidth: 30
+        implicitHeight: 30
+        radius: 7
+        opacity: enabled ? 1 : 0.4
+        color: buttonHover.hovered ? theme.hover : "transparent"
+        Label {
+            anchors.centerIn: parent
+            text: navButton.glyph
+            color: buttonHover.hovered ? theme.text : theme.textMuted
+            font.family: "JetBrainsMono Nerd Font"
+            font.pixelSize: 16
+        }
+        HoverHandler { id: buttonHover; cursorShape: Qt.PointingHandCursor }
+        TapHandler { onTapped: navButton.clicked() }
+        ToolTip.visible: buttonHover.hovered
+        ToolTip.delay: 300
+        ToolTip.text: tip
+    }
     property bool quitConfirmVisible: false
     property bool quitting: false
 
@@ -64,6 +104,7 @@ ApplicationWindow {
     }
     function requestQuit() {
         if (iso.busy) {
+            if (collapsed) restore("");
             quitConfirmVisible = true;
         } else {
             quitting = true;
@@ -80,17 +121,62 @@ ApplicationWindow {
 
     Component.onCompleted: show(current)
 
+    // Closed or minimised, OmaCraft folds into a tab on the screen's edge
+    // (where it was last left) rather than going away. Q and Ctrl Q, or the
+    // tab's own button, quit.
+    property bool collapsed: false
+    function collapse() {
+        if (!edgeTab.supported || collapsed) return false;
+        collapsed = true;
+        edgeTab.attach(edgeTabWindow, win);
+        edgeTabWindow.show();
+        win.hide();
+        return true;
+    }
+    function restore(pageId) {
+        if (pageId) showPage(pageId);
+        if (!collapsed) {
+            win.raise();
+            win.requestActivate();
+            return;
+        }
+        collapsed = false;
+        // showNormal: this window's own show() picks a page.
+        win.showNormal();
+        win.raise();
+        win.requestActivate();
+        edgeTabWindow.hide();
+    }
+
     onClosing: close => {
-        if (iso.busy && !quitting) {
+        if (quitting) return;
+        if (collapse()) {
+            close.accepted = false;
+        } else if (iso.busy) {
             close.accepted = false;
             quitConfirmVisible = true;
         }
+    }
+    onVisibilityChanged: visibility => {
+        if (visibility === Window.Minimized && !quitting) collapse();
+    }
+
+    EdgeTab {
+        id: edgeTabWindow
+        onRestoreWanted: win.restore("")
+        onQuitWanted: win.requestQuit()
+    }
+    Connections {
+        target: edgeTab
+        // Launched again: the window this one already has, on that page.
+        function onRestoreRequested(pageId, tabId) { win.restore(pageId); }
     }
 
     // --- keys ---
     Shortcut { sequence: "?"; context: Qt.ApplicationShortcut; enabled: (win.keysFree || win.helpVisible) && !win.quitConfirmVisible; onActivated: win.helpVisible = !win.helpVisible }
     Shortcut { sequence: "Q"; context: Qt.ApplicationShortcut; enabled: win.keysFree && !(win.page && win.page.dialogOpen); onActivated: win.requestQuit() }
     Shortcut { sequence: "Ctrl+Q"; context: Qt.ApplicationShortcut; onActivated: win.requestQuit() }
+    Shortcut { sequence: "Ctrl+B"; context: Qt.ApplicationShortcut; enabled: !win.webPage && !win.overlayOpen; onActivated: win.navCollapsed = !win.navCollapsed }
     Shortcut { sequence: "Ctrl+R"; context: Qt.ApplicationShortcut; enabled: !win.webPage && !win.overlayOpen; onActivated: plugins.restartShell() }
     Shortcut { sequence: "Ctrl+PgDown"; context: Qt.ApplicationShortcut; onActivated: win.show((win.current + 1) % win.pages.length) }
     Shortcut { sequence: "Ctrl+PgUp"; context: Qt.ApplicationShortcut; onActivated: win.show((win.current + win.pages.length - 1) % win.pages.length) }
@@ -109,7 +195,7 @@ ApplicationWindow {
     Shortcut {
         sequence: "Escape"
         context: Qt.ApplicationShortcut
-        // HyprFIGZ's own dialogs close with Esc, so leave it to the web view.
+        // Dotfile Generator's own dialogs close with Esc, so leave it to the web view.
         enabled: !win.webPage || win.overlayOpen
         onActivated: {
             if (win.quitConfirmVisible)
@@ -145,22 +231,29 @@ ApplicationWindow {
         spacing: 0
 
         // --- sidebar ---
+        // Folds down to a rail of icons (Ctrl B, or the arrow by the logo)
+        // and opens out to icon and name; it stays as it was left.
         Rectangle {
+            id: sidebar
             Layout.fillHeight: true
-            Layout.preferredWidth: 220
+            Layout.preferredWidth: win.navCollapsed ? 60 : 244
+            Behavior on Layout.preferredWidth { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
             color: theme.sidebar
+            clip: true
             Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: theme.border }
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 14
-                spacing: 4
+                anchors.margins: win.navCollapsed ? 10 : 12
+                spacing: 2
 
                 RowLayout {
-                    Layout.bottomMargin: 18
-                    Layout.topMargin: 6
+                    Layout.fillWidth: true
+                    Layout.bottomMargin: 14
+                    Layout.topMargin: 4
                     spacing: 10
                     Rectangle {
+                        Layout.alignment: Qt.AlignHCenter
                         width: 32; height: 32; radius: 9
                         color: theme.accent
                         Label {
@@ -169,11 +262,24 @@ ApplicationWindow {
                             color: theme.accentForeground
                             font.pixelSize: 15
                         }
+                        // Folded, the logo is what opens it out again.
+                        HoverHandler { id: logoHover; enabled: win.navCollapsed; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { enabled: win.navCollapsed; onTapped: win.navCollapsed = false }
+                        ToolTip.visible: logoHover.hovered
+                        ToolTip.text: "Show the page names  (Ctrl B)"
                     }
                     ColumnLayout {
+                        visible: !win.navCollapsed
+                        Layout.fillWidth: true
                         spacing: 0
-                        Label { text: "OMAcraft"; color: theme.text; font.pixelSize: 17; font.weight: Font.DemiBold }
-                        Label { text: "Your Omarchy plugins"; color: theme.textDim; font.pixelSize: 11 }
+                        Label { text: "OmaCraft"; color: theme.text; font.pixelSize: 16; font.weight: Font.DemiBold }
+                        Label { text: "Your Omarchy plugins"; color: theme.textDim; font.pixelSize: 10; elide: Text.ElideRight; Layout.fillWidth: true }
+                    }
+                    NavButton {
+                        visible: !win.navCollapsed
+                        glyph: "\u{f0141}"
+                        tip: "Fold to icons  (Ctrl B)"
+                        onClicked: win.navCollapsed = true
                     }
                 }
 
@@ -188,47 +294,58 @@ ApplicationWindow {
                         readonly property color tone: Qt.color(theme.accent)
 
                         Layout.fillWidth: true
-                        implicitHeight: 40
+                        implicitHeight: 36
                         radius: 8
                         color: chosen ? Qt.rgba(tone.r, tone.g, tone.b, 0.13) : navHover.hovered ? theme.hover : "transparent"
 
                         RowLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: 10
-                            anchors.rightMargin: 10
+                            anchors.leftMargin: win.navCollapsed ? 0 : 10
+                            anchors.rightMargin: win.navCollapsed ? 0 : 10
                             spacing: 10
                             Label {
-                                Layout.preferredWidth: 20
+                                Layout.preferredWidth: win.navCollapsed ? nav.width : 20
+                                horizontalAlignment: win.navCollapsed ? Text.AlignHCenter : Text.AlignLeft
                                 text: nav.modelData.glyph
                                 color: nav.chosen ? theme.accent : theme.textMuted
                                 font.family: "JetBrainsMono Nerd Font"
                                 font.pixelSize: 16
                             }
                             Label {
+                                visible: !win.navCollapsed
                                 Layout.fillWidth: true
                                 text: nav.modelData.name
                                 color: nav.chosen ? theme.text : theme.textSoft
                                 font.weight: nav.chosen ? Font.DemiBold : Font.Normal
+                                elide: Text.ElideRight
                             }
-                            // Whether the page's plugin is on, off, or missing.
-                            Rectangle {
-                                visible: nav.pluginState !== ""
-                                width: 7; height: 7; radius: 4
-                                color: nav.pluginState === "on" ? theme.accent : nav.pluginState === "off" ? theme.textFaint : "transparent"
-                                border.color: nav.pluginState === "missing" ? theme.danger : "transparent"
+                            StateDot {
+                                pluginState: nav.pluginState
+                                visible: !win.navCollapsed && nav.pluginState !== ""
                                 ToolTip.visible: dotHover.hovered
                                 ToolTip.text: nav.pluginState === "on" ? "Enabled in the shell" : nav.pluginState === "off" ? "Installed, not enabled" : "Not installed"
                                 HoverHandler { id: dotHover }
                             }
                             Label {
+                                visible: !win.navCollapsed
                                 text: nav.index < 9 ? nav.index + 1 : ""
                                 color: theme.textFaint
                                 font.family: "monospace"
                                 font.pixelSize: 11
                             }
                         }
+                        // Folded, the dot sits on the icon's corner.
+                        StateDot {
+                            pluginState: nav.pluginState
+                            visible: win.navCollapsed && nav.pluginState !== ""
+                            x: nav.width / 2 + 7
+                            y: 7
+                        }
                         HoverHandler { id: navHover; cursorShape: Qt.PointingHandCursor }
                         TapHandler { onTapped: win.show(nav.index) }
+                        ToolTip.visible: win.navCollapsed && navHover.hovered
+                        ToolTip.delay: 300
+                        ToolTip.text: nav.modelData.name + (nav.index < 9 ? "  (" + (nav.index + 1) + ")" : "")
                     }
                 }
 
@@ -237,12 +354,14 @@ ApplicationWindow {
                 Label {
                     Layout.fillWidth: true
                     visible: !plugins.shellRunning
-                    text: "The shell isn't answering."
+                    text: win.navCollapsed ? "!" : "The shell isn't answering."
+                    horizontalAlignment: win.navCollapsed ? Text.AlignHCenter : Text.AlignLeft
                     color: theme.danger
                     font.pixelSize: 11
                     wrapMode: Text.WordWrap
                 }
                 Button {
+                    visible: !win.navCollapsed
                     Layout.fillWidth: true
                     text: "Restart shell"
                     flat: true
@@ -250,7 +369,23 @@ ApplicationWindow {
                     enabled: !plugins.busy
                     onClicked: plugins.restartShell()
                 }
+                NavButton {
+                    visible: win.navCollapsed
+                    Layout.alignment: Qt.AlignHCenter
+                    glyph: "\u{f0450}"
+                    tip: "Restart shell  (Ctrl R)"
+                    enabled: !plugins.busy
+                    onClicked: plugins.restartShell()
+                }
+                NavButton {
+                    visible: win.navCollapsed
+                    Layout.alignment: Qt.AlignHCenter
+                    glyph: "\u{f0142}"
+                    tip: "Show the page names  (Ctrl B)"
+                    onClicked: win.navCollapsed = false
+                }
                 RowLayout {
+                    visible: !win.navCollapsed
                     Layout.fillWidth: true
                     Layout.leftMargin: 6
                     Label { text: "Shortcuts"; color: theme.textFaint; font.pixelSize: 11 }
@@ -264,7 +399,7 @@ ApplicationWindow {
 
         // --- pages ---
         // Each page loads the first time it's opened and then stays, so a
-        // running build or an edit in HyprFIGZ survives switching away.
+        // running build or an edit in Dotfile Generator survives switching away.
         StackLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -293,9 +428,9 @@ ApplicationWindow {
     // --- quitting mid-build ---
     Confirm {
         visible: win.quitConfirmVisible
-        heading: "Quit OMAcraft?"
+        heading: "Quit OmaCraft?"
         body: iso.state === "flashing" ? "A drive is being written. Quitting stops it, and the drive won't boot."
-              : iso.state === "installing" ? "archiso is being installed. OMAcraft quits once pacman finishes."
+              : iso.state === "installing" ? "archiso is being installed. OmaCraft quits once pacman finishes."
               : "An ISO build is running. Quitting cancels it and cleans up first, which takes a few seconds."
         action: "Quit"
         onAccepted: { win.quitConfirmVisible = false; win.quitting = true; iso.cancelAndQuit(); }
@@ -347,6 +482,7 @@ ApplicationWindow {
                     model: [
                         { keys: "1 … 9", action: "Switch pages (Ctrl 1 … 9 anywhere)" },
                         { keys: "Ctrl PgUp/PgDn", action: "Previous / next page" },
+                        { keys: "Ctrl B", action: "Fold the sidebar to icons, or open it out" },
                         { keys: "Ctrl R", action: "Restart the Omarchy shell" },
                         { keys: "Esc", action: "Close, dismiss, or leave a field" },
                         { keys: "Q", action: "Quit (asks first while an ISO builds)" },
