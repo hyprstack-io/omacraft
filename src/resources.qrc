@@ -2,6 +2,9 @@
     <qresource prefix="/">
         <file alias="Main.qml">Main.qml</file>
         <file alias="PluginsPage.qml">PluginsPage.qml</file>
+        <file alias="ModuleTile.qml">ModuleTile.qml</file>
+        <file alias="AsciiTitle.qml">AsciiTitle.qml</file>
+        <file alias="OmaCraftArt.js">OmaCraftArt.js</file>
         <file alias="AnimationsPage.qml">AnimationsPage.qml</file>
         <file alias="DockPage.qml">DockPage.qml</file>
         <file alias="BarPage.qml">BarPage.qml</file>

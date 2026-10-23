@@ -12,9 +12,15 @@
 #include <functional>
 
 // The Omarchy shell plugins OmaCraft houses: whether each is installed in
-// ~/.config/omarchy/plugins, enabled in the shell, and where it sits on the
-// bar. Every change goes through Omarchy's own `omarchy plugin` and
-// `omarchy bar` commands, so the shell stays the one that owns shell.json.
+// ~/.config/omarchy/plugins and whether it's switched on. They're run from
+// OmaCraft, not from icons on the bar: the shell loads a plugin whenever
+// shell.json names it, so switching one on lists it in shell.json's
+// plugins[] and takes any icon of its own off the bar, and switching it off
+// lists it in disabledPlugins[], which keeps whatever it still has on the
+// bar (folder trays, the launcher button) for when it comes back. shell.json
+// is rewritten in place, touching only that plugin's entries, so the shell's
+// watcher stays on it. Installing and removing still link and set aside code
+// as before, and the bar itself is switched with `omarchy bar use|reset`.
 class Plugins : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantList plugins READ plugins NOTIFY changed)
@@ -30,6 +36,7 @@ public:
         QString summary;
         QString page;          // the OmaCraft page that holds its settings
         QString defaultSource; // where its code lives when it isn't installed
+        QString glyph;         // its Nerd Font icon in OmaCraft
     };
 
     // home is the user's home folder; tests pass a temp directory and set
@@ -62,15 +69,28 @@ public:
     // ~/.local/share/omacraft/stash so installing again brings it back.
     // Nothing is ever deleted.
     Q_INVOKABLE void remove(const QString &id);
+    // On: listed in plugins[], with no icon of its own on the bar. Off:
+    // listed in disabledPlugins[]. The bar is used or reset instead.
     Q_INVOKABLE void setEnabled(const QString &id, bool on);
-    Q_INVOKABLE void place(const QString &id, const QString &section);
+    // Moves every installed plugin's bar icon into OmaCraft, leaving each
+    // one switched on.
+    Q_INVOKABLE void takeIconsOffBar();
     Q_INVOKABLE void setSource(const QString &id, const QString &path);
     Q_INVOKABLE void restartShell();
     Q_INVOKABLE void dismissMessages();
 
-    // The bar section ("left", "center", "right") holding a widget in a
-    // shell.json document, or empty when it isn't on the bar.
-    static QString sectionIn(const QJsonObject &shell, const QString &id);
+    // Whether a bar entry is the plugin's own icon, which OmaCraft replaces,
+    // rather than something made with it that belongs on the bar: a folder
+    // tray, or Studio's launcher button standing in for Omarchy's menu.
+    static bool isBarIcon(const QString &id, const QJsonObject &entry);
+    // How many of a plugin's icons a shell.json document has on the bar.
+    static int barIconsIn(const QJsonObject &shell, const QString &id);
+    // Whether a shell.json document has the shell load a plugin: named in
+    // plugins[] or on the bar, and not in disabledPlugins[].
+    static bool isOnIn(const QJsonObject &shell, const QString &id);
+    // Switches a plugin on or off in a shell.json document, as described
+    // above. Touches nothing but that plugin's entries.
+    static void switchIn(QJsonObject &shell, const QString &id, bool on);
     // The id of the bar in use, "omarchy.bar" when shell.json names none.
     static QString barIn(const QJsonObject &shell);
     // Folders in pluginsDir whose manifest names another folder's id, by that
@@ -86,6 +106,9 @@ signals:
 private:
     void rebuild();
     void readShellConfig();
+    // Reads shell.json, runs edit on it and writes it back in place. Returns
+    // what went wrong, or nothing.
+    QString editShell(const std::function<void(QJsonObject &)> &edit);
     void loadSources();
     // One step of a change: a command to run, or work done here (returning
     // what went wrong, or nothing).

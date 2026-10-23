@@ -107,12 +107,83 @@ void OmacraftTests::expandsHomeAndQuotes()
 void OmacraftTests::readsBarSections()
 {
     const auto shell = QJsonDocument::fromJson(R"({"bar":{"id":"omabar16","layout":{
-        "left":[{"id":"a"}],"center":[{"id":"b"}],"right":[{"id":"c"},{"id":"omacraft.agentdock"}]}}})").object();
-    QCOMPARE(Plugins::sectionIn(shell, "omacraft.agentdock"), QString("right"));
-    QCOMPARE(Plugins::sectionIn(shell, "b"), QString("center"));
-    QCOMPARE(Plugins::sectionIn(shell, "missing"), QString());
+        "left":[{"id":"omacraft.studio","role":"launcher"},{"id":"omacraft.folders","name":"Apps"}],
+        "right":[{"id":"omacraft.agentdock"},{"id":"omacraft.studio","role":"studio"}]}},
+        "plugins":[{"id":"omacraft.burn"},{"id":"omacraft.omascii"}],"disabledPlugins":["omacraft.omascii"]})").object();
     QCOMPARE(Plugins::barIn(shell), QString("omabar16"));
     QCOMPARE(Plugins::barIn(QJsonObject()), QString("omarchy.bar"));
+    QVERIFY(Plugins::isOnIn(shell, "omacraft.burn"));
+    QVERIFY(Plugins::isOnIn(shell, "omacraft.agentdock"));
+    QVERIFY(!Plugins::isOnIn(shell, "omacraft.omascii"));
+    QVERIFY(!Plugins::isOnIn(shell, "omacraft.animations"));
+    // Folder trays and Studio's launcher button belong on the bar; the rest
+    // are icons OmaCraft takes over.
+    QCOMPARE(Plugins::barIconsIn(shell, "omacraft.agentdock"), 1);
+    QCOMPARE(Plugins::barIconsIn(shell, "omacraft.studio"), 1);
+    QCOMPARE(Plugins::barIconsIn(shell, "omacraft.folders"), 0);
+}
+
+void OmacraftTests::switchesPluginsWithoutBarIcons()
+{
+    auto shell = QJsonDocument::fromJson(R"({"bar":{"id":"omabar16","layout":{
+        "left":[{"id":"omacraft.studio","role":"launcher"},{"id":"omacraft.folders","name":"Apps"}],
+        "right":[{"id":"omarchy.clock"},{"id":"omacraft.agentdock"},{"id":"omacraft.studio","role":"studio"}]}},
+        "plugins":[{"id":"other.thing"}],"theme":"kept"})").object();
+
+    // On: listed in plugins[], its icon gone, everything else left alone.
+    Plugins::switchIn(shell, "omacraft.agentdock", true);
+    QVERIFY(Plugins::isOnIn(shell, "omacraft.agentdock"));
+    QCOMPARE(Plugins::barIconsIn(shell, "omacraft.agentdock"), 0);
+    QCOMPARE(shell.value("plugins").toArray().size(), 2);
+    QCOMPARE(shell.value("bar").toObject().value("layout").toObject().value("right").toArray().size(), 2);
+    QCOMPARE(shell.value("theme").toString(), QString("kept"));
+    Plugins::switchIn(shell, "omacraft.agentdock", true);
+    QCOMPARE(shell.value("plugins").toArray().size(), 2);
+
+    // Off: out of plugins[], and nothing is said in disabledPlugins[] when
+    // nothing of it is left to load it.
+    Plugins::switchIn(shell, "omacraft.agentdock", false);
+    QVERIFY(!Plugins::isOnIn(shell, "omacraft.agentdock"));
+    QVERIFY(!shell.contains("disabledPlugins"));
+
+    // Studio keeps its launcher button, so off is said, and on unsays it.
+    Plugins::switchIn(shell, "omacraft.studio", false);
+    QVERIFY(!Plugins::isOnIn(shell, "omacraft.studio"));
+    QCOMPARE(shell.value("disabledPlugins").toArray(), QJsonArray{"omacraft.studio"});
+    QCOMPARE(shell.value("bar").toObject().value("layout").toObject().value("left").toArray().size(), 2);
+    Plugins::switchIn(shell, "omacraft.studio", true);
+    QVERIFY(Plugins::isOnIn(shell, "omacraft.studio"));
+    QVERIFY(!shell.contains("disabledPlugins"));
+    QCOMPARE(Plugins::barIconsIn(shell, "omacraft.studio"), 0);
+}
+
+void OmacraftTests::switchingAPluginEditsShellJsonInPlace()
+{
+    QTemporaryDir home;
+    writeManifest(home.path() + "/.config/omarchy/plugins/omacraft.animations", "omacraft.animations");
+    const QString shellPath = home.path() + "/.config/omarchy/shell.json";
+    writeFile(shellPath, R"({"bar":{"layout":{"right":[{"id":"omacraft.animations"},{"id":"omarchy.clock"}]}}})");
+
+    Plugins plugins(home.path(), false);
+    auto item = plugins.plugin("omacraft.animations");
+    QVERIFY(item.value("enabled").toBool());
+    QCOMPARE(item.value("barIcons").toInt(), 1);
+    QCOMPARE(item.value("state").toString(), QString("On, with an icon on the bar"));
+
+    const auto born = QFileInfo(shellPath).fileTime(QFileDevice::FileBirthTime);
+    plugins.takeIconsOffBar();
+    QCOMPARE(plugins.error(), QString());
+    item = plugins.plugin("omacraft.animations");
+    QVERIFY(item.value("enabled").toBool());
+    QCOMPARE(item.value("barIcons").toInt(), 0);
+    QCOMPARE(item.value("state").toString(), QString("On"));
+    QCOMPARE(QFileInfo(shellPath).fileTime(QFileDevice::FileBirthTime), born);
+
+    plugins.setEnabled("omacraft.animations", false);
+    QVERIFY(!plugins.isEnabled("omacraft.animations"));
+    const auto shell = readJson(shellPath);
+    QCOMPARE(shell.value("plugins").toArray().size(), 0);
+    QCOMPARE(shell.value("bar").toObject().value("layout").toObject().value("right").toArray().size(), 1);
 }
 
 void OmacraftTests::installsByLinkingTheSource()

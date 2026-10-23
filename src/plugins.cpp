@@ -73,33 +73,33 @@ QList<Plugins::Definition> Plugins::definitions() {
         {"omacraft.burn", "Burn My Windows",
          "Window open and close effects after the GNOME extension: fire, broken glass, the Doom melt, "
          "the Matrix, portals, an old TV switching off and more.",
-         "effects", "~/Work/omacraft-burn/plugin"},
+         "effects", "~/Work/omacraft-burn/plugin", "\u{f0238}"},
         {"omacraft.agentdock", "Side Dock",
          "A dock on the screen edge that opens into a side panel with a tab per AI agent.",
-         "dock", "~/Work/skll-agentdock/plugin"},
+         "dock", "~/Work/skll-agentdock/plugin", "\u{f06a9}"},
         {"omabar16", "omabar16",
-         "The bar itself: segment shapes, themes, layouts, and the drag-and-drop customizer.",
-         "bar", ""},
+         "The bar itself: segment shapes, themes and layouts, all edited on the Main Bar page.",
+         "bar", "", "\u{f0570}"},
         {"omacraft.animations", "Window Transitions",
-         "Hyprland animation presets with a speed control, from the bar.",
-         "animations", ""},
+         "Hyprland animation presets, gradient borders and a speed control.",
+         "animations", "", "\u{f0d6d}"},
         {"omacraft.omascii", "omascii",
          "FIGlet, TheDraw, system-font and image ASCII art for the Plymouth boot screen.",
-         "ascii", "~/Projects/omascii"},
+         "ascii", "~/Projects/omascii", "\u{f0b9e}"},
         {"omacraft.studio", "Studio (Launcher)",
-         "The Launcher launcher: rofi-style layouts, colour schemes and transitions. Studio also brings "
-         "wallpapers and the bar customizer. Its own uninstall.sh puts the stock menu back best.",
-         "launcher", "~/Work/skll-studio/plugin"},
+         "The Launcher launcher: rofi-style layouts, colour schemes and transitions, and the wallpapers "
+         "behind the Wallpapers page. Its own uninstall.sh puts the stock menu back best.",
+         "launcher", "~/Work/skll-studio/plugin", "\u{f003b}"},
         {"omacraft.folders", "Folder trays",
          "Folders on the bar that open into a row of the apps you pick, like the system tray's drawer.",
-         "bar", "~/Work/omacraft/plugins/folders"},
+         "bar", "~/Work/omacraft/plugins/folders", "\u{f024b}"},
         {"omacraft.wallpicker", "Wallpaper picker",
          "Omarchy's background switcher with OmaCraft's wallpapers: theme backgrounds, Wallhaven search, the "
          "library and favourites as tabs of slanted previews, opened from a key without OmaCraft's window.",
-         "wallpaper", "~/Work/omacraft/plugins/wallpicker"},
+         "wallpaper", "~/Work/omacraft/plugins/wallpicker", "\u{f08b9}"},
         {"omacraft.hyprcraft", "Dotfile Generator",
-         "Hyprland, Waybar, Rofi, SwayNC, GTK/Qt and terminal configurator, as a bar dropdown.",
-         "hyprcraft", "~/Projects/HyprCraft/omarchy-plugin"},
+         "Hyprland, Waybar, Rofi, SwayNC, GTK/Qt and terminal configurator. OmaCraft runs it on its own page.",
+         "hyprcraft", "~/Projects/HyprCraft/omarchy-plugin", "\u{f0b0b}"},
     };
 }
 
@@ -134,13 +134,112 @@ void Plugins::readShellConfig() {
     m_shellConfig = readJsonObject(m_shellPath);
 }
 
-QString Plugins::sectionIn(const QJsonObject &shell, const QString &id) {
+bool Plugins::isBarIcon(const QString &id, const QJsonObject &entry) {
+    if (id == "omacraft.folders")
+        return false;
+    // Studio's launcher role is the menu button (Omarchy's own is switched off
+    // for it); its studio role is a popout OmaCraft's pages replace.
+    if (id == "omacraft.studio")
+        return entry.value("role").toString() == "studio";
+    return true;
+}
+
+int Plugins::barIconsIn(const QJsonObject &shell, const QString &id) {
+    int count = 0;
     const auto layout = shell.value("bar").toObject().value("layout").toObject();
-    for (const auto &section : {"left", "center", "right"}) {
-        for (const auto &entry : layout.value(section).toArray())
+    for (auto it = layout.begin(); it != layout.end(); ++it)
+        for (const auto &entry : it.value().toArray())
+            if (entry.toObject().value("id").toString() == id && isBarIcon(id, entry.toObject()))
+                ++count;
+    return count;
+}
+
+bool Plugins::isOnIn(const QJsonObject &shell, const QString &id) {
+    for (const auto &value : shell.value("disabledPlugins").toArray())
+        if (value.toString() == id)
+            return false;
+    for (const auto &value : shell.value("plugins").toArray())
+        if (value.toObject().value("id").toString() == id)
+            return true;
+    const auto layout = shell.value("bar").toObject().value("layout").toObject();
+    for (auto it = layout.begin(); it != layout.end(); ++it)
+        for (const auto &entry : it.value().toArray())
             if (entry.toObject().value("id").toString() == id)
-                return section;
+                return true;
+    return false;
+}
+
+void Plugins::switchIn(QJsonObject &shell, const QString &id, bool on) {
+    // Its icons come off the bar either way; anything else of it stays put.
+    bool kept = false;
+    auto bar = shell.value("bar").toObject();
+    if (bar.contains("layout")) {
+        auto layout = bar.value("layout").toObject();
+        for (auto it = layout.begin(); it != layout.end(); ++it) {
+            QJsonArray entries;
+            for (const auto &entry : it.value().toArray()) {
+                const auto object = entry.toObject();
+                if (object.value("id").toString() != id) {
+                    entries << entry;
+                } else if (!isBarIcon(id, object)) {
+                    entries << entry;
+                    kept = true;
+                }
+            }
+            it.value() = entries;
+        }
+        bar["layout"] = layout;
+        shell["bar"] = bar;
     }
+
+    QJsonArray plugins;
+    bool listed = false;
+    for (const auto &value : shell.value("plugins").toArray()) {
+        if (value.toObject().value("id").toString() == id) {
+            if (!on || listed)
+                continue;
+            listed = true;
+        }
+        plugins << value;
+    }
+    if (on && !listed && !kept)
+        plugins << QJsonObject{{"id", id}};
+    shell["plugins"] = plugins;
+
+    QJsonArray disabled;
+    for (const auto &value : shell.value("disabledPlugins").toArray())
+        if (value.toString() != id)
+            disabled << value;
+    // What it keeps on the bar would load it, so off has to be said.
+    if (!on && kept)
+        disabled << id;
+    if (disabled.isEmpty())
+        shell.remove("disabledPlugins");
+    else
+        shell["disabledPlugins"] = disabled;
+}
+
+QString Plugins::editShell(const std::function<void(QJsonObject &)> &edit) {
+    QDir().mkpath(QFileInfo(m_shellPath).absolutePath());
+    QFile file(m_shellPath);
+    if (!file.open(QIODevice::ReadWrite))
+        return "Couldn't open " + m_shellPath + ": " + file.errorString();
+    const QByteArray before = file.readAll();
+    QJsonObject shell;
+    if (!before.trimmed().isEmpty()) {
+        QJsonParseError parseError;
+        const QJsonDocument doc = QJsonDocument::fromJson(before, &parseError);
+        if (parseError.error != QJsonParseError::NoError || !doc.isObject())
+            return "shell.json isn't valid JSON (" + parseError.errorString() + "), so it was left alone.";
+        shell = doc.object();
+    }
+    edit(shell);
+    // In place, not through a rename: the shell's file watcher stays on it.
+    const QByteArray bytes = QJsonDocument(shell).toJson(QJsonDocument::Indented);
+    if (bytes == before)
+        return {};
+    if (!file.seek(0) || file.write(bytes) != bytes.size() || !file.resize(bytes.size()))
+        return "Couldn't save " + m_shellPath + ": " + file.errorString();
     return {};
 }
 
@@ -191,29 +290,32 @@ void Plugins::rebuild() {
         for (const auto &kind : kindsJson)
             kinds << kind.toString();
         const bool isBar = kinds.contains("bar");
-        const bool barWidget = kinds.contains("bar-widget");
         const bool barInUse = isBar && barIn(m_shellConfig) == definition.id;
-        const bool enabled = isBar ? barInUse : shellEntry.value("enabled").toBool();
+        // Read from shell.json rather than the shell's list, which counts a
+        // bar widget as on only while it sits on the bar.
+        const bool enabled = installed && (isBar ? barInUse : isOnIn(m_shellConfig, definition.id));
+        const int icons = isBar ? 0 : barIconsIn(m_shellConfig, definition.id);
 
         QString state;
         if (!others.isEmpty())
             state = "Also installed as " + others.join(", ");
         else if (!installed)
             state = linked ? "Broken link" : "Not installed";
-        else if (!m_shellRunning)
-            state = "Installed";
-        else if (shellEntry.isEmpty())
+        else if (m_shellRunning && shellEntry.isEmpty())
             state = "Not found by the shell";
         else if (isBar)
-            state = barInUse ? "Your bar" : "Installed, not in use";
+            state = barInUse ? "Your bar" : "Not in use";
+        else if (!enabled)
+            state = "Off";
         else
-            state = enabled ? "Enabled" : "Disabled";
+            state = icons > 0 ? "On, with an icon on the bar" : "On";
 
         QVariantMap item;
         item["id"] = definition.id;
         item["name"] = definition.name;
         item["summary"] = definition.summary;
         item["page"] = definition.page;
+        item["glyph"] = definition.glyph;
         item["version"] = manifest.value("version").toString();
         item["kinds"] = kinds;
         item["installed"] = installed;
@@ -226,9 +328,7 @@ void Plugins::rebuild() {
         item["known"] = !shellEntry.isEmpty();
         item["enabled"] = enabled;
         item["isBar"] = isBar;
-        item["barWidget"] = barWidget;
-        item["section"] = barWidget ? sectionIn(m_shellConfig, definition.id) : QString();
-        item["defaultSection"] = manifest.value("barWidget").toObject().value("defaultSection").toString();
+        item["barIcons"] = icons;
         item["dir"] = dir;
         item["duplicates"] = others;
         item["state"] = state;
@@ -375,7 +475,7 @@ void Plugins::remove(const QString &id) {
     if (item.value("isBar").toBool() && item.value("enabled").toBool())
         steps << Step{{"omarchy-bar", "reset"}};
     else if (item.value("enabled").toBool())
-        steps << Step{{"omarchy-plugin-disable", id}};
+        steps << Step{{}, [=, this] { return editShell([&](QJsonObject &shell) { switchIn(shell, id, false); }); }};
 
     const QString target = installPath(id);
     const QString stash = stashPath(id);
@@ -415,26 +515,30 @@ void Plugins::setEnabled(const QString &id, bool on) {
             runSteps({Step{{"omarchy-bar", "reset"}}}, "Back to the built-in Omarchy bar.");
         return;
     }
-    if (on)
-        runSteps({Step{{"omarchy-plugin-enable", id}}}, QString("Enabled %1.").arg(name));
-    else
-        runSteps({Step{{"omarchy-plugin-disable", id}}}, QString("Disabled %1.").arg(name));
+    runSteps({Step{{}, [=, this] { return editShell([&](QJsonObject &shell) { switchIn(shell, id, on); }); }},
+              Step{{"omarchy-shell", "shell", "reloadConfig"}, {}, true}},
+             on ? QString("%1 is on, run from OmaCraft.").arg(name) : QString("%1 is off.").arg(name));
 }
 
-void Plugins::place(const QString &id, const QString &section) {
-    const auto item = plugin(id);
-    if (item.isEmpty() || !item.value("barWidget").toBool())
+void Plugins::takeIconsOffBar() {
+    QStringList ids;
+    for (const auto &value : m_plugins) {
+        const auto item = value.toMap();
+        if (item.value("installed").toBool() && item.value("barIcons").toInt() > 0)
+            ids << item.value("id").toString();
+    }
+    if (ids.isEmpty())
         return;
     dismissMessages();
-    const QString name = item.value("name").toString();
-    QList<Step> steps;
-    if (!item.value("enabled").toBool())
-        steps << Step{{"omarchy-plugin-enable", id, "--section", section}};
-    else if (item.value("section").toString().isEmpty())
-        steps << Step{{"omarchy-bar", "put", id, "--section", section}};
-    else
-        steps << Step{{"omarchy-bar", "move", id, "--section", section}};
-    runSteps(steps, QString("Moved %1 to the %2 of the bar.").arg(name, section == "center" ? "centre" : section));
+    runSteps({Step{{}, [=, this] {
+                  return editShell([&](QJsonObject &shell) {
+                      for (const auto &id : ids)
+                          switchIn(shell, id, true);
+                  });
+              }},
+              Step{{"omarchy-shell", "shell", "reloadConfig"}, {}, true}},
+             ids.size() == 1 ? QString("Moved 1 plugin off the bar. It runs from OmaCraft now.")
+                             : QString("Moved %1 plugins off the bar. They run from OmaCraft now.").arg(ids.size()));
 }
 
 void Plugins::setSource(const QString &id, const QString &path) {

@@ -15,6 +15,8 @@ private slots:
     void savesAtomically();
     void expandsHomeAndQuotes();
     void readsBarSections();
+    void switchesPluginsWithoutBarIcons();
+    void switchingAPluginEditsShellJsonInPlace();
     void installsByLinkingTheSource();
     void flagsAFolderThatReusesAPluginId();
     void removingALinkKeepsTheCode();

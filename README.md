@@ -7,7 +7,7 @@ hyprbuildz ISO builder.
 
 | Page | What it covers | Where it comes from |
 | --- | --- | --- |
-| Plugin Suite | Install, remove, enable, disable, and place on the bar (left, centre, right) | `omarchy plugin` and `omarchy bar` |
+| Plugin Suite | The landing page, under OmaCraft's name in animated TheDraw block art: every plugin as a module to install, switch on or off and open, run from OmaCraft rather than from icons on the bar (*Move into OmaCraft* takes any that are still there off it); an inspector for the picked one's code location and removal; the built-in tools | `shell.json` (`plugins[]`, `disabledPlugins[]`), `omarchy bar use|reset` |
 | Wallpapers | Browse wallhaven.cc (search, filters, API key), your downloaded library (right-click a wallpaper to delete it), your own folders, and ♥ favourites; set one with or without its colours; build the Omarchy theme from the wallpaper with the Material, matugen, wallbash, pywal or flavours scheme (the real `matugen`, `wal` and `flavours` when installed), mode, style, contrast, accent, which parts follow, fit and auto-change | `omacraft.studio` (its `hyprskin` command) |
 | Window Transitions | A live stage that plays the preset in use (or the one under the pointer) the way Hyprland would: a window opening, a workspace switch, the window closing, in its border, with the preset's own durations, curves and styles at your speed. **Presets** (each tile draws its curve and plays on hover), **Motion** (window and workspace shapes, each playing, and the speed), **Borders** (gradient borders, spinning or not) and **Lua** (what each preset writes); your own presets | `omacraft.animations` (its `omarchy-animations` script) |
 | Burn My Windows | Window open and close effects after the GNOME extension of the same name: 27 of its effects plus two of our own, each tile playing the real shader; closing and opening lists picked at random, speed, intensity, colour, windows to leave alone, and the SUPER+W / SUPER+Q keys | `omacraft.burn` (its `effects.json` and shaders) |
@@ -31,9 +31,14 @@ routes the plugins and Omarchy already offer:
   the link, or moves a real folder to `~/.local/share/omacraft/stash`.
   Nothing is ever deleted. Where each plugin's code lives is under *Code
   location* on its card, saved in `~/.config/omacraft/sources.json`.
-- **Enabling, disabling and placing** run `omarchy plugin enable|disable` and
-  `omarchy bar use|reset|put|move`, so the shell stays the one that writes
-  `shell.json`.
+- **Switching on and off** happens in OmaCraft, not through icons on the bar.
+  The shell loads a plugin whenever `shell.json` names it, so switching one on
+  lists it in `plugins[]` and takes its own icon off the bar, and switching it
+  off lists it in `disabledPlugins[]`. `omarchy plugin enable` would put a bar
+  widget back on the bar, so OmaCraft makes these edits itself, in place,
+  touching only that plugin's entries. What belongs on the bar stays there:
+  folder trays, and Studio's launcher button (your Omarchy menu). The bar
+  itself is switched with `omarchy bar use|reset`.
 - **Settings** go through each plugin's own command or IPC: `omarchy-animations`,
   `omascii` and `omarchy-shell agentdock set …`. When the dock isn't running,
   OmaCraft writes its `state.json` itself. Launcher's style goes to
@@ -104,11 +109,12 @@ files change.
 | `Q`, `Ctrl Q` | Quit (asks first while an ISO builds) |
 | `?` | Show the shortcuts, with the page's own |
 | **Plugins** | |
-| `↑` `↓` | Choose a plugin |
-| `Space` | Enable or disable it |
+| Arrows | Choose a plugin |
+| `Space` | Switch it on or off |
 | `I` / `Del` | Install / remove it |
-| `L` `C` `R` | Place it on the left, centre or right of the bar |
-| `Enter` | Open its settings |
+| `B` | Move every plugin's bar icon into OmaCraft |
+| `Enter` | Open its page |
+| Click the title | Play it again |
 | **Window Transitions** | |
 | `P` `M` `B` `L` | Presets, Motion, Borders, Lua |
 | Arrows, `Space` | Choose a preset (it plays on the stage), apply it |
