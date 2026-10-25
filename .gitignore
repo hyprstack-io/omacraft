@@ -3,3 +3,7 @@
 /pkgbuild/src/
 *.pkg.tar.*
 /tests/build/
+
+# Agent worktrees and scratch files
+/.claude/
+*.patch

@@ -1,0 +1,7 @@
+#!/bin/bash
+# Installed by Studio (omacraft.studio). Leaving the wallpaper theme for a regular
+# Omarchy theme puts omabar16's own colours back the way you had them.
+[[ ${1:-} == "hyprskin" ]] && exit 0
+hyprskin="$HOME/.config/omarchy/plugins/omacraft.studio/bin/hyprskin"
+[[ -x $hyprskin ]] && python3 "$hyprskin" bar restore >/dev/null 2>&1
+exit 0

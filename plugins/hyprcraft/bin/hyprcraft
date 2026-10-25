@@ -1,0 +1,580 @@
+#!/usr/bin/env python3
+"""HyprCraft host for the omacraft.hyprcraft Omarchy bar plugin.
+
+Quickshell cannot embed QtWebEngine without crashing the shell, so the bar
+widget drives this small single-instance PyQt6 process instead. It serves the
+built React app from ../app over localhost and keeps one live web view that is
+moved between two top-level windows:
+
+  "HyprCraft Dropdown"  pinned, borderless, placed under the bar icon with a
+                        live Hyprland window rule; hides when it loses focus.
+  "HyprCraft"           a normal floating window (the popped-out state).
+
+Because the same view is reparented, all editor state survives pop-out/dock.
+
+Usage:
+  hyprcraft toggle [--monitor NAME --x X --y Y --width W --height H] [--hide-on-blur]
+  hyprcraft show   [same options]
+  hyprcraft popout | dock | hide | quit
+  hyprcraft start  (launch the host hidden, for preloading)
+"""
+
+import argparse
+import fcntl
+import functools
+import json
+import os
+import secrets
+import socket
+import subprocess
+import sys
+import threading
+import time
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+PLUGIN_DIR = Path(__file__).resolve().parent.parent
+APP_DIR = PLUGIN_DIR / "app"
+RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/hyprcraft-{os.getuid()}")
+SOCKET_PATH = RUNTIME_DIR / "hyprcraft.sock"
+LOCK_PATH = RUNTIME_DIR / "hyprcraft.lock"
+APP_CLASS = "hyprcraft"
+DROPDOWN_TITLE = "HyprCraft Dropdown"
+WINDOW_TITLE = "HyprCraft"
+DOWNLOAD_DIR = Path.home() / "Downloads" / "HyprCraft"
+DATA_DIR = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "hyprcraft"
+
+# A click on the bar icon first steals focus from the dropdown (hiding it) and
+# then arrives as "toggle". Treat a toggle this soon after a focus-loss hide as
+# the user closing the dropdown, not reopening it.
+REOPEN_GRACE_SECONDS = 0.35
+
+DEBUG = os.environ.get("HYPRCRAFT_DEBUG") == "1"
+
+
+def debug(message):
+    if DEBUG:
+        print(f"[hyprcraft {time.monotonic():.3f}] {message}", file=sys.stderr, flush=True)
+
+
+ACTIONS = ("toggle", "show", "popout", "dock", "hide", "quit", "start")
+
+
+def parse_args(argv):
+    parser = argparse.ArgumentParser(prog="hyprcraft", description="HyprCraft Omarchy plugin host")
+    parser.add_argument("action", nargs="?", default="toggle", choices=ACTIONS)
+    parser.add_argument("--monitor", default="")
+    parser.add_argument("--x", type=int)
+    parser.add_argument("--y", type=int)
+    parser.add_argument("--width", type=int)
+    parser.add_argument("--height", type=int)
+    parser.add_argument("--hide-on-blur", action="store_true",
+                        help="hide the dropdown when it loses keyboard focus")
+    return parser.parse_args(argv)
+
+
+def command_payload(args):
+    payload = {"action": args.action, "hideOnBlur": args.hide_on_blur}
+    if None not in (args.x, args.y, args.width, args.height):
+        payload["anchor"] = {
+            "monitor": args.monitor,
+            "x": args.x,
+            "y": args.y,
+            "width": args.width,
+            "height": args.height,
+        }
+    return payload
+
+
+def send_to_running_instance(payload):
+    """Deliver a command to an existing host. Returns False if none is running."""
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+            conn.settimeout(1)
+            conn.connect(str(SOCKET_PATH))
+            conn.sendall((json.dumps(payload) + "\n").encode())
+        return True
+    except OSError:
+        return False
+
+
+# --- Hyprland -----------------------------------------------------------------
+
+def lua_string(value):
+    return json.dumps(str(value))
+
+
+def hypr_eval(expression):
+    started = time.monotonic()
+    try:
+        result = subprocess.run(
+            ["hyprctl", "eval", expression], capture_output=True, text=True, timeout=3
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    output = (result.stdout + result.stderr).strip().lower()
+    debug(f"hyprctl eval {time.monotonic() - started:.3f}s -> {output[:80]!r}")
+    return result.returncode == 0 and "error" not in output
+
+
+def replace_window_rule(name, match, rules):
+    """(Re)install a named dynamic Hyprland window rule via the Lua API.
+
+    Rules apply when a window maps, so they are refreshed before every show.
+    Richer rule sets are tried first and trimmed if this Hyprland rejects a key.
+    """
+    fields = [f"{key} = {lua_string(value)}" for key, value in match.items()]
+    match_lua = "{ " + ", ".join(fields) + " }"
+
+    for rule_set in rules:
+        body = ", ".join([f"match = {match_lua}"] + rule_set)
+        expression = (
+            f"if {name} then {name}:set_enabled(false) end; {name} = nil; "
+            f"{name} = hl.window_rule({{ {body} }})"
+        )
+        if hypr_eval(expression):
+            return True
+    return False
+
+
+def install_dropdown_rule(anchor):
+    x, y, w, h = anchor["x"], anchor["y"], anchor["width"], anchor["height"]
+    base = [
+        "float = true",
+        "pin = true",
+        f"size = {{ {w}, {h} }}",
+        f"move = {{ {x}, {y} }}",
+    ]
+    styled = base + [
+        'tag = "-default-opacity"',
+        'opacity = "1 1"',
+        "border_size = 0",
+        "no_dim = true",
+    ]
+    rule_sets = []
+    if anchor.get("monitor"):
+        rule_sets.append(styled + [f"monitor = {lua_string(anchor['monitor'])}"])
+    rule_sets += [styled, base]
+    replace_window_rule(
+        "hyprcraft_dropdown_rule",
+        {"class": f"^{APP_CLASS}$", "title": f"^{DROPDOWN_TITLE}$"},
+        rule_sets,
+    )
+
+
+def install_window_rule():
+    replace_window_rule(
+        "hyprcraft_window_rule",
+        {"class": f"^{APP_CLASS}$", "title": f"^{WINDOW_TITLE}$"},
+        [
+            [
+                "float = true",
+                "center = true",
+                'size = { "(monitor_w*0.8)", "(monitor_h*0.85)" }',
+            ],
+            ["float = true", "center = true"],
+        ],
+    )
+
+
+def focus_window_by_title(title):
+    selector = f"title:^{title}$"
+    try:
+        result = subprocess.run(
+            ["hyprctl", "dispatch", f"hl.dsp.focus({{ window = {lua_string(selector)} }})"],
+            capture_output=True, text=True, timeout=3,
+        )
+        if result.returncode != 0 or "error" in (result.stdout + result.stderr).lower():
+            subprocess.run(["hyprctl", "dispatch", "focuswindow", selector],
+                           capture_output=True, timeout=3)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
+def notify(summary, body=""):
+    try:
+        subprocess.Popen(["notify-send", "-a", "HyprCraft", summary, body],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        pass
+
+
+# --- Local web server ---------------------------------------------------------
+
+def start_web_server(token, bridge):
+    class Handler(SimpleHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def end_headers(self):
+            self.send_header("Cache-Control", "no-store")
+            super().end_headers()
+
+        def do_POST(self):
+            action = self.path.rsplit("/", 1)[-1]
+            if not self.path.startswith("/__host/") or action not in ("popout", "dock", "close"):
+                self.send_error(404)
+                return
+            if not secrets.compare_digest(self.headers.get("X-HyprCraft-Token", ""), token):
+                self.send_error(403)
+                return
+            bridge.command.emit({"action": "hide" if action == "close" else action, "source": "page"})
+            self.send_response(204)
+            self.end_headers()
+
+    handler = functools.partial(Handler, directory=str(APP_DIR))
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+# --- Qt application -----------------------------------------------------------
+
+def run_host(initial_payload):
+    from PyQt6.QtCore import QEvent, QObject, QTimer, QUrl, Qt, pyqtSignal
+    from PyQt6.QtGui import QGuiApplication, QIcon
+    from PyQt6.QtNetwork import QLocalServer
+    from PyQt6.QtWebEngineCore import (
+        QWebEngineDownloadRequest, QWebEnginePage, QWebEnginePermission,
+        QWebEngineProfile, QWebEngineSettings,
+    )
+    from PyQt6.QtWebEngineWidgets import QWebEngineView
+    from PyQt6.QtWidgets import QApplication, QFileDialog, QVBoxLayout, QWidget
+
+    class Bridge(QObject):
+        # Carries commands from the HTTP thread and the local socket onto the
+        # Qt main thread.
+        command = pyqtSignal(dict)
+
+    class Page(QWebEnginePage):
+        def __init__(self, profile, host):
+            super().__init__(profile, host.dropdown)
+            self.host = host
+            self.permissionRequested.connect(self.on_permission)
+
+        def on_permission(self, permission):
+            if permission.permissionType() == QWebEnginePermission.PermissionType.ClipboardReadWrite:
+                permission.grant()
+            else:
+                permission.deny()
+
+        def chooseFiles(self, mode, old_files, mime_types):
+            # A portal file picker would steal focus and auto-hide the dropdown
+            # out from under it, so use Qt's own dialog and hold the dropdown open.
+            self.host.dialog_open = True
+            try:
+                options = QFileDialog.Option.DontUseNativeDialog
+                parent = self.host.current_window()
+                if mode == QWebEnginePage.FileSelectionMode.FileSelectOpenMultiple:
+                    files, _ = QFileDialog.getOpenFileNames(parent, "Import", str(Path.home()), options=options)
+                    return files
+                path, _ = QFileDialog.getOpenFileName(parent, "Import", str(Path.home()), options=options)
+                return [path] if path else []
+            finally:
+                self.host.dialog_open = False
+                QTimer.singleShot(0, lambda: parent.activateWindow())
+
+        def javaScriptConfirm(self, origin, message):
+            self.host.dialog_open = True
+            try:
+                return super().javaScriptConfirm(origin, message)
+            finally:
+                self.host.dialog_open = False
+
+        def javaScriptAlert(self, origin, message):
+            self.host.dialog_open = True
+            try:
+                super().javaScriptAlert(origin, message)
+            finally:
+                self.host.dialog_open = False
+
+    class HostWindow(QWidget):
+        def __init__(self, host, title, frameless):
+            super().__init__()
+            self.host = host
+            self.setWindowTitle(title)
+            if frameless:
+                self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
+            layout = QVBoxLayout(self)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
+
+        def closeEvent(self, event):
+            # Super+W and friends close the window; keep the process and its
+            # editor state alive and return to the (hidden) dropdown instead.
+            event.ignore()
+            self.host.hide_all()
+
+        def changeEvent(self, event):
+            super().changeEvent(event)
+            if event.type() == QEvent.Type.ActivationChange and not self.isActiveWindow():
+                self.host.on_window_deactivated(self)
+
+    class Host:
+        def __init__(self, app):
+            self.app = app
+            self.mode = "dropdown"
+            self.anchor = None
+            self.last_focus_hide = 0.0
+            self.hide_on_blur = False
+            self.dialog_open = False
+            self.token = secrets.token_urlsafe(24)
+            self.bridge = Bridge()
+            self.bridge.command.connect(self.handle)
+            self.server = start_web_server(self.token, self.bridge)
+
+            self.dropdown = HostWindow(self, DROPDOWN_TITLE, frameless=True)
+            self.window = HostWindow(self, WINDOW_TITLE, frameless=False)
+            self.window.setMinimumSize(720, 480)
+
+            DATA_DIR.mkdir(parents=True, exist_ok=True)
+            self.profile = QWebEngineProfile("hyprcraft", app)
+            self.profile.setPersistentStoragePath(str(DATA_DIR / "storage"))
+            self.profile.setCachePath(str(DATA_DIR / "cache"))
+            self.profile.downloadRequested.connect(self.on_download)
+
+            self.view = QWebEngineView()
+            self.page = Page(self.profile, self)
+            self.view.setPage(self.page)
+            settings = self.page.settings()
+            settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanAccessClipboard, True)
+            settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanPaste, True)
+            settings.setAttribute(QWebEngineSettings.WebAttribute.ScrollAnimatorEnabled, True)
+            self.page.setBackgroundColor(Qt.GlobalColor.black)
+            self.page.loadFinished.connect(lambda ok: self.push_mode())
+            self.dropdown.layout().addWidget(self.view)
+
+            port = self.server.server_address[1]
+            self.view.setUrl(QUrl(f"http://127.0.0.1:{port}/index.html?host=dropdown&token={self.token}"))
+
+            # main() already found no live instance, so a leftover socket is stale.
+            RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+            QLocalServer.removeServer(str(SOCKET_PATH))
+            self.ipc_buffers = {}
+            self.ipc = QLocalServer()
+            self.ipc.setSocketOptions(QLocalServer.SocketOption.UserAccessOption)
+            self.ipc.newConnection.connect(self.on_ipc_connection)
+            if not self.ipc.listen(str(SOCKET_PATH)):
+                print(f"hyprcraft: cannot listen on {SOCKET_PATH}: {self.ipc.errorString()}", file=sys.stderr)
+
+        # -- IPC --------------------------------------------------------------
+
+        def on_ipc_connection(self):
+            while self.ipc.hasPendingConnections():
+                conn = self.ipc.nextPendingConnection()
+                conn.readyRead.connect(lambda c=conn: self.read_ipc(c))
+                conn.disconnected.connect(lambda c=conn: (self.read_ipc(c), c.deleteLater()))
+                # The client writes and hangs up immediately, so its command can
+                # already be buffered before readyRead is connected; drain it now.
+                self.read_ipc(conn)
+
+        def read_ipc(self, conn):
+            if conn.bytesAvailable():
+                self.ipc_buffers[conn] = self.ipc_buffers.get(conn, b"") + bytes(conn.readAll())
+            buffer = self.ipc_buffers.pop(conn, b"")
+            *lines, rest = buffer.split(b"\n")
+            if rest:
+                self.ipc_buffers[conn] = rest
+            for raw in lines:
+                line = raw.decode(errors="replace").strip()
+                if not line:
+                    continue
+                try:
+                    self.handle(json.loads(line))
+                except (ValueError, TypeError):
+                    pass
+
+        # -- Commands ---------------------------------------------------------
+
+        def handle(self, payload):
+            if payload.get("anchor"):
+                self.anchor = payload["anchor"]
+            if "hideOnBlur" in payload:
+                self.hide_on_blur = bool(payload["hideOnBlur"])
+            action = payload.get("action", "toggle")
+            debug(f"command {action} from {payload.get('source', 'socket')} (mode={self.mode}, dropdown={self.dropdown.isVisible()}, window={self.window.isVisible()})")
+            getattr(self, f"do_{action}", self.do_toggle)()
+
+        def do_toggle(self):
+            if self.mode == "window":
+                self.show_window()
+                return
+            if self.dropdown.isVisible():
+                self.dropdown.hide()
+                return
+            if time.monotonic() - self.last_focus_hide < REOPEN_GRACE_SECONDS:
+                return
+            self.show_dropdown()
+
+        def do_show(self):
+            if self.mode == "window":
+                self.show_window()
+            else:
+                self.show_dropdown()
+
+        def do_popout(self):
+            self.dropdown.hide()
+            self.move_view(self.window)
+            self.mode = "window"
+            self.push_mode()
+            self.show_window()
+
+        def do_dock(self):
+            self.window.hide()
+            self.move_view(self.dropdown)
+            self.mode = "dropdown"
+            self.push_mode()
+            self.show_dropdown()
+
+        def do_start(self):
+            pass
+
+        def do_hide(self):
+            self.hide_all()
+
+        def do_quit(self):
+            self.ipc.close()
+            self.server.shutdown()
+            self.app.quit()
+
+        # -- Windows ----------------------------------------------------------
+
+        def current_window(self):
+            return self.window if self.mode == "window" else self.dropdown
+
+        def move_view(self, target):
+            if self.view.parentWidget() is target:
+                return
+            self.view.parentWidget().layout().removeWidget(self.view)
+            target.layout().addWidget(self.view)
+            self.view.show()
+
+        def default_anchor(self):
+            screen = self.app.primaryScreen()
+            geometry = screen.geometry()
+            width = min(1280, geometry.width() - 32)
+            height = min(840, geometry.height() - 96)
+            return {
+                "monitor": screen.name(),
+                "x": (geometry.width() - width) // 2,
+                "y": 48,
+                "width": width,
+                "height": height,
+            }
+
+        def show_dropdown(self):
+            anchor = self.anchor or self.default_anchor()
+            install_dropdown_rule(anchor)
+            self.dropdown.resize(anchor["width"], anchor["height"])
+            self.dropdown.show()
+            self.dropdown.raise_()
+            self.dropdown.activateWindow()
+            self.view.setFocus()
+
+        def show_window(self):
+            if self.window.isVisible():
+                focus_window_by_title(WINDOW_TITLE)
+                return
+            install_window_rule()
+            self.window.show()
+            self.window.activateWindow()
+            self.view.setFocus()
+
+        def hide_all(self):
+            self.dropdown.hide()
+            self.window.hide()
+            if self.mode == "window":
+                self.move_view(self.dropdown)
+                self.mode = "dropdown"
+                self.push_mode()
+
+        def on_window_deactivated(self, window):
+            # Omarchy focuses windows on hover (follow_mouse = 1), so losing focus
+            # usually means the pointer merely drifted off; only hide when asked.
+            if not self.hide_on_blur or window is not self.dropdown or self.mode != "dropdown":
+                return
+            # Defer: focus may be moving to one of our own dialogs.
+            QTimer.singleShot(120, self.hide_dropdown_if_unfocused)
+
+        def hide_dropdown_if_unfocused(self):
+            if self.dialog_open or not self.dropdown.isVisible():
+                return
+            if self.app.activeWindow() is not None:
+                return
+            self.dropdown.hide()
+            self.last_focus_hide = time.monotonic()
+
+        def push_mode(self):
+            self.page.runJavaScript(
+                f"window.__hyprcraftHost && window.__hyprcraftHost.setMode({json.dumps(self.mode)})"
+            )
+
+        # -- Downloads --------------------------------------------------------
+
+        def on_download(self, download):
+            DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+            download.setDownloadDirectory(str(DOWNLOAD_DIR))
+            download.isFinishedChanged.connect(lambda d=download: self.on_download_finished(d))
+            download.accept()
+
+        def on_download_finished(self, download):
+            if download.state() == QWebEngineDownloadRequest.DownloadState.DownloadCompleted:
+                path = Path(download.downloadDirectory()) / download.downloadFileName()
+                notify("HyprCraft export saved", str(path))
+            elif download.state() == QWebEngineDownloadRequest.DownloadState.DownloadInterrupted:
+                notify("HyprCraft export failed", download.interruptReasonString())
+
+    QGuiApplication.setDesktopFileName(APP_CLASS)
+    app = QApplication([sys.argv[0]])
+    app.setApplicationName("HyprCraft")
+    app.setWindowIcon(QIcon.fromTheme("preferences-desktop-theme"))
+    app.setQuitOnLastWindowClosed(False)
+
+    if not (APP_DIR / "index.html").is_file():
+        notify("HyprCraft is not built", f"Missing {APP_DIR}/index.html — run the plugin install script.")
+        return 1
+
+    host = Host(app)
+    QTimer.singleShot(0, lambda: host.handle(initial_payload))
+    status = app.exec()
+
+    # Chromium requires pages to be destroyed before the profile they use.
+    from PyQt6 import sip
+    sip.delete(host.view)
+    sip.delete(host.page)
+    return status
+
+
+def main(argv):
+    args = parse_args(argv)
+    payload = command_payload(args)
+
+    if send_to_running_instance(payload):
+        return 0
+    if args.action in ("hide", "quit"):
+        return 0
+
+    # Each monitor's bar can fire at once; the lock makes exactly one of them
+    # the host while the others wait for its socket and hand over their command.
+    RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+    lock = open(LOCK_PATH, "w")
+    deadline = time.monotonic() + 15
+    while True:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except BlockingIOError:
+            if args.action == "start" or time.monotonic() > deadline:
+                return 0
+            time.sleep(0.2)
+            if send_to_running_instance(payload):
+                return 0
+
+    # Holding the lock, re-check: a host may have come up while we waited.
+    if send_to_running_instance(payload):
+        return 0
+    return run_host(payload)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -1,0 +1,369 @@
+#!/usr/bin/env python3
+"""Hyprland animation presets for Omarchy.
+
+Generates ~/.config/hypr/animation_preset.lua from a preset and a speed
+multiplier, then reloads Hyprland. The shell widget (omacraft.animations) drives
+this script, and it works just as well from a terminal or a keybinding.
+
+  omarchy-animations list [--json]
+  omarchy-animations status [--json]
+  omarchy-animations apply <preset> [--speed X]
+  omarchy-animations speed <X>          # 1.0 = preset speed, 2.0 = twice as fast
+  omarchy-animations next | prev        # cycle presets
+  omarchy-animations toggle             # Off <-> last preset
+  omarchy-animations preview <preset> [--speed X]   # print the Lua, change nothing
+  omarchy-animations style windows|workspaces <style|preset>
+                                        # e.g. "slide top", "popin 40%", "slidefadevert 30%";
+                                        # preset puts back the preset's own
+  omarchy-animations border <id|theme> [--loop|--no-loop] [--border-speed N]
+                                        # gradient window border; --loop spins it
+  omarchy-animations borders [--json]   # the border colour runs
+"""
+
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+PLUGIN_DIR = Path(__file__).resolve().parent.parent
+HOME = Path.home()
+CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config"))
+BUILTIN_PRESETS = PLUGIN_DIR / "presets.json"
+USER_PRESETS = CONFIG / "omarchy" / "animation-presets.json"
+STATE_FILE = CONFIG / "omarchy" / "animation-preset.json"
+LUA_FILE = CONFIG / "hypr" / "animation_preset.lua"
+
+# Curves Omarchy (or Hyprland itself) already defines.
+BUILTIN_CURVES = {"default", "easeOutQuint", "easeInOutCubic", "linear", "almostLinear", "quick"}
+MIN_SPEED, MAX_SPEED = 0.25, 3.0
+
+# Shapes the window and workspace overrides offer (Hyprland's animation styles).
+WINDOW_STYLES = ["preset", "popin 90%", "popin 60%", "popin 30%", "popin 10%", "gnomed",
+                 "slide", "slide top", "slide bottom", "slide left", "slide right"]
+WORKSPACE_STYLES = ["preset", "slide", "slidevert", "fade", "slidefade 20%", "slidefade 50%",
+                    "slidefadevert 20%", "slidefadevert 50%"]
+# Seconds one turn of a looping border takes (Hyprland allows up to 10).
+MIN_BORDER_SPEED, MAX_BORDER_SPEED = 1, 10
+
+
+def die(message, code=1):
+    print(f"omarchy-animations: {message}", file=sys.stderr)
+    sys.exit(code)
+
+
+def load_json(path, fallback):
+    try:
+        return json.loads(path.read_text())
+    except FileNotFoundError:
+        return fallback
+    except json.JSONDecodeError as error:
+        die(f"{path}: {error}")
+
+
+def sources():
+    return (load_json(BUILTIN_PRESETS, {"curves": {}, "presets": []}),
+            load_json(USER_PRESETS, {"curves": {}, "presets": []}))
+
+
+def borders():
+    """Border colour runs, stock then the user's own (same id replaces)."""
+    base, user = sources()
+    return {**base.get("borders", {}), **user.get("borders", {})}
+
+
+def library():
+    """Built-in presets plus the user's own; a user preset with a stock id replaces it."""
+    base, user = sources()
+    curves = {**base.get("curves", {}), **user.get("curves", {})}
+    presets = {}
+    for preset in base.get("presets", []):
+        presets[preset["id"]] = {**preset, "custom": False}
+    for preset in user.get("presets", []):
+        presets[preset["id"]] = {**preset, "custom": True}
+    return curves, list(presets.values())
+
+
+def find(presets, preset_id):
+    for preset in presets:
+        if preset["id"] == preset_id:
+            return preset
+    die(f"unknown preset '{preset_id}' (try: {', '.join(p['id'] for p in presets)})")
+
+
+def read_state():
+    state = load_json(STATE_FILE, {})
+    return {
+        "preset": state.get("preset", "omarchy"),
+        "speed": clamp_speed(state.get("speed", 1.0)),
+        "last": state.get("last", "omarchy"),
+        "windowStyle": state.get("windowStyle", "preset"),
+        "workspaceStyle": state.get("workspaceStyle", "preset"),
+        "border": state.get("border", "theme"),
+        "borderLoop": bool(state.get("borderLoop", False)),
+        "borderSpeed": clamp_border_speed(state.get("borderSpeed", 6)),
+    }
+
+
+def clamp_border_speed(value):
+    try:
+        return int(min(MAX_BORDER_SPEED, max(MIN_BORDER_SPEED, float(value))))
+    except (TypeError, ValueError):
+        return 6
+
+
+def write_state(state):
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    STATE_FILE.write_text(json.dumps(state, indent=2) + "\n")
+
+
+def clamp_speed(value):
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        die(f"speed must be a number, got '{value}'")
+    return round(min(MAX_SPEED, max(MIN_SPEED, value)), 2)
+
+
+def lua_number(value):
+    text = f"{float(value):.4f}".rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def lua_string(value):
+    return json.dumps(str(value))
+
+
+def lua_colors(colors, angle):
+    stops = ", ".join(lua_string(f"rgba({c.lstrip('#')}ee)") for c in colors)
+    return f"{{ colors = {{ {stops} }}, angle = {int(angle)} }}"
+
+
+def render(preset, curves, speed, look=None):
+    """The preset's Lua. look holds the overrides from the state file: window
+    and workspace styles, and the border colours and their loop."""
+    look = look or {}
+    lines = [
+        "-- Generated by the omacraft.animations Omarchy plugin. Don't edit by hand:",
+        "-- pick a preset from the bar, or run `omarchy-animations`. Add your own",
+        "-- presets in ~/.config/omarchy/animation-presets.json.",
+        f"-- preset: {preset['id']}  speed: {lua_number(speed)}x",
+        "",
+    ]
+
+    enabled = preset.get("enabled", True)
+    lines.append(f"hl.config({{ animations = {{ enabled = {'true' if enabled else 'false'} }} }})")
+    if not enabled:
+        return "\n".join(lines) + "\n"
+
+    animations = dict(preset.get("animations", {}))
+    # A style override replaces the shape, keeping the preset's timing.
+    for leaves, key in ((("windows", "windowsIn", "windowsOut"), "windowStyle"), (("workspaces",), "workspaceStyle")):
+        style = look.get(key, "preset")
+        if style and style != "preset":
+            for leaf in leaves:
+                spec = animations.get(leaf)
+                if spec:
+                    animations[leaf] = [spec[0], spec[1], style]
+    used = []
+    for spec in animations.values():
+        if spec and spec[1] not in BUILTIN_CURVES and spec[1] not in used:
+            used.append(spec[1])
+
+    if used:
+        lines.append("")
+    for name in used:
+        curve = curves.get(name)
+        if curve is None:
+            die(f"preset '{preset['id']}' uses undefined curve '{name}'")
+        if curve.get("type") == "spring":
+            lines.append(
+                f"hl.curve({lua_string(name)}, {{ type = \"spring\", mass = {lua_number(curve['mass'])}, "
+                f"stiffness = {lua_number(curve['stiffness'])}, dampening = {lua_number(curve['dampening'])} }})"
+            )
+        else:
+            (x0, y0), (x1, y1) = curve["points"]
+            lines.append(
+                f"hl.curve({lua_string(name)}, {{ type = \"bezier\", points = {{ "
+                f"{{ {lua_number(x0)}, {lua_number(y0)} }}, {{ {lua_number(x1)}, {lua_number(y1)} }} }} }})"
+            )
+
+    if animations:
+        lines.append("")
+    for leaf, spec in animations.items():
+        if not spec:
+            lines.append(f"hl.animation({{ leaf = {lua_string(leaf)}, enabled = false }})")
+            continue
+        # Hyprland takes 0.1 to 100 (deciseconds).
+        duration = min(100, max(0.1, round(float(spec[0]) / speed, 2)))
+        curve_name = spec[1]
+        kind = "spring" if curves.get(curve_name, {}).get("type") == "spring" else "bezier"
+        parts = [
+            f"leaf = {lua_string(leaf)}",
+            "enabled = true",
+            f"speed = {lua_number(duration)}",
+            f"{kind} = {lua_string(curve_name)}",
+        ]
+        if len(spec) > 2 and spec[2]:
+            parts.append(f"style = {lua_string(spec[2])}")
+        lines.append(f"hl.animation({{ {', '.join(parts)} }})")
+
+    run = borders().get(look.get("border", "theme"))
+    if run and run.get("colors"):
+        colors = lua_colors(run["colors"], run.get("angle", 45))
+        lines += ["", f"-- border: {look['border']}",
+                  f"hl.config({{ general = {{ col = {{ active_border = {colors} }} }}, "
+                  f"group = {{ col = {{ border_active = {colors} }} }} }})"]
+        if look.get("borderLoop"):
+            seconds = clamp_border_speed(look.get("borderSpeed", 6))
+            lines.append(f"hl.animation({{ leaf = \"borderangle\", enabled = true, speed = {seconds * 10}, "
+                         f"bezier = \"linear\", style = \"loop\" }})")
+
+    return "\n".join(lines) + "\n"
+
+
+def hyprctl(*args):
+    try:
+        return subprocess.run(["hyprctl", *args], capture_output=True, text=True, timeout=10)
+    except (FileNotFoundError, subprocess.TimeoutExpired) as error:
+        return subprocess.CompletedProcess(args, 1, "", str(error))
+
+
+def apply(preset_id, speed):
+    curves, presets = library()
+    preset = find(presets, preset_id)
+    speed = clamp_speed(speed)
+
+    state = read_state()
+    LUA_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = LUA_FILE.with_suffix(".lua.tmp")
+    tmp.write_text(render(preset, curves, speed, state))
+    tmp.replace(LUA_FILE)
+
+    last = preset_id if preset.get("enabled", True) else state["last"]
+    write_state({**state, "preset": preset_id, "speed": speed, "last": last})
+
+    if not os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
+        print(f"Wrote {LUA_FILE} (Hyprland not running, applies on next start)")
+        return
+
+    hyprctl("reload")
+    errors = hyprctl("configerrors").stdout.strip()
+    if errors:
+        die(f"Hyprland reported config errors after applying '{preset_id}':\n{errors}")
+    print(f"Animations: {preset['name']} at {lua_number(speed)}x")
+
+
+def ids_in_order():
+    return [p["id"] for p in library()[1]]
+
+
+def cycle(step):
+    state = read_state()
+    ids = [i for i in ids_in_order() if i != "off"]
+    current = state["preset"] if state["preset"] in ids else state["last"]
+    index = ids.index(current) if current in ids else -1
+    apply(ids[(index + step) % len(ids)], state["speed"])
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(__doc__.strip())
+        return
+
+    command, rest = argv[0], argv[1:]
+    as_json = "--json" in rest
+    rest = [a for a in rest if a != "--json"]
+
+    speed = None
+    if "--speed" in rest:
+        at = rest.index("--speed")
+        if at + 1 >= len(rest):
+            die("--speed needs a value")
+        speed = rest[at + 1]
+        del rest[at : at + 2]
+
+    if command == "list":
+        _, presets = library()
+        if as_json:
+            print(json.dumps([
+                {k: p.get(k) for k in ("id", "name", "description", "custom")} for p in presets
+            ]))
+        else:
+            for p in presets:
+                print(f"{p['id']:<12} {p.get('description', '')}{'  (custom)' if p['custom'] else ''}")
+    elif command == "status":
+        state = read_state()
+        if as_json:
+            _, presets = library()
+            print(json.dumps({
+                **state,
+                "file": str(LUA_FILE),
+                "presets": [{k: p.get(k) for k in ("id", "name", "description", "custom")} for p in presets],
+                "borders": [{"id": k, **v} for k, v in borders().items()],
+                "windowStyles": WINDOW_STYLES,
+                "workspaceStyles": WORKSPACE_STYLES,
+            }))
+        else:
+            print(f"preset: {state['preset']}\nspeed:  {state['speed']}x\nfile:   {LUA_FILE}")
+    elif command == "apply":
+        if not rest:
+            die("apply needs a preset id")
+        apply(rest[0], speed if speed is not None else read_state()["speed"])
+    elif command == "speed":
+        if not rest:
+            die("speed needs a value, e.g. 1.5")
+        apply(read_state()["preset"], rest[0])
+    elif command == "next":
+        cycle(1)
+    elif command == "prev":
+        cycle(-1)
+    elif command == "toggle":
+        state = read_state()
+        target = state["last"] if state["preset"] == "off" else "off"
+        apply(target, state["speed"])
+    elif command == "preview":
+        if not rest:
+            die("preview needs a preset id")
+        curves, presets = library()
+        sys.stdout.write(render(find(presets, rest[0]), curves, clamp_speed(speed or 1.0), read_state()))
+    elif command == "style":
+        if len(rest) < 2 or rest[0] not in ("windows", "workspaces"):
+            die("style needs windows|workspaces and a style, e.g. style windows \"slide top\"")
+        value = " ".join(rest[1:]).strip()
+        allowed = WINDOW_STYLES if rest[0] == "windows" else WORKSPACE_STYLES
+        if value not in allowed:
+            die(f"unknown {rest[0]} style '{value}' (try: {', '.join(allowed)})")
+        state = read_state()
+        write_state({**state, ("windowStyle" if rest[0] == "windows" else "workspaceStyle"): value})
+        apply(state["preset"], state["speed"])
+    elif command == "border":
+        if not rest:
+            die("border needs a colour run id or theme")
+        if rest[0] != "theme" and rest[0] not in borders():
+            die(f"unknown border '{rest[0]}' (try: theme, {', '.join(borders())})")
+        state = {**read_state(), "border": rest[0]}
+        if "--loop" in rest:
+            state["borderLoop"] = True
+        if "--no-loop" in rest:
+            state["borderLoop"] = False
+        if "--border-speed" in rest:
+            at = rest.index("--border-speed")
+            if at + 1 >= len(rest):
+                die("--border-speed needs a value in seconds")
+            state["borderSpeed"] = clamp_border_speed(rest[at + 1])
+        write_state(state)
+        apply(state["preset"], state["speed"])
+    elif command == "borders":
+        runs = borders()
+        if as_json:
+            print(json.dumps([{"id": k, **v} for k, v in runs.items()]))
+        else:
+            for k, v in runs.items():
+                print(f"{k:<12} {' '.join('#' + c for c in v['colors'])}")
+    else:
+        die(f"unknown command '{command}' (see --help)")
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

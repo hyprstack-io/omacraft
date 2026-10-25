@@ -1,0 +1,3878 @@
+{
+  "_comment": "Animation presets for omacraft.animations. Each animation is [speed, curve, style?] or false to disable the leaf. Speed is Hyprland's duration in deciseconds (lower = faster). Curves may name Omarchy's built-ins (default, easeOutQuint, easeInOutCubic, linear, almostLinear, quick) or any entry in `curves`. Add your own presets in ~/.config/omarchy/animation-presets.json using the same shape. `borders` are colour runs for the window border (`omarchy-animations border <id>`), hex without #.",
+  "curves": {
+    "ap_outExpo": {
+      "type": "bezier",
+      "points": [
+        [
+          0.16,
+          1
+        ],
+        [
+          0.3,
+          1
+        ]
+      ]
+    },
+    "ap_inCubic": {
+      "type": "bezier",
+      "points": [
+        [
+          0.32,
+          0
+        ],
+        [
+          0.67,
+          0
+        ]
+      ]
+    },
+    "ap_inOutSine": {
+      "type": "bezier",
+      "points": [
+        [
+          0.37,
+          0
+        ],
+        [
+          0.63,
+          1
+        ]
+      ]
+    },
+    "ap_outBack": {
+      "type": "bezier",
+      "points": [
+        [
+          0.34,
+          1.3
+        ],
+        [
+          0.64,
+          1
+        ]
+      ]
+    },
+    "ap_overshoot": {
+      "type": "bezier",
+      "points": [
+        [
+          0.34,
+          1.56
+        ],
+        [
+          0.64,
+          1
+        ]
+      ]
+    },
+    "ap_snap": {
+      "type": "bezier",
+      "points": [
+        [
+          0.05,
+          0.9
+        ],
+        [
+          0.1,
+          1.05
+        ]
+      ]
+    },
+    "ap_material": {
+      "type": "bezier",
+      "points": [
+        [
+          0.2,
+          0
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    "ap_drift": {
+      "type": "bezier",
+      "points": [
+        [
+          0.25,
+          0.1
+        ],
+        [
+          0.25,
+          1
+        ]
+      ]
+    },
+    "ap_springSoft": {
+      "type": "spring",
+      "mass": 1,
+      "stiffness": 170,
+      "dampening": 26
+    },
+    "ap_springCritical": {
+      "type": "spring",
+      "mass": 1,
+      "stiffness": 260,
+      "dampening": 32
+    },
+    "ap_springBouncy": {
+      "type": "spring",
+      "mass": 1,
+      "stiffness": 300,
+      "dampening": 15
+    },
+    "ap_springWobbly": {
+      "type": "spring",
+      "mass": 1,
+      "stiffness": 180,
+      "dampening": 9
+    },
+    "ap_anticipate": {
+      "type": "bezier",
+      "points": [
+        [
+          0.6,
+          -0.28
+        ],
+        [
+          0.735,
+          0.045
+        ]
+      ]
+    },
+    "ap_backOut": {
+      "type": "bezier",
+      "points": [
+        [
+          0.18,
+          1.6
+        ],
+        [
+          0.35,
+          1
+        ]
+      ]
+    },
+    "ap_circOut": {
+      "type": "bezier",
+      "points": [
+        [
+          0,
+          0.55
+        ],
+        [
+          0.45,
+          1
+        ]
+      ]
+    },
+    "ap_springJiggle": {
+      "type": "spring",
+      "mass": 1,
+      "stiffness": 400,
+      "dampening": 12
+    },
+    "mx_spring": {
+      "type": "bezier",
+      "points": [
+        [
+          0.05,
+          0.9
+        ],
+        [
+          0.1,
+          1.05
+        ]
+      ]
+    },
+    "mx_easeOutExpo": {
+      "type": "bezier",
+      "points": [
+        [
+          0.16,
+          1
+        ],
+        [
+          0.3,
+          1
+        ]
+      ]
+    },
+    "mx_easeOutSine": {
+      "type": "bezier",
+      "points": [
+        [
+          0.61,
+          1
+        ],
+        [
+          0.88,
+          1
+        ]
+      ]
+    },
+    "mx_emphasized": {
+      "type": "bezier",
+      "points": [
+        [
+          0.05,
+          0.7
+        ],
+        [
+          0.1,
+          1
+        ]
+      ]
+    },
+    "mx_accel": {
+      "type": "bezier",
+      "points": [
+        [
+          0.3,
+          0
+        ],
+        [
+          1,
+          1
+        ]
+      ]
+    },
+    "mx_material": {
+      "type": "bezier",
+      "points": [
+        [
+          0.2,
+          0
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    "mx_softBounce": {
+      "type": "bezier",
+      "points": [
+        [
+          0.3,
+          1.3
+        ],
+        [
+          0.5,
+          1
+        ]
+      ]
+    },
+    "mx_easeInOutQuart": {
+      "type": "bezier",
+      "points": [
+        [
+          0.76,
+          0
+        ],
+        [
+          0.24,
+          1
+        ]
+      ]
+    },
+    "mx_easeInOutSine": {
+      "type": "bezier",
+      "points": [
+        [
+          0.37,
+          0
+        ],
+        [
+          0.63,
+          1
+        ]
+      ]
+    },
+    "mx_slowStart": {
+      "type": "bezier",
+      "points": [
+        [
+          0.6,
+          0
+        ],
+        [
+          0.4,
+          1
+        ]
+      ]
+    },
+    "mx_easeOutBack": {
+      "type": "bezier",
+      "points": [
+        [
+          0.34,
+          1.56
+        ],
+        [
+          0.64,
+          1
+        ]
+      ]
+    },
+    "mx_easeInOutBack": {
+      "type": "bezier",
+      "points": [
+        [
+          0.68,
+          -0.55
+        ],
+        [
+          0.27,
+          1.55
+        ]
+      ]
+    },
+    "mx_overshot": {
+      "type": "bezier",
+      "points": [
+        [
+          0.13,
+          0.99
+        ],
+        [
+          0.29,
+          1.1
+        ]
+      ]
+    },
+    "mx_snap": {
+      "type": "bezier",
+      "points": [
+        [
+          0.2,
+          1.4
+        ],
+        [
+          0.3,
+          1
+        ]
+      ]
+    },
+    "mx_drift": {
+      "type": "bezier",
+      "points": [
+        [
+          0.25,
+          0.1
+        ],
+        [
+          0.25,
+          1
+        ]
+      ]
+    }
+  },
+  "presets": [
+    {
+      "id": "omarchy",
+      "name": "Omarchy",
+      "description": "Stock Omarchy animations",
+      "animations": {
+        "global": [
+          10,
+          "default"
+        ],
+        "border": [
+          5.39,
+          "easeOutQuint"
+        ],
+        "windows": [
+          3.79,
+          "easeOutQuint"
+        ],
+        "windowsIn": [
+          4.1,
+          "easeOutQuint",
+          "popin 87%"
+        ],
+        "windowsOut": [
+          1.49,
+          "linear",
+          "popin 87%"
+        ],
+        "fadeIn": [
+          1.73,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          1.46,
+          "almostLinear"
+        ],
+        "fade": [
+          3.03,
+          "quick"
+        ],
+        "fadeSwitch": false,
+        "layers": [
+          3.81,
+          "easeOutQuint"
+        ],
+        "layersIn": [
+          4,
+          "easeOutQuint",
+          "fade"
+        ],
+        "layersOut": [
+          1.5,
+          "linear",
+          "fade"
+        ],
+        "fadeLayersIn": [
+          1.79,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          1.39,
+          "almostLinear"
+        ],
+        "workspaces": false
+      }
+    },
+    {
+      "id": "off",
+      "name": "Off",
+      "description": "No animations at all",
+      "enabled": false,
+      "animations": {}
+    },
+    {
+      "id": "snappy",
+      "name": "Snappy",
+      "description": "Fast and crisp, barely there",
+      "animations": {
+        "global": [
+          5,
+          "ap_outExpo"
+        ],
+        "border": [
+          3,
+          "ap_outExpo"
+        ],
+        "windows": [
+          2.2,
+          "ap_outExpo"
+        ],
+        "windowsIn": [
+          2.2,
+          "ap_outExpo",
+          "popin 95%"
+        ],
+        "windowsOut": [
+          1.2,
+          "linear",
+          "popin 95%"
+        ],
+        "windowsMove": [
+          2,
+          "ap_outExpo"
+        ],
+        "fade": [
+          1.5,
+          "quick"
+        ],
+        "fadeIn": [
+          1.2,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          1,
+          "almostLinear"
+        ],
+        "layers": [
+          2,
+          "ap_outExpo"
+        ],
+        "layersIn": [
+          2,
+          "ap_outExpo",
+          "fade"
+        ],
+        "layersOut": [
+          1,
+          "linear",
+          "fade"
+        ],
+        "fadeLayersIn": [
+          1.2,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          1,
+          "almostLinear"
+        ],
+        "workspaces": [
+          2,
+          "ap_outExpo",
+          "slide"
+        ]
+      }
+    },
+    {
+      "id": "minimal",
+      "name": "Minimal",
+      "description": "Fades only, nothing moves",
+      "animations": {
+        "global": [
+          4,
+          "almostLinear"
+        ],
+        "border": [
+          3,
+          "linear"
+        ],
+        "windows": [
+          2,
+          "almostLinear"
+        ],
+        "windowsIn": [
+          2,
+          "almostLinear",
+          "popin 100%"
+        ],
+        "windowsOut": [
+          1.5,
+          "almostLinear",
+          "popin 100%"
+        ],
+        "windowsMove": false,
+        "fade": [
+          2,
+          "almostLinear"
+        ],
+        "fadeIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          1.5,
+          "almostLinear"
+        ],
+        "layers": [
+          2,
+          "almostLinear"
+        ],
+        "layersIn": [
+          2,
+          "almostLinear",
+          "fade"
+        ],
+        "layersOut": [
+          1.5,
+          "almostLinear",
+          "fade"
+        ],
+        "fadeLayersIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          1.5,
+          "almostLinear"
+        ],
+        "workspaces": [
+          2.5,
+          "almostLinear",
+          "fade"
+        ]
+      }
+    },
+    {
+      "id": "smooth",
+      "name": "Smooth",
+      "description": "Relaxed eases with sliding workspaces",
+      "animations": {
+        "global": [
+          8,
+          "ap_inOutSine"
+        ],
+        "border": [
+          6,
+          "ap_inOutSine"
+        ],
+        "windows": [
+          5,
+          "easeOutQuint"
+        ],
+        "windowsIn": [
+          5,
+          "easeOutQuint",
+          "popin 85%"
+        ],
+        "windowsOut": [
+          3.5,
+          "ap_inOutSine",
+          "popin 85%"
+        ],
+        "windowsMove": [
+          4.5,
+          "easeOutQuint"
+        ],
+        "fade": [
+          4,
+          "ap_inOutSine"
+        ],
+        "fadeIn": [
+          3,
+          "ap_inOutSine"
+        ],
+        "fadeOut": [
+          2.5,
+          "ap_inOutSine"
+        ],
+        "layers": [
+          4,
+          "easeOutQuint"
+        ],
+        "layersIn": [
+          4,
+          "easeOutQuint",
+          "fade"
+        ],
+        "layersOut": [
+          2.5,
+          "ap_inOutSine",
+          "fade"
+        ],
+        "fadeLayersIn": [
+          3,
+          "ap_inOutSine"
+        ],
+        "fadeLayersOut": [
+          2.5,
+          "ap_inOutSine"
+        ],
+        "workspaces": [
+          5,
+          "easeInOutCubic",
+          "slide"
+        ]
+      }
+    },
+    {
+      "id": "fluid",
+      "name": "Fluid",
+      "description": "Soft slide-fades, macOS-ish",
+      "animations": {
+        "global": [
+          7,
+          "ap_material"
+        ],
+        "border": [
+          5,
+          "ap_material"
+        ],
+        "windows": [
+          4.5,
+          "ap_material"
+        ],
+        "windowsIn": [
+          4.5,
+          "ap_material",
+          "popin 90%"
+        ],
+        "windowsOut": [
+          3,
+          "ap_inCubic",
+          "popin 90%"
+        ],
+        "windowsMove": [
+          4,
+          "ap_material"
+        ],
+        "fade": [
+          3.5,
+          "ap_material"
+        ],
+        "fadeIn": [
+          3,
+          "ap_material"
+        ],
+        "fadeOut": [
+          2.5,
+          "ap_inCubic"
+        ],
+        "layers": [
+          4,
+          "ap_material"
+        ],
+        "layersIn": [
+          4,
+          "ap_material",
+          "slide"
+        ],
+        "layersOut": [
+          2.5,
+          "ap_inCubic",
+          "slide"
+        ],
+        "fadeLayersIn": [
+          3,
+          "ap_material"
+        ],
+        "fadeLayersOut": [
+          2.5,
+          "ap_inCubic"
+        ],
+        "workspaces": [
+          5,
+          "ap_material",
+          "slidefade 20%"
+        ]
+      }
+    },
+    {
+      "id": "springy",
+      "name": "Springy",
+      "description": "Physics springs, no overshoot",
+      "animations": {
+        "global": [
+          6,
+          "ap_springCritical"
+        ],
+        "border": [
+          5,
+          "ap_springCritical"
+        ],
+        "windows": [
+          4.5,
+          "ap_springCritical"
+        ],
+        "windowsIn": [
+          4.5,
+          "ap_springCritical",
+          "popin 85%"
+        ],
+        "windowsOut": [
+          2,
+          "linear",
+          "popin 85%"
+        ],
+        "windowsMove": [
+          4.5,
+          "ap_springCritical"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "fadeIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          1.5,
+          "almostLinear"
+        ],
+        "layers": [
+          4,
+          "ap_springCritical"
+        ],
+        "layersIn": [
+          4,
+          "ap_springCritical",
+          "fade"
+        ],
+        "layersOut": [
+          1.5,
+          "linear",
+          "fade"
+        ],
+        "fadeLayersIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          1.5,
+          "almostLinear"
+        ],
+        "workspaces": [
+          5,
+          "ap_springCritical",
+          "slide"
+        ]
+      }
+    },
+    {
+      "id": "bouncy",
+      "name": "Bouncy",
+      "description": "Springs that overshoot and settle",
+      "animations": {
+        "global": [
+          7,
+          "ap_springBouncy"
+        ],
+        "border": [
+          5,
+          "ap_outExpo"
+        ],
+        "windows": [
+          5,
+          "ap_springBouncy"
+        ],
+        "windowsIn": [
+          5,
+          "ap_springBouncy",
+          "popin 70%"
+        ],
+        "windowsOut": [
+          2,
+          "ap_inCubic",
+          "popin 80%"
+        ],
+        "windowsMove": [
+          5,
+          "ap_springBouncy"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "fadeIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          1.5,
+          "almostLinear"
+        ],
+        "layers": [
+          4.5,
+          "ap_springBouncy"
+        ],
+        "layersIn": [
+          4.5,
+          "ap_springBouncy",
+          "popin 80%"
+        ],
+        "layersOut": [
+          1.5,
+          "linear",
+          "fade"
+        ],
+        "fadeLayersIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          1.5,
+          "almostLinear"
+        ],
+        "workspaces": [
+          6,
+          "ap_springBouncy",
+          "slide"
+        ]
+      }
+    },
+    {
+      "id": "jelly",
+      "name": "Jelly",
+      "description": "Loose, wobbly springs everywhere",
+      "animations": {
+        "global": [
+          8,
+          "ap_springWobbly"
+        ],
+        "border": [
+          6,
+          "ap_springWobbly"
+        ],
+        "windows": [
+          6,
+          "ap_springWobbly"
+        ],
+        "windowsIn": [
+          6,
+          "ap_springWobbly",
+          "popin 60%"
+        ],
+        "windowsOut": [
+          2.5,
+          "ap_inCubic",
+          "popin 70%"
+        ],
+        "windowsMove": [
+          6,
+          "ap_springWobbly"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "fadeIn": [
+          2.5,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          2,
+          "almostLinear"
+        ],
+        "layers": [
+          5,
+          "ap_springWobbly"
+        ],
+        "layersIn": [
+          5,
+          "ap_springWobbly",
+          "popin 70%"
+        ],
+        "layersOut": [
+          2,
+          "linear",
+          "fade"
+        ],
+        "fadeLayersIn": [
+          2.5,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          2,
+          "almostLinear"
+        ],
+        "workspaces": [
+          7,
+          "ap_springWobbly",
+          "slidevert"
+        ]
+      }
+    },
+    {
+      "id": "elastic",
+      "name": "Elastic",
+      "description": "Overshooting pop-ins with a snap",
+      "animations": {
+        "global": [
+          6,
+          "ap_overshoot"
+        ],
+        "border": [
+          4,
+          "ap_outExpo"
+        ],
+        "windows": [
+          4,
+          "ap_overshoot"
+        ],
+        "windowsIn": [
+          4,
+          "ap_overshoot",
+          "popin 60%"
+        ],
+        "windowsOut": [
+          2,
+          "ap_inCubic",
+          "popin 60%"
+        ],
+        "windowsMove": [
+          4,
+          "ap_outBack"
+        ],
+        "fade": [
+          2.5,
+          "quick"
+        ],
+        "fadeIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          1.5,
+          "almostLinear"
+        ],
+        "layers": [
+          3.5,
+          "ap_outBack"
+        ],
+        "layersIn": [
+          3.5,
+          "ap_outBack",
+          "popin 75%"
+        ],
+        "layersOut": [
+          1.5,
+          "linear",
+          "fade"
+        ],
+        "fadeLayersIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          1.5,
+          "almostLinear"
+        ],
+        "workspaces": [
+          4.5,
+          "ap_outBack",
+          "slide"
+        ]
+      }
+    },
+    {
+      "id": "slide",
+      "name": "Slide",
+      "description": "Windows and layers slide into place",
+      "animations": {
+        "global": [
+          6,
+          "easeOutQuint"
+        ],
+        "border": [
+          5,
+          "easeOutQuint"
+        ],
+        "windows": [
+          4,
+          "easeOutQuint",
+          "slide"
+        ],
+        "windowsIn": [
+          4,
+          "easeOutQuint",
+          "slide"
+        ],
+        "windowsOut": [
+          3,
+          "ap_inCubic",
+          "slide"
+        ],
+        "windowsMove": [
+          4,
+          "easeOutQuint",
+          "slide"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "fadeIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          2,
+          "almostLinear"
+        ],
+        "layers": [
+          4,
+          "easeOutQuint",
+          "slide"
+        ],
+        "layersIn": [
+          4,
+          "easeOutQuint",
+          "slide"
+        ],
+        "layersOut": [
+          2.5,
+          "ap_inCubic",
+          "slide"
+        ],
+        "fadeLayersIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          2,
+          "almostLinear"
+        ],
+        "workspaces": [
+          4.5,
+          "easeOutQuint",
+          "slide"
+        ]
+      }
+    },
+    {
+      "id": "vertical",
+      "name": "Vertical",
+      "description": "Windows rise up, workspaces stack",
+      "animations": {
+        "global": [
+          6,
+          "ap_outExpo"
+        ],
+        "border": [
+          5,
+          "ap_outExpo"
+        ],
+        "windows": [
+          4,
+          "ap_outExpo",
+          "slide bottom"
+        ],
+        "windowsIn": [
+          4,
+          "ap_outExpo",
+          "slide bottom"
+        ],
+        "windowsOut": [
+          3,
+          "ap_inCubic",
+          "slide bottom"
+        ],
+        "windowsMove": [
+          4,
+          "ap_outExpo"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "fadeIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          2,
+          "almostLinear"
+        ],
+        "layers": [
+          4,
+          "ap_outExpo",
+          "slide"
+        ],
+        "layersIn": [
+          4,
+          "ap_outExpo",
+          "slide"
+        ],
+        "layersOut": [
+          2.5,
+          "ap_inCubic",
+          "slide"
+        ],
+        "fadeLayersIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          2,
+          "almostLinear"
+        ],
+        "workspaces": [
+          5,
+          "ap_outExpo",
+          "slidefadevert 30%"
+        ]
+      }
+    },
+    {
+      "id": "gnome",
+      "name": "Gnome",
+      "description": "Windows unfold from their center line",
+      "animations": {
+        "global": [
+          6,
+          "ap_material"
+        ],
+        "border": [
+          5,
+          "ap_material"
+        ],
+        "windows": [
+          4,
+          "ap_material",
+          "gnomed"
+        ],
+        "windowsIn": [
+          4,
+          "ap_material",
+          "gnomed"
+        ],
+        "windowsOut": [
+          3,
+          "ap_inCubic",
+          "gnomed"
+        ],
+        "windowsMove": [
+          4,
+          "ap_material"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "fadeIn": [
+          2.5,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          2,
+          "almostLinear"
+        ],
+        "layers": [
+          4,
+          "ap_material"
+        ],
+        "layersIn": [
+          4,
+          "ap_material",
+          "fade"
+        ],
+        "layersOut": [
+          2,
+          "ap_inCubic",
+          "fade"
+        ],
+        "fadeLayersIn": [
+          2.5,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          2,
+          "almostLinear"
+        ],
+        "workspaces": [
+          5,
+          "ap_material",
+          "slidefade 15%"
+        ]
+      }
+    },
+    {
+      "id": "dreamy",
+      "name": "Dreamy",
+      "description": "Slow, drifting and cinematic",
+      "animations": {
+        "global": [
+          12,
+          "ap_drift"
+        ],
+        "border": [
+          10,
+          "ap_drift"
+        ],
+        "windows": [
+          8,
+          "ap_drift"
+        ],
+        "windowsIn": [
+          8,
+          "ap_drift",
+          "popin 80%"
+        ],
+        "windowsOut": [
+          6,
+          "ap_drift",
+          "popin 80%"
+        ],
+        "windowsMove": [
+          7,
+          "ap_drift"
+        ],
+        "fade": [
+          7,
+          "ap_inOutSine"
+        ],
+        "fadeIn": [
+          6,
+          "ap_inOutSine"
+        ],
+        "fadeOut": [
+          5,
+          "ap_inOutSine"
+        ],
+        "layers": [
+          7,
+          "ap_drift"
+        ],
+        "layersIn": [
+          7,
+          "ap_drift",
+          "fade"
+        ],
+        "layersOut": [
+          5,
+          "ap_drift",
+          "fade"
+        ],
+        "fadeLayersIn": [
+          6,
+          "ap_inOutSine"
+        ],
+        "fadeLayersOut": [
+          5,
+          "ap_inOutSine"
+        ],
+        "workspaces": [
+          9,
+          "ap_drift",
+          "slidefadevert 20%"
+        ]
+      }
+    },
+    {
+      "id": "arcade",
+      "name": "Arcade",
+      "description": "Linear, mechanical and quick",
+      "animations": {
+        "global": [
+          4,
+          "linear"
+        ],
+        "border": [
+          3,
+          "linear"
+        ],
+        "windows": [
+          2.5,
+          "linear",
+          "slide"
+        ],
+        "windowsIn": [
+          2.5,
+          "linear",
+          "slide"
+        ],
+        "windowsOut": [
+          2,
+          "linear",
+          "slide"
+        ],
+        "windowsMove": [
+          2.5,
+          "linear"
+        ],
+        "fade": false,
+        "fadeIn": false,
+        "fadeOut": false,
+        "layers": [
+          2.5,
+          "linear",
+          "slide"
+        ],
+        "layersIn": [
+          2.5,
+          "linear",
+          "slide"
+        ],
+        "layersOut": [
+          2,
+          "linear",
+          "slide"
+        ],
+        "fadeLayersIn": false,
+        "fadeLayersOut": false,
+        "workspaces": [
+          3,
+          "linear",
+          "slide"
+        ]
+      }
+    },
+    {
+      "id": "zen",
+      "name": "Zen",
+      "description": "Gentle fades, workspaces dissolve",
+      "animations": {
+        "global": [
+          8,
+          "ap_inOutSine"
+        ],
+        "border": [
+          8,
+          "ap_inOutSine"
+        ],
+        "windows": [
+          4,
+          "ap_inOutSine"
+        ],
+        "windowsIn": [
+          4,
+          "ap_inOutSine",
+          "popin 97%"
+        ],
+        "windowsOut": [
+          3.5,
+          "ap_inOutSine",
+          "popin 97%"
+        ],
+        "windowsMove": [
+          4,
+          "ap_inOutSine"
+        ],
+        "fade": [
+          5,
+          "ap_inOutSine"
+        ],
+        "fadeIn": [
+          4,
+          "ap_inOutSine"
+        ],
+        "fadeOut": [
+          3.5,
+          "ap_inOutSine"
+        ],
+        "layers": [
+          4,
+          "ap_inOutSine"
+        ],
+        "layersIn": [
+          4,
+          "ap_inOutSine",
+          "fade"
+        ],
+        "layersOut": [
+          3,
+          "ap_inOutSine",
+          "fade"
+        ],
+        "fadeLayersIn": [
+          4,
+          "ap_inOutSine"
+        ],
+        "fadeLayersOut": [
+          3,
+          "ap_inOutSine"
+        ],
+        "workspaces": [
+          5,
+          "ap_inOutSine",
+          "fade"
+        ]
+      }
+    },
+    {
+      "id": "snap",
+      "name": "Snap",
+      "description": "Tiny overshoot, lightning fast",
+      "animations": {
+        "global": [
+          4,
+          "ap_snap"
+        ],
+        "border": [
+          3,
+          "ap_snap"
+        ],
+        "windows": [
+          2.5,
+          "ap_snap"
+        ],
+        "windowsIn": [
+          2.5,
+          "ap_snap",
+          "popin 80%"
+        ],
+        "windowsOut": [
+          1.2,
+          "linear",
+          "popin 90%"
+        ],
+        "windowsMove": [
+          2.5,
+          "ap_snap"
+        ],
+        "fade": [
+          2,
+          "quick"
+        ],
+        "fadeIn": [
+          1.5,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          1,
+          "almostLinear"
+        ],
+        "layers": [
+          2.5,
+          "ap_snap"
+        ],
+        "layersIn": [
+          2.5,
+          "ap_snap",
+          "popin 85%"
+        ],
+        "layersOut": [
+          1,
+          "linear",
+          "fade"
+        ],
+        "fadeLayersIn": [
+          1.5,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          1,
+          "almostLinear"
+        ],
+        "workspaces": [
+          3,
+          "ap_snap",
+          "slide"
+        ]
+      }
+    },
+    {
+      "id": "pop",
+      "name": "Pop",
+      "description": "Windows pop out of a small dot with a little overshoot",
+      "animations": {
+        "global": [
+          5.5,
+          "ap_backOut"
+        ],
+        "border": [
+          4.5,
+          "ap_backOut"
+        ],
+        "windows": [
+          3.5,
+          "ap_backOut"
+        ],
+        "windowsIn": [
+          3.5,
+          "ap_backOut",
+          "popin 40%"
+        ],
+        "windowsOut": [
+          2.1,
+          "ap_inCubic",
+          "popin 60%"
+        ],
+        "windowsMove": [
+          3.5,
+          "ap_backOut"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "fadeIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          2,
+          "almostLinear"
+        ],
+        "layers": [
+          3.5,
+          "ap_backOut"
+        ],
+        "layersIn": [
+          3.5,
+          "ap_backOut",
+          "fade"
+        ],
+        "layersOut": [
+          2,
+          "linear",
+          "fade"
+        ],
+        "workspaces": [
+          4,
+          "ap_backOut",
+          "slidefade 20%"
+        ]
+      }
+    },
+    {
+      "id": "zoom",
+      "name": "Zoom",
+      "description": "Windows zoom up from almost nothing",
+      "animations": {
+        "global": [
+          6.5,
+          "ap_outExpo"
+        ],
+        "border": [
+          5.5,
+          "ap_outExpo"
+        ],
+        "windows": [
+          4.5,
+          "ap_outExpo"
+        ],
+        "windowsIn": [
+          4.5,
+          "ap_outExpo",
+          "popin 10%"
+        ],
+        "windowsOut": [
+          2.6999999999999997,
+          "ap_inCubic",
+          "popin 20%"
+        ],
+        "windowsMove": [
+          4.5,
+          "ap_outExpo"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "fadeIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          2,
+          "almostLinear"
+        ],
+        "layers": [
+          4.5,
+          "ap_outExpo"
+        ],
+        "layersIn": [
+          4.5,
+          "ap_outExpo",
+          "popin 50%"
+        ],
+        "layersOut": [
+          2,
+          "linear",
+          "popin 50%"
+        ],
+        "workspaces": [
+          5,
+          "ap_outExpo",
+          "fade"
+        ]
+      }
+    },
+    {
+      "id": "drop",
+      "name": "Drop",
+      "description": "Windows fall in from the top and drop out the bottom",
+      "animations": {
+        "global": [
+          6.5,
+          "ap_overshoot"
+        ],
+        "border": [
+          5.5,
+          "ap_overshoot"
+        ],
+        "windows": [
+          4.5,
+          "ap_overshoot"
+        ],
+        "windowsIn": [
+          4.5,
+          "ap_overshoot",
+          "slide top"
+        ],
+        "windowsOut": [
+          2.6999999999999997,
+          "ap_inCubic",
+          "slide bottom"
+        ],
+        "windowsMove": [
+          4.5,
+          "ap_overshoot"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "fadeIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          2,
+          "almostLinear"
+        ],
+        "layers": [
+          4.5,
+          "ap_overshoot"
+        ],
+        "layersIn": [
+          4.5,
+          "ap_overshoot",
+          "slide top"
+        ],
+        "layersOut": [
+          2,
+          "linear",
+          "slide top"
+        ],
+        "workspaces": [
+          5,
+          "ap_overshoot",
+          "slidevert"
+        ]
+      }
+    },
+    {
+      "id": "rise",
+      "name": "Rise",
+      "description": "Windows rise from the bottom edge, workspaces lift away",
+      "animations": {
+        "global": [
+          6,
+          "ap_circOut"
+        ],
+        "border": [
+          5,
+          "ap_circOut"
+        ],
+        "windows": [
+          4,
+          "ap_circOut"
+        ],
+        "windowsIn": [
+          4,
+          "ap_circOut",
+          "slide bottom"
+        ],
+        "windowsOut": [
+          2.4,
+          "ap_inCubic",
+          "slide bottom"
+        ],
+        "windowsMove": [
+          4,
+          "ap_circOut"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "fadeIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          2,
+          "almostLinear"
+        ],
+        "layers": [
+          4,
+          "ap_circOut"
+        ],
+        "layersIn": [
+          4,
+          "ap_circOut",
+          "slide bottom"
+        ],
+        "layersOut": [
+          2,
+          "linear",
+          "slide bottom"
+        ],
+        "workspaces": [
+          5,
+          "ap_circOut",
+          "slidefadevert 30%"
+        ]
+      }
+    },
+    {
+      "id": "sweep",
+      "name": "Sweep",
+      "description": "Everything sweeps sideways, left in, right out",
+      "animations": {
+        "global": [
+          6,
+          "ap_material"
+        ],
+        "border": [
+          5,
+          "ap_material"
+        ],
+        "windows": [
+          4,
+          "ap_material"
+        ],
+        "windowsIn": [
+          4,
+          "ap_material",
+          "slide left"
+        ],
+        "windowsOut": [
+          2.4,
+          "ap_inCubic",
+          "slide right"
+        ],
+        "windowsMove": [
+          4,
+          "ap_material"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "fadeIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          2,
+          "almostLinear"
+        ],
+        "layers": [
+          4,
+          "ap_material"
+        ],
+        "layersIn": [
+          4,
+          "ap_material",
+          "slide right"
+        ],
+        "layersOut": [
+          2,
+          "linear",
+          "slide right"
+        ],
+        "workspaces": [
+          4.5,
+          "ap_material",
+          "slide"
+        ]
+      }
+    },
+    {
+      "id": "curtain",
+      "name": "Curtain",
+      "description": "Windows unfold like a curtain, workspaces fade vertically",
+      "animations": {
+        "global": [
+          7,
+          "ap_material"
+        ],
+        "border": [
+          6,
+          "ap_material"
+        ],
+        "windows": [
+          5,
+          "ap_material"
+        ],
+        "windowsIn": [
+          5,
+          "ap_material",
+          "gnomed"
+        ],
+        "windowsOut": [
+          3.0,
+          "ap_inCubic",
+          "gnomed"
+        ],
+        "windowsMove": [
+          5,
+          "ap_material"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "fadeIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          2,
+          "almostLinear"
+        ],
+        "layers": [
+          5,
+          "ap_material"
+        ],
+        "layersIn": [
+          5,
+          "ap_material",
+          "fade"
+        ],
+        "layersOut": [
+          2,
+          "linear",
+          "fade"
+        ],
+        "workspaces": [
+          6,
+          "ap_inOutSine",
+          "slidefadevert 40%"
+        ]
+      }
+    },
+    {
+      "id": "drift",
+      "name": "Drift",
+      "description": "Slow, soft settle with long fading workspace slides",
+      "animations": {
+        "global": [
+          9,
+          "ap_drift"
+        ],
+        "border": [
+          8,
+          "ap_drift"
+        ],
+        "windows": [
+          7,
+          "ap_drift"
+        ],
+        "windowsIn": [
+          7,
+          "ap_drift",
+          "popin 92%"
+        ],
+        "windowsOut": [
+          4.2,
+          "ap_inOutSine",
+          "popin 92%"
+        ],
+        "windowsMove": [
+          7,
+          "ap_drift"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "fadeIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          2,
+          "almostLinear"
+        ],
+        "layers": [
+          7,
+          "ap_drift"
+        ],
+        "layersIn": [
+          7,
+          "ap_drift",
+          "fade"
+        ],
+        "layersOut": [
+          2,
+          "linear",
+          "fade"
+        ],
+        "workspaces": [
+          8,
+          "ap_drift",
+          "slidefade 35%"
+        ]
+      }
+    },
+    {
+      "id": "warp",
+      "name": "Warp",
+      "description": "Bouncy springs from a pinpoint, fast fading workspaces",
+      "animations": {
+        "global": [
+          7,
+          "ap_springBouncy"
+        ],
+        "border": [
+          6,
+          "ap_springBouncy"
+        ],
+        "windows": [
+          5,
+          "ap_springBouncy"
+        ],
+        "windowsIn": [
+          5,
+          "ap_springBouncy",
+          "popin 20%"
+        ],
+        "windowsOut": [
+          3.0,
+          "ap_inCubic",
+          "popin 50%"
+        ],
+        "windowsMove": [
+          5,
+          "ap_springBouncy"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "fadeIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          2,
+          "almostLinear"
+        ],
+        "layers": [
+          5,
+          "ap_springBouncy"
+        ],
+        "layersIn": [
+          5,
+          "ap_springBouncy",
+          "fade"
+        ],
+        "layersOut": [
+          2,
+          "linear",
+          "fade"
+        ],
+        "workspaces": [
+          4,
+          "ap_outExpo",
+          "slidefade 60%"
+        ]
+      }
+    },
+    {
+      "id": "cascade",
+      "name": "Cascade",
+      "description": "Windows tumble into place on soft springs",
+      "animations": {
+        "global": [
+          8,
+          "ap_springSoft"
+        ],
+        "border": [
+          7,
+          "ap_springSoft"
+        ],
+        "windows": [
+          6,
+          "ap_springSoft"
+        ],
+        "windowsIn": [
+          6,
+          "ap_springSoft",
+          "popin 85%"
+        ],
+        "windowsOut": [
+          3.5999999999999996,
+          "ap_inCubic",
+          "slide bottom"
+        ],
+        "windowsMove": [
+          6,
+          "ap_springSoft"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "fadeIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          2,
+          "almostLinear"
+        ],
+        "layers": [
+          6,
+          "ap_springSoft"
+        ],
+        "layersIn": [
+          6,
+          "ap_springSoft",
+          "slide top"
+        ],
+        "layersOut": [
+          2,
+          "linear",
+          "slide top"
+        ],
+        "workspaces": [
+          6,
+          "ap_springSoft",
+          "slidevert"
+        ]
+      }
+    },
+    {
+      "id": "glide",
+      "name": "Glide",
+      "description": "Material easing with a subtle fade on every switch",
+      "animations": {
+        "global": [
+          5.5,
+          "ap_material"
+        ],
+        "border": [
+          4.5,
+          "ap_material"
+        ],
+        "windows": [
+          3.5,
+          "ap_material"
+        ],
+        "windowsIn": [
+          3.5,
+          "ap_material",
+          "popin 96%"
+        ],
+        "windowsOut": [
+          2.1,
+          "ap_inCubic",
+          "popin 96%"
+        ],
+        "windowsMove": [
+          3.5,
+          "ap_material"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "fadeIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          2,
+          "almostLinear"
+        ],
+        "layers": [
+          3.5,
+          "ap_material"
+        ],
+        "layersIn": [
+          3.5,
+          "ap_material",
+          "fade"
+        ],
+        "layersOut": [
+          2,
+          "linear",
+          "fade"
+        ],
+        "workspaces": [
+          4,
+          "ap_material",
+          "slidefade 10%"
+        ]
+      }
+    },
+    {
+      "id": "flip",
+      "name": "Flip",
+      "description": "Windows flip in from the top, workspaces fade over each other",
+      "animations": {
+        "global": [
+          6,
+          "ap_backOut"
+        ],
+        "border": [
+          5,
+          "ap_backOut"
+        ],
+        "windows": [
+          4,
+          "ap_backOut"
+        ],
+        "windowsIn": [
+          4,
+          "ap_backOut",
+          "slide top"
+        ],
+        "windowsOut": [
+          2.4,
+          "ap_inCubic",
+          "slide top"
+        ],
+        "windowsMove": [
+          4,
+          "ap_backOut"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "fadeIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          2,
+          "almostLinear"
+        ],
+        "layers": [
+          4,
+          "ap_backOut"
+        ],
+        "layersIn": [
+          4,
+          "ap_backOut",
+          "slide top"
+        ],
+        "layersOut": [
+          2,
+          "linear",
+          "slide top"
+        ],
+        "workspaces": [
+          4,
+          "ap_inOutSine",
+          "fade"
+        ]
+      }
+    },
+    {
+      "id": "hyper",
+      "name": "Hyper",
+      "description": "Near-instant snaps with a crisp pop",
+      "animations": {
+        "global": [
+          3.8,
+          "ap_snap"
+        ],
+        "border": [
+          2,
+          "ap_snap"
+        ],
+        "windows": [
+          1.8,
+          "ap_snap"
+        ],
+        "windowsIn": [
+          1.8,
+          "ap_snap",
+          "popin 50%"
+        ],
+        "windowsOut": [
+          1.5,
+          "ap_inCubic",
+          "popin 70%"
+        ],
+        "windowsMove": [
+          1.8,
+          "ap_snap"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "fadeIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          2,
+          "almostLinear"
+        ],
+        "layers": [
+          1.8,
+          "ap_snap"
+        ],
+        "layersIn": [
+          1.8,
+          "ap_snap",
+          "fade"
+        ],
+        "layersOut": [
+          2,
+          "linear",
+          "fade"
+        ],
+        "workspaces": [
+          2,
+          "ap_snap",
+          "slide"
+        ]
+      }
+    },
+    {
+      "id": "cinema",
+      "name": "Cinema",
+      "description": "Slow, wide fades like a film cut",
+      "animations": {
+        "global": [
+          10,
+          "ap_inOutSine"
+        ],
+        "border": [
+          9,
+          "ap_inOutSine"
+        ],
+        "windows": [
+          8,
+          "ap_inOutSine"
+        ],
+        "windowsIn": [
+          8,
+          "ap_inOutSine",
+          "popin 98%"
+        ],
+        "windowsOut": [
+          4.8,
+          "ap_inOutSine",
+          "popin 98%"
+        ],
+        "windowsMove": [
+          8,
+          "ap_inOutSine"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "fadeIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          2,
+          "almostLinear"
+        ],
+        "layers": [
+          8,
+          "ap_inOutSine"
+        ],
+        "layersIn": [
+          8,
+          "ap_inOutSine",
+          "fade"
+        ],
+        "layersOut": [
+          2,
+          "linear",
+          "fade"
+        ],
+        "workspaces": [
+          9,
+          "ap_inOutSine",
+          "fade"
+        ]
+      }
+    },
+    {
+      "id": "rubber",
+      "name": "Rubber",
+      "description": "Jiggly springs that stretch from the centre line",
+      "animations": {
+        "global": [
+          8,
+          "ap_springJiggle"
+        ],
+        "border": [
+          7,
+          "ap_springJiggle"
+        ],
+        "windows": [
+          6,
+          "ap_springJiggle"
+        ],
+        "windowsIn": [
+          6,
+          "ap_springJiggle",
+          "gnomed"
+        ],
+        "windowsOut": [
+          3.5999999999999996,
+          "ap_inCubic",
+          "popin 80%"
+        ],
+        "windowsMove": [
+          6,
+          "ap_springJiggle"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "fadeIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeOut": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersIn": [
+          2,
+          "almostLinear"
+        ],
+        "fadeLayersOut": [
+          2,
+          "almostLinear"
+        ],
+        "layers": [
+          6,
+          "ap_springJiggle"
+        ],
+        "layersIn": [
+          6,
+          "ap_springJiggle",
+          "fade"
+        ],
+        "layersOut": [
+          2,
+          "linear",
+          "fade"
+        ],
+        "workspaces": [
+          6,
+          "ap_springJiggle",
+          "slidevert"
+        ]
+      }
+    },
+    {
+      "id": "instant",
+      "name": "Instant",
+      "description": "Everything appears at once, with only a quick fade.",
+      "animations": {
+        "global": [
+          10,
+          "default"
+        ],
+        "windows": false,
+        "layers": false,
+        "workspaces": false,
+        "border": false,
+        "fade": [
+          1.5,
+          "quick"
+        ],
+        "fadeSwitch": false
+      }
+    },
+    {
+      "id": "spring",
+      "name": "Spring",
+      "description": "A light spring on everything.",
+      "animations": {
+        "global": [
+          10,
+          "default"
+        ],
+        "windows": [
+          5,
+          "mx_spring"
+        ],
+        "windowsIn": [
+          5,
+          "mx_spring",
+          "popin 75%"
+        ],
+        "windowsOut": [
+          2.5,
+          "easeInOutCubic",
+          "popin 85%"
+        ],
+        "layers": [
+          4,
+          "mx_spring",
+          "slide"
+        ],
+        "fade": [
+          2.5,
+          "quick"
+        ],
+        "workspaces": [
+          5,
+          "mx_spring",
+          "slide"
+        ],
+        "border": [
+          4,
+          "mx_spring"
+        ]
+      }
+    },
+    {
+      "id": "macos",
+      "name": "macOS",
+      "description": "Quick zoom-in windows and smooth spaces.",
+      "animations": {
+        "global": [
+          10,
+          "default"
+        ],
+        "windows": [
+          3.5,
+          "mx_easeOutExpo"
+        ],
+        "windowsIn": [
+          3.5,
+          "mx_easeOutExpo",
+          "popin 85%"
+        ],
+        "windowsOut": [
+          2,
+          "easeInOutCubic",
+          "popin 85%"
+        ],
+        "layers": [
+          3,
+          "mx_easeOutExpo",
+          "fade"
+        ],
+        "fade": [
+          2.5,
+          "mx_easeOutSine"
+        ],
+        "workspaces": [
+          5,
+          "mx_easeOutExpo",
+          "slide"
+        ],
+        "border": [
+          4,
+          "mx_easeOutExpo"
+        ]
+      }
+    },
+    {
+      "id": "material",
+      "name": "Material",
+      "description": "Android's emphasized motion.",
+      "animations": {
+        "global": [
+          10,
+          "default"
+        ],
+        "windows": [
+          4.5,
+          "mx_emphasized"
+        ],
+        "windowsIn": [
+          4.5,
+          "mx_emphasized",
+          "popin 80%"
+        ],
+        "windowsOut": [
+          2,
+          "mx_accel",
+          "popin 90%"
+        ],
+        "layers": [
+          4,
+          "mx_emphasized",
+          "slide"
+        ],
+        "fade": [
+          3,
+          "mx_material"
+        ],
+        "workspaces": [
+          5,
+          "mx_emphasized",
+          "slidefade 10%"
+        ],
+        "border": [
+          4,
+          "mx_material"
+        ]
+      }
+    },
+    {
+      "id": "slide-up",
+      "name": "Slide Up",
+      "description": "Windows rise in from below.",
+      "animations": {
+        "global": [
+          10,
+          "default"
+        ],
+        "windows": [
+          4.5,
+          "easeOutQuint",
+          "slide bottom"
+        ],
+        "windowsIn": [
+          4.5,
+          "easeOutQuint",
+          "slide bottom"
+        ],
+        "windowsOut": [
+          2.5,
+          "mx_accel",
+          "slide bottom"
+        ],
+        "layers": [
+          4,
+          "easeOutQuint",
+          "slide bottom"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "workspaces": [
+          5,
+          "easeOutQuint",
+          "slidevert"
+        ],
+        "border": [
+          4,
+          "easeOutQuint"
+        ]
+      }
+    },
+    {
+      "id": "drop-in",
+      "name": "Drop In",
+      "description": "Windows drop from the top and bounce.",
+      "animations": {
+        "global": [
+          10,
+          "default"
+        ],
+        "windows": [
+          5,
+          "mx_softBounce",
+          "slide top"
+        ],
+        "windowsIn": [
+          5,
+          "mx_softBounce",
+          "slide top"
+        ],
+        "windowsOut": [
+          2.5,
+          "mx_accel",
+          "slide bottom"
+        ],
+        "layers": [
+          4,
+          "mx_softBounce",
+          "slide top"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "workspaces": [
+          5,
+          "easeOutQuint",
+          "slidevert"
+        ],
+        "border": [
+          4,
+          "easeOutQuint"
+        ]
+      }
+    },
+    {
+      "id": "cinematic",
+      "name": "Cinematic",
+      "description": "Measured, film-like transitions.",
+      "animations": {
+        "global": [
+          14,
+          "default"
+        ],
+        "windows": [
+          8,
+          "mx_easeInOutQuart"
+        ],
+        "windowsIn": [
+          8,
+          "mx_easeInOutQuart",
+          "popin 90%"
+        ],
+        "windowsOut": [
+          6,
+          "mx_easeInOutQuart",
+          "popin 90%"
+        ],
+        "layers": [
+          7,
+          "mx_easeInOutQuart",
+          "fade"
+        ],
+        "fade": [
+          7,
+          "mx_easeInOutSine"
+        ],
+        "workspaces": [
+          9,
+          "mx_easeInOutQuart",
+          "slidefade 30%"
+        ],
+        "border": [
+          8,
+          "mx_easeInOutQuart"
+        ]
+      }
+    },
+    {
+      "id": "silk",
+      "name": "Silk",
+      "description": "Everything fades in and out like silk.",
+      "animations": {
+        "global": [
+          10,
+          "default"
+        ],
+        "windows": [
+          5,
+          "mx_easeInOutSine",
+          "popin 95%"
+        ],
+        "windowsIn": [
+          5,
+          "mx_easeInOutSine",
+          "popin 95%"
+        ],
+        "windowsOut": [
+          4,
+          "mx_easeInOutSine",
+          "popin 95%"
+        ],
+        "layers": [
+          5,
+          "mx_easeInOutSine",
+          "fade"
+        ],
+        "fade": [
+          6,
+          "mx_easeInOutSine"
+        ],
+        "workspaces": [
+          6,
+          "mx_easeInOutSine",
+          "fade"
+        ],
+        "border": [
+          6,
+          "mx_easeInOutSine"
+        ]
+      }
+    },
+    {
+      "id": "ghost",
+      "name": "Ghost",
+      "description": "Windows materialise out of thin air.",
+      "animations": {
+        "global": [
+          10,
+          "default"
+        ],
+        "windows": [
+          6,
+          "mx_slowStart",
+          "popin 97%"
+        ],
+        "windowsIn": [
+          6,
+          "mx_slowStart",
+          "popin 97%"
+        ],
+        "windowsOut": [
+          5,
+          "mx_easeInOutSine",
+          "popin 97%"
+        ],
+        "layers": [
+          5,
+          "mx_slowStart",
+          "fade"
+        ],
+        "fade": [
+          9,
+          "mx_slowStart"
+        ],
+        "fadeIn": [
+          9,
+          "mx_slowStart"
+        ],
+        "fadeOut": [
+          6,
+          "mx_easeInOutSine"
+        ],
+        "workspaces": [
+          7,
+          "mx_easeInOutSine",
+          "fade"
+        ],
+        "fadeDim": [
+          8,
+          "mx_easeInOutSine"
+        ],
+        "border": [
+          6,
+          "mx_slowStart"
+        ]
+      }
+    },
+    {
+      "id": "lazy",
+      "name": "Lazy Sunday",
+      "description": "Unhurried everything.",
+      "animations": {
+        "global": [
+          30,
+          "mx_easeInOutSine"
+        ],
+        "windows": [
+          12,
+          "easeInOutCubic",
+          "popin 80%"
+        ],
+        "windowsIn": [
+          12,
+          "easeInOutCubic",
+          "popin 80%"
+        ],
+        "windowsOut": [
+          9,
+          "easeInOutCubic",
+          "popin 80%"
+        ],
+        "layers": [
+          10,
+          "easeInOutCubic",
+          "fade"
+        ],
+        "fade": [
+          10,
+          "mx_easeInOutSine"
+        ],
+        "workspaces": [
+          12,
+          "easeInOutCubic",
+          "slidefade 40%"
+        ],
+        "border": [
+          12,
+          "mx_easeInOutSine"
+        ]
+      }
+    },
+    {
+      "id": "hyperspace",
+      "name": "Hyperspace",
+      "description": "Windows punch in from deep space.",
+      "animations": {
+        "global": [
+          10,
+          "default"
+        ],
+        "windows": [
+          3,
+          "mx_easeOutExpo"
+        ],
+        "windowsIn": [
+          3,
+          "mx_easeOutExpo",
+          "popin 15%"
+        ],
+        "windowsOut": [
+          2,
+          "mx_accel",
+          "popin 15%"
+        ],
+        "layers": [
+          3,
+          "mx_easeOutExpo",
+          "popin 30%"
+        ],
+        "fade": [
+          2,
+          "mx_easeOutExpo"
+        ],
+        "workspaces": [
+          4,
+          "mx_easeOutExpo",
+          "slidefade 80%"
+        ],
+        "border": [
+          3,
+          "mx_easeOutExpo"
+        ]
+      }
+    },
+    {
+      "id": "aurora",
+      "name": "Aurora Border",
+      "description": "A slow rotating gradient border, with smooth windows. Pair it with a multi-colour border on the Palette page.",
+      "animations": {
+        "global": [
+          10,
+          "default"
+        ],
+        "windows": [
+          4.5,
+          "easeOutQuint"
+        ],
+        "windowsIn": [
+          4.5,
+          "easeOutQuint",
+          "popin 85%"
+        ],
+        "windowsOut": [
+          2,
+          "linear",
+          "popin 85%"
+        ],
+        "layers": [
+          4,
+          "easeOutQuint",
+          "fade"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "workspaces": [
+          4.5,
+          "easeInOutCubic",
+          "slidefade 20%"
+        ],
+        "border": [
+          5,
+          "easeOutQuint"
+        ],
+        "borderangle": [
+          100,
+          "linear",
+          "loop"
+        ]
+      }
+    },
+    {
+      "id": "pulse",
+      "name": "Pulse Border",
+      "description": "A fast spinning border that never stops.",
+      "animations": {
+        "global": [
+          10,
+          "default"
+        ],
+        "windows": [
+          3.5,
+          "easeOutQuint"
+        ],
+        "windowsIn": [
+          3.5,
+          "easeOutQuint",
+          "popin 85%"
+        ],
+        "windowsOut": [
+          2,
+          "linear",
+          "popin 85%"
+        ],
+        "layers": [
+          3.5,
+          "easeOutQuint",
+          "fade"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "workspaces": [
+          4,
+          "easeOutQuint",
+          "slide"
+        ],
+        "border": [
+          3,
+          "easeOutQuint"
+        ],
+        "borderangle": [
+          25,
+          "linear",
+          "loop"
+        ]
+      }
+    },
+    {
+      "id": "halo",
+      "name": "Halo",
+      "description": "The border spins once each time focus changes.",
+      "animations": {
+        "global": [
+          10,
+          "default"
+        ],
+        "windows": [
+          4,
+          "easeOutQuint"
+        ],
+        "windowsIn": [
+          4,
+          "easeOutQuint",
+          "popin 85%"
+        ],
+        "windowsOut": [
+          2,
+          "linear",
+          "popin 85%"
+        ],
+        "layers": [
+          4,
+          "easeOutQuint",
+          "fade"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "workspaces": [
+          4.5,
+          "easeOutQuint",
+          "slide"
+        ],
+        "border": [
+          6,
+          "easeInOutCubic"
+        ],
+        "borderangle": [
+          12,
+          "easeInOutCubic",
+          "once"
+        ]
+      }
+    },
+    {
+      "id": "focus-flow",
+      "name": "Focus Flow",
+      "description": "Dimming and shadows ease gently as focus moves.",
+      "animations": {
+        "global": [
+          10,
+          "default"
+        ],
+        "windows": [
+          4,
+          "easeOutQuint"
+        ],
+        "windowsIn": [
+          4,
+          "easeOutQuint",
+          "popin 88%"
+        ],
+        "windowsOut": [
+          2,
+          "linear",
+          "popin 88%"
+        ],
+        "layers": [
+          4,
+          "easeOutQuint",
+          "fade"
+        ],
+        "fade": [
+          4,
+          "mx_easeInOutSine"
+        ],
+        "fadeDim": [
+          8,
+          "mx_easeInOutSine"
+        ],
+        "fadeShadow": [
+          8,
+          "mx_easeInOutSine"
+        ],
+        "workspaces": [
+          4.5,
+          "easeOutQuint",
+          "slidefade 20%"
+        ],
+        "border": [
+          8,
+          "mx_easeInOutSine"
+        ]
+      }
+    },
+    {
+      "id": "tide",
+      "name": "Tide",
+      "description": "Rolling vertical waves between workspaces.",
+      "animations": {
+        "global": [
+          10,
+          "default"
+        ],
+        "windows": [
+          5,
+          "mx_easeInOutQuart",
+          "slide"
+        ],
+        "windowsIn": [
+          5,
+          "mx_easeInOutQuart",
+          "slide"
+        ],
+        "windowsOut": [
+          3.5,
+          "mx_easeInOutQuart",
+          "slide"
+        ],
+        "layers": [
+          4.5,
+          "mx_easeInOutQuart",
+          "slide bottom"
+        ],
+        "fade": [
+          4,
+          "mx_easeInOutSine"
+        ],
+        "workspaces": [
+          6,
+          "mx_easeInOutQuart",
+          "slidefadevert 25%"
+        ],
+        "border": [
+          5,
+          "mx_easeInOutQuart"
+        ]
+      }
+    },
+    {
+      "id": "modarchy-omarchy",
+      "name": "Omarchy \u00b7 Modarchy",
+      "description": "Omarchy's own animations; Modarchy writes nothing.",
+      "animations": {}
+    },
+    {
+      "id": "modarchy-off",
+      "name": "Off \u00b7 Modarchy",
+      "description": "No animations at all.",
+      "enabled": false,
+      "animations": {}
+    },
+    {
+      "id": "modarchy-snappy",
+      "name": "Snappy \u00b7 Modarchy",
+      "description": "Fast and decisive.",
+      "animations": {
+        "global": [
+          8,
+          "default"
+        ],
+        "windows": [
+          2.6,
+          "easeOutQuint"
+        ],
+        "windowsIn": [
+          2.6,
+          "easeOutQuint",
+          "popin 90%"
+        ],
+        "windowsOut": [
+          1.2,
+          "linear",
+          "popin 90%"
+        ],
+        "layers": [
+          2.5,
+          "easeOutQuint",
+          "fade"
+        ],
+        "fade": [
+          1.8,
+          "quick"
+        ],
+        "workspaces": [
+          2.4,
+          "easeOutQuint",
+          "slide"
+        ],
+        "border": [
+          3,
+          "easeOutQuint"
+        ]
+      }
+    },
+    {
+      "id": "modarchy-smooth",
+      "name": "Smooth \u00b7 Modarchy",
+      "description": "Omarchy's feel, a little softer.",
+      "animations": {
+        "global": [
+          10,
+          "default"
+        ],
+        "windows": [
+          4.5,
+          "easeOutQuint"
+        ],
+        "windowsIn": [
+          4.5,
+          "easeOutQuint",
+          "popin 85%"
+        ],
+        "windowsOut": [
+          2,
+          "almostLinear",
+          "popin 85%"
+        ],
+        "layers": [
+          4,
+          "easeOutQuint",
+          "fade"
+        ],
+        "fade": [
+          3.5,
+          "quick"
+        ],
+        "workspaces": [
+          4.5,
+          "easeInOutCubic",
+          "slidefade 20%"
+        ],
+        "border": [
+          5.4,
+          "easeOutQuint"
+        ]
+      }
+    },
+    {
+      "id": "modarchy-bouncy",
+      "name": "Bouncy \u00b7 Modarchy",
+      "description": "Windows overshoot and settle.",
+      "animations": {
+        "global": [
+          10,
+          "default"
+        ],
+        "windows": [
+          5,
+          "mx_easeOutBack"
+        ],
+        "windowsIn": [
+          5,
+          "mx_easeOutBack",
+          "popin 60%"
+        ],
+        "windowsOut": [
+          2.5,
+          "easeInOutCubic",
+          "popin 80%"
+        ],
+        "windowsMove": [
+          4,
+          "mx_softBounce"
+        ],
+        "layers": [
+          4,
+          "mx_easeOutBack",
+          "popin 70%"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "workspaces": [
+          5,
+          "mx_easeOutBack",
+          "slide"
+        ],
+        "border": [
+          5,
+          "easeOutQuint"
+        ]
+      }
+    },
+    {
+      "id": "modarchy-elastic",
+      "name": "Elastic \u00b7 Modarchy",
+      "description": "Stretchy, rubber-band motion.",
+      "animations": {
+        "global": [
+          10,
+          "default"
+        ],
+        "windows": [
+          6,
+          "mx_easeInOutBack"
+        ],
+        "windowsIn": [
+          6,
+          "mx_easeInOutBack",
+          "popin 50%"
+        ],
+        "windowsOut": [
+          3,
+          "easeInOutCubic",
+          "popin 70%"
+        ],
+        "windowsMove": [
+          5,
+          "mx_overshot"
+        ],
+        "layers": [
+          5,
+          "mx_overshot",
+          "slide"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "workspaces": [
+          6,
+          "mx_easeInOutBack",
+          "slidevert"
+        ],
+        "border": [
+          5,
+          "easeOutQuint"
+        ]
+      }
+    },
+    {
+      "id": "modarchy-pop",
+      "name": "Pop \u00b7 Modarchy",
+      "description": "Windows pop out from their centre.",
+      "animations": {
+        "global": [
+          10,
+          "default"
+        ],
+        "windows": [
+          4,
+          "mx_snap"
+        ],
+        "windowsIn": [
+          4,
+          "mx_snap",
+          "popin 40%"
+        ],
+        "windowsOut": [
+          2,
+          "mx_accel",
+          "popin 40%"
+        ],
+        "layers": [
+          3.5,
+          "mx_snap",
+          "popin 60%"
+        ],
+        "fade": [
+          2,
+          "quick"
+        ],
+        "workspaces": [
+          4,
+          "mx_emphasized",
+          "fade"
+        ],
+        "border": [
+          4,
+          "mx_snap"
+        ]
+      }
+    },
+    {
+      "id": "modarchy-gnome",
+      "name": "GNOME \u00b7 Modarchy",
+      "description": "GNOME's window open and workspace slide.",
+      "animations": {
+        "global": [
+          10,
+          "default"
+        ],
+        "windows": [
+          4,
+          "mx_material"
+        ],
+        "windowsIn": [
+          4,
+          "mx_material",
+          "gnomed"
+        ],
+        "windowsOut": [
+          2.5,
+          "mx_material",
+          "gnomed"
+        ],
+        "layers": [
+          3.5,
+          "mx_material",
+          "fade"
+        ],
+        "fade": [
+          3,
+          "mx_material"
+        ],
+        "workspaces": [
+          4.5,
+          "mx_emphasized",
+          "slidefade 15%"
+        ],
+        "border": [
+          4,
+          "mx_material"
+        ]
+      }
+    },
+    {
+      "id": "modarchy-glide",
+      "name": "Glide \u00b7 Modarchy",
+      "description": "Long horizontal glides.",
+      "animations": {
+        "global": [
+          10,
+          "default"
+        ],
+        "windows": [
+          5,
+          "mx_easeOutExpo",
+          "slide"
+        ],
+        "windowsIn": [
+          5,
+          "mx_easeOutExpo",
+          "slide"
+        ],
+        "windowsOut": [
+          3,
+          "easeInOutCubic",
+          "slide"
+        ],
+        "layers": [
+          4,
+          "mx_easeOutExpo",
+          "slide"
+        ],
+        "fade": [
+          3,
+          "mx_easeOutSine"
+        ],
+        "workspaces": [
+          6,
+          "mx_easeOutExpo",
+          "slide"
+        ],
+        "border": [
+          5,
+          "mx_easeOutExpo"
+        ]
+      }
+    },
+    {
+      "id": "modarchy-curtain",
+      "name": "Curtain \u00b7 Modarchy",
+      "description": "In from the top, out through the floor.",
+      "animations": {
+        "global": [
+          10,
+          "default"
+        ],
+        "windows": [
+          4.5,
+          "mx_easeInOutQuart",
+          "slide top"
+        ],
+        "windowsIn": [
+          4.5,
+          "mx_easeInOutQuart",
+          "slide top"
+        ],
+        "windowsOut": [
+          3.5,
+          "mx_easeInOutQuart",
+          "slide bottom"
+        ],
+        "layers": [
+          4,
+          "mx_easeInOutQuart",
+          "slide top"
+        ],
+        "fade": [
+          3,
+          "mx_easeInOutSine"
+        ],
+        "workspaces": [
+          5,
+          "mx_easeInOutQuart",
+          "slidefadevert 30%"
+        ],
+        "border": [
+          4,
+          "mx_easeInOutQuart"
+        ]
+      }
+    },
+    {
+      "id": "modarchy-vertical",
+      "name": "Vertical \u00b7 Modarchy",
+      "description": "Workspaces stack up and down.",
+      "animations": {
+        "global": [
+          10,
+          "default"
+        ],
+        "windows": [
+          4,
+          "easeOutQuint"
+        ],
+        "windowsIn": [
+          4,
+          "easeOutQuint",
+          "popin 85%"
+        ],
+        "windowsOut": [
+          2,
+          "linear",
+          "popin 85%"
+        ],
+        "layers": [
+          4,
+          "easeOutQuint",
+          "slide"
+        ],
+        "fade": [
+          3,
+          "quick"
+        ],
+        "workspaces": [
+          4.5,
+          "easeOutQuint",
+          "slidevert"
+        ],
+        "specialWorkspace": [
+          4,
+          "easeOutQuint",
+          "slidefadevert 40%"
+        ],
+        "border": [
+          5,
+          "easeOutQuint"
+        ]
+      }
+    },
+    {
+      "id": "modarchy-dreamy",
+      "name": "Dreamy \u00b7 Modarchy",
+      "description": "Slow, soft fades that drift.",
+      "animations": {
+        "global": [
+          27,
+          "mx_drift"
+        ],
+        "windows": [
+          18,
+          "mx_drift"
+        ],
+        "windowsIn": [
+          18,
+          "mx_drift",
+          "popin 80%"
+        ],
+        "windowsOut": [
+          13.6,
+          "mx_drift",
+          "popin 80%"
+        ],
+        "layers": [
+          15.9,
+          "mx_drift",
+          "fade"
+        ],
+        "fade": [
+          15.9,
+          "mx_easeInOutSine"
+        ],
+        "workspaces": [
+          20,
+          "mx_drift",
+          "slidefadevert 20%"
+        ],
+        "border": [
+          22,
+          "mx_drift"
+        ]
+      }
+    },
+    {
+      "id": "modarchy-warp",
+      "name": "Warp \u00b7 Modarchy",
+      "description": "Workspaces warp past at speed.",
+      "animations": {
+        "global": [
+          10,
+          "default"
+        ],
+        "windows": [
+          3.5,
+          "mx_emphasized",
+          "popin 70%"
+        ],
+        "windowsIn": [
+          3.5,
+          "mx_emphasized",
+          "popin 70%"
+        ],
+        "windowsOut": [
+          2,
+          "mx_accel",
+          "popin 70%"
+        ],
+        "layers": [
+          3,
+          "mx_emphasized",
+          "fade"
+        ],
+        "fade": [
+          2,
+          "quick"
+        ],
+        "workspaces": [
+          3,
+          "mx_accel",
+          "slidefadevert 100%"
+        ],
+        "border": [
+          3,
+          "linear"
+        ]
+      }
+    }
+  ],
+  "borders": {
+    "rainbow": {
+      "name": "Rainbow",
+      "colors": [
+        "ff0055",
+        "ff8000",
+        "ffee00",
+        "00ff6a",
+        "00d0ff",
+        "6a5cff",
+        "ff00d4"
+      ],
+      "angle": 45
+    },
+    "sunset": {
+      "name": "Sunset",
+      "colors": [
+        "f8b195",
+        "f67280",
+        "c06c84",
+        "6c5b7b"
+      ],
+      "angle": 45
+    },
+    "synthwave": {
+      "name": "Synthwave",
+      "colors": [
+        "ff2a6d",
+        "d300c5",
+        "05d9e8"
+      ],
+      "angle": 45
+    },
+    "aurora": {
+      "name": "Aurora",
+      "colors": [
+        "00ff87",
+        "60efff",
+        "0061ff",
+        "b16cea"
+      ],
+      "angle": 45
+    },
+    "ocean": {
+      "name": "Ocean",
+      "colors": [
+        "a8edea",
+        "4fc3f7",
+        "0288d1",
+        "01579b"
+      ],
+      "angle": 90
+    },
+    "ice": {
+      "name": "Ice",
+      "colors": [
+        "ffffff",
+        "9ad9ff",
+        "2e86de"
+      ],
+      "angle": 90
+    },
+    "fire": {
+      "name": "Fire",
+      "colors": [
+        "fff200",
+        "ff9a00",
+        "ff4d00",
+        "e00000"
+      ],
+      "angle": 90
+    },
+    "forest": {
+      "name": "Forest",
+      "colors": [
+        "d4fc79",
+        "96e6a1",
+        "43a047"
+      ],
+      "angle": 45
+    },
+    "neon": {
+      "name": "Neon",
+      "colors": [
+        "39ff14",
+        "00f0ff",
+        "ff00e6"
+      ],
+      "angle": 45
+    },
+    "candy": {
+      "name": "Candy",
+      "colors": [
+        "ff9a9e",
+        "fecfef",
+        "a18cd1"
+      ],
+      "angle": 45
+    },
+    "gold": {
+      "name": "Gold",
+      "colors": [
+        "fff6c9",
+        "ffd700",
+        "daa520"
+      ],
+      "angle": 45
+    },
+    "mono": {
+      "name": "Mono",
+      "colors": [
+        "ffffff",
+        "6d6d6d"
+      ],
+      "angle": 45
+    },
+    "dracula": {
+      "name": "Dracula",
+      "colors": [
+        "ff79c6",
+        "bd93f9",
+        "8be9fd"
+      ],
+      "angle": 45
+    },
+    "catppuccin": {
+      "name": "Catppuccin",
+      "colors": [
+        "f5c2e7",
+        "cba6f7",
+        "89b4fa",
+        "94e2d5"
+      ],
+      "angle": 45
+    },
+    "tokyonight": {
+      "name": "Tokyo Night",
+      "colors": [
+        "7aa2f7",
+        "bb9af7",
+        "7dcfff"
+      ],
+      "angle": 45
+    }
+  }
+}

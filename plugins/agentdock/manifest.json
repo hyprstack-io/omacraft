@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "omacraft.agentdock",
+  "name": "Agent Dock",
+  "version": "1.0.0",
+  "author": "skll",
+  "license": "MIT",
+  "description": "A slim dock on the right edge that expands into a resizable side panel with a tab per AI agent (Claude Code and Gemini by default), each running in its own terminal.",
+  "kinds": ["panel", "bar-widget"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "panel": "Dock.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Agent Dock",
+    "description": "Expands or collapses the Agent Dock side panel",
+    "category": "AI",
+    "aliases": ["agentdock", "agent-dock", "agents-panel"],
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

@@ -1,0 +1,48 @@
+#!/bin/sh
+# Copies the current code of every plugin OmaCraft manages into plugins/, so
+# the package (and a fresh clone) carries all of them. Each plugin is worked on
+# in its own folder; run this before committing or packaging a release.
+#
+#   bin/sync-plugins          copy them all
+#   bin/sync-plugins --check  only say which copies differ from their sources
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+check=0
+[ "${1:-}" = --check ] && check=1
+
+# folder in plugins/   where its code is worked on
+plugins="
+burn        $HOME/Work/omacraft-burn/plugin
+agentdock   $HOME/Work/skll-agentdock/plugin
+studio      $HOME/Work/skll-studio/plugin
+omascii     $HOME/Projects/omascii
+animations  $HOME/.config/omarchy/plugins/omacraft.animations
+hyprcraft   $HOME/Projects/HyprCraft/omarchy-plugin
+omabar16    $HOME/.config/omarchy/plugins/omabar16
+"
+
+status=0
+echo "$plugins" | while read -r name source; do
+  [ -n "$name" ] || continue
+  if [ ! -f "$source/manifest.json" ]; then
+    echo "skip $name: no plugin at $source"
+    continue
+  fi
+  # Backups, editor and agent leftovers, and caches stay behind.
+  set -- -a --delete --exclude='.git' --exclude='.claude' --exclude='__pycache__' --exclude='node_modules' \
+    --exclude='*.bak' --exclude='*.bak[.-]*' --exclude='*.orig' --exclude='*.v[0-9]' --exclude='*.pyc' \
+    "$source/" "$ROOT/plugins/$name/"
+  if [ "$check" = 1 ]; then
+    changes=$(rsync -n -i "$@" | grep -v '^\.' || true)
+    if [ -n "$changes" ]; then
+      echo "$name differs from $source"
+      status=1
+    fi
+  else
+    mkdir -p "$ROOT/plugins/$name"
+    rsync "$@"
+    echo "$name  <- $source"
+  fi
+done
+exit "$status"

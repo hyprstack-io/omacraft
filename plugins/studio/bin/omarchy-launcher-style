@@ -1,0 +1,155 @@
+#!/bin/bash
+
+# Pick the layout and color scheme of the Omarchy menu (omacraft.studio plugin).
+# The plugin watches the style file and restyles itself as soon as it changes.
+
+set -euo pipefail
+
+FILE="$HOME/.config/omarchy/launcher-style.json"
+LAYOUTS=(classic sidebar spotlight split launchpad grid dock topbar drawer-right panel panel-right palette compact center wide-split mini-grid wide-grid top-dock bottombar)
+SCHEMES=(omarchy catppuccin dracula nord gruvbox onedark tokyonight everforest lovelace cyberpunk navy black paper yousai rosepine kanagawa solarized monokai synthwave sakura matrix amber)
+TRANSITIONS=(auto fade zoom pop from-top from-bottom from-left from-right bounce unfold swing flip spin none)
+
+usage() {
+  cat <<USAGE
+Usage: omarchy-launcher-style <command> [--show]
+
+Commands:
+  get [layout|scheme]      Print the current style
+  layout <name>            Set the layout
+  scheme <name>            Set the color scheme (alias: colors, theme)
+  next-layout | prev-layout
+  next-scheme | prev-scheme
+  random                   Pick a random layout and scheme
+  transition <name>        How the launcher opens (auto = each layout's own)
+  speed <x>                Animation speed, 0.25-3 (1 = normal, 2 = twice as fast)
+  morph layouts|colors on|off
+                           Glide between layouts / blend colours when they
+                           change while the launcher is open
+  list                     List layouts, schemes and transitions
+
+  --show                   Open the menu afterwards to preview the change
+
+Layouts: ${LAYOUTS[*]}
+Schemes: ${SCHEMES[*]}
+Transitions: ${TRANSITIONS[*]}
+
+Inside the menu, Ctrl+L / Ctrl+T cycle layouts / schemes (Shift reverses).
+USAGE
+}
+
+current() {
+  local value
+  value=$(jq -r --arg k "$1" '.[$k] // empty' "$FILE" 2>/dev/null || true)
+  echo "${value:-$2}"
+}
+
+# Written in place rather than renamed over, so the shell's watcher stays
+# attached. Keys other than the two given (transition, speed, ...) are kept.
+write() {
+  set_keys --arg layout "$1" --arg scheme "$2" '.layout = $layout | .scheme = $scheme'
+}
+
+# set_keys <jq args...> <filter>: apply a jq filter to the style file in place.
+set_keys() {
+  mkdir -p "${FILE%/*}"
+  local current updated
+  current=$(cat "$FILE" 2>/dev/null || true)
+  jq -e 'type == "object"' >/dev/null 2>&1 <<<"$current" || current='{}'
+  updated=$(jq "$@" <<<"$current")
+  printf '%s\n' "$updated" >"$FILE"
+}
+
+contains() {
+  local needle=$1
+  shift
+  local item
+  for item in "$@"; do [[ $item == "$needle" ]] && return 0; done
+  return 1
+}
+
+# cycle <current> <delta> <list...>
+cycle() {
+  local now=$1 delta=$2
+  shift 2
+  local list=("$@") i
+  for i in "${!list[@]}"; do
+    if [[ ${list[$i]} == "$now" ]]; then
+      echo "${list[$(((i + delta + ${#list[@]}) % ${#list[@]}))]}"
+      return
+    fi
+  done
+  echo "${list[0]}"
+}
+
+show=0
+args=()
+for arg in "$@"; do
+  if [[ $arg == --show ]]; then show=1; else args+=("$arg"); fi
+done
+set -- "${args[@]}"
+
+layout=$(current layout classic)
+scheme=$(current scheme omarchy)
+
+case "${1:-}" in
+get)
+  case "${2:-}" in
+  layout) echo "$layout" ;;
+  scheme | colors | theme) echo "$scheme" ;;
+  transition) current transition auto ;;
+  speed) current speed 1 ;;
+  *) echo "layout=$layout scheme=$scheme" ;;
+  esac
+  exit 0
+  ;;
+layout)
+  contains "${2:-}" "${LAYOUTS[@]}" || { echo "Unknown layout '${2:-}'. Choose from: ${LAYOUTS[*]}" >&2; exit 2; }
+  write "$2" "$scheme"
+  ;;
+scheme | colors | theme)
+  contains "${2:-}" "${SCHEMES[@]}" || { echo "Unknown scheme '${2:-}'. Choose from: ${SCHEMES[*]}" >&2; exit 2; }
+  write "$layout" "$2"
+  ;;
+next-layout) write "$(cycle "$layout" 1 "${LAYOUTS[@]}")" "$scheme" ;;
+prev-layout) write "$(cycle "$layout" -1 "${LAYOUTS[@]}")" "$scheme" ;;
+next-scheme) write "$layout" "$(cycle "$scheme" 1 "${SCHEMES[@]}")" ;;
+prev-scheme) write "$layout" "$(cycle "$scheme" -1 "${SCHEMES[@]}")" ;;
+random) write "${LAYOUTS[RANDOM % ${#LAYOUTS[@]}]}" "${SCHEMES[RANDOM % ${#SCHEMES[@]}]}" ;;
+transition)
+  contains "${2:-}" "${TRANSITIONS[@]}" || { echo "Unknown transition '${2:-}'. Choose from: ${TRANSITIONS[*]}" >&2; exit 2; }
+  set_keys --arg t "$2" '.transition = $t'
+  ;;
+speed)
+  [[ ${2:-} =~ ^[0-9]*\.?[0-9]+$ ]] || { echo "speed needs a number, e.g. 1.5" >&2; exit 2; }
+  set_keys --argjson v "$2" '.speed = ([0.25, ([3, $v] | min)] | max)'
+  ;;
+morph)
+  case "${2:-}:${3:-}" in
+  layouts:on | layouts:off) set_keys --argjson v "$([[ $3 == on ]] && echo true || echo false)" '.animateLayouts = $v' ;;
+  colors:on | colors:off) set_keys --argjson v "$([[ $3 == on ]] && echo true || echo false)" '.animateColors = $v' ;;
+  *) echo "usage: omarchy-launcher-style morph layouts|colors on|off" >&2; exit 2 ;;
+  esac
+  ;;
+list)
+  echo "Layouts: ${LAYOUTS[*]}"
+  echo "Schemes: ${SCHEMES[*]}"
+  echo "Transitions: ${TRANSITIONS[*]}"
+  exit 0
+  ;;
+-h | --help | help | "")
+  usage
+  exit 0
+  ;;
+*)
+  echo "omarchy-launcher-style: unknown command '$1'" >&2
+  usage >&2
+  exit 2
+  ;;
+esac
+
+if ((show)); then
+  # Give the shell's file watcher a moment before reopening.
+  sleep 0.2
+  omarchy-menu summon "${LAUNCHER_STYLE_SHOW_ROUTE:-root}"
+fi

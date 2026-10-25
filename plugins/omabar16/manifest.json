@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "omabar16",
+  "name": "omabar16",
+  "version": "1.0.0",
+  "author": "skll",
+  "license": "MIT",
+  "description": "A bar you can rebuild without touching JSON: drag-and-drop modules, preset layouts and positions, preset themes, and a studio with a hex colour picker for making your own.",
+  "kinds": [
+    "bar",
+    "overlay"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "bar": "Bar.qml",
+    "overlay": "Customizer.qml"
+  }
+}

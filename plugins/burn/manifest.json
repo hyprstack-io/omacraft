@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "omacraft.burn",
+  "name": "Burn My Windows",
+  "version": "1.0.0",
+  "author": "skll",
+  "license": "MIT",
+  "description": "Window open and close effects after the GNOME extension Burn My Windows: fire, broken glass, Doom melt, the Matrix, portals, TV switch-off and 23 more, played by the shell over a copy of the window.",
+  "kinds": [
+    "service"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Burn.qml"
+  }
+}

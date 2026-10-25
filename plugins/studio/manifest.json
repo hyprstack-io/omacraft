@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "id": "omacraft.studio",
+  "name": "Studio",
+  "version": "1.3.0",
+  "author": "skll",
+  "license": "MIT",
+  "description": "One home for desktop styling: Wallhaven and local wallpapers with transitions and auto-change, Hyprland animation presets, wallpaper-driven colors (Hyprskin: Material, wallbash and pywal-style schemes with contrast control and template exports) with per-part control over what follows them, the launcher with rofi-style layouts and color schemes (omalauncher), and the bar customizer.",
+  "kinds": [
+    "menu",
+    "service",
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "menu": "Main.qml",
+    "service": "Background.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Studio",
+    "description": "Launcher button, or the Studio popout, depending on the entry's role",
+    "category": "Appearance",
+    "aliases": [
+      "studio",
+      "launcher",
+      "hyprskin",
+      "wallpaper",
+      "animations"
+    ],
+    "allowMultiple": true,
+    "defaultSection": "left",
+    "defaults": {
+      "role": "launcher"
+    },
+    "schema": [
+      {
+        "key": "role",
+        "type": "enum",
+        "label": "What this button does",
+        "options": [
+          "launcher",
+          "studio"
+        ],
+        "defaultValue": "launcher",
+        "description": "launcher: the Omarchy menu. studio: a popout from the bar with the wallpaper, its colors and the bar's contrast and effects, plus a button for the full Studio hub."
+      }
+    ]
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.menu"
+  }
+}

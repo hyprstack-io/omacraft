@@ -1,0 +1,2356 @@
+#!/usr/bin/env python3
+"""Hyprskin: Wallhaven wallpapers and wallpaper-driven theming for Omarchy.
+
+Searches wallhaven.cc, downloads wallpapers into ~/Pictures/Wallhaven, and
+(optionally) derives a full Omarchy theme from the wallpaper's colors, in the
+spirit of pywal / wallbash. The generated theme lives in
+~/.config/omarchy/themes/hyprskin and is applied with `omarchy theme set`, so
+every templated app (bar, terminals, Hyprland borders, btop, browser, ...)
+follows the wallpaper.
+
+  hyprskin search [--query Q] [--page N] [--seed S] [--sorting S] [--top-range R]
+                  [--categories 111] [--purity 100] [--atleast WxH]
+                  [--ratios R] [--color HEX] [--json]
+  hyprskin apply <wallhaven-id | url | path> [--no-theme] [--auto]
+  hyprskin next [--auto]                 # rotate: random pick from the rotation source
+  hyprskin theme [path]                  # build + apply a theme from a wallpaper (default: current)
+  hyprskin follow <path>                 # a wallpaper was set elsewhere: theme from it if wallpaper colors are on
+  hyprskin colors [path] [--json]        # print the palette, change nothing
+  hyprskin export                        # rewrite ~/.cache/hyprskin exports and render templates
+  hyprskin library [--json]              # downloaded wallpapers
+  hyprskin local [--query Q] [--dir D]... [--sort newest|oldest|name|random]
+                 [--min-width N] [--page N] [--seed S] [--refresh] [--json]
+                                         # wallpapers in your own folders
+  hyprskin folder add|remove <path>      # manage the folders `local` searches
+  hyprskin delete <path>                 # remove a downloaded wallpaper
+  hyprskin favorite add|remove|toggle <id | url | path> [--meta JSON]
+  hyprskin favorites [--json]            # Studio favorites (local; Wallhaven's API is read-only)
+  hyprskin account [--json]              # the API key's account: settings and collections
+  hyprskin collection <id> [--page N] [--json]   # one of your collections (needs settings.username)
+  hyprskin use-account-filters           # copy the account's purity/categories/range into the search
+  hyprskin status [--json]
+  hyprskin bar apply|restore|status       # recolor omabar16 from the palette / put it back
+  hyprskin bar style <key> <json|null>   # set one omabar16 style key (outline, shadow, ...)
+  hyprskin targets [--json]              # which interface parts follow the wallpaper
+  hyprskin get <key>                     # e.g. transition.type
+  hyprskin set <key> <value>             # e.g. rotation.interval 30
+"""
+
+import fcntl
+import json
+import math
+import os
+import random
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+HOME = Path.home()
+CONFIG_HOME = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config"))
+STATE_HOME = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state"))
+CACHE_HOME = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache"))
+
+SETTINGS_FILE = CONFIG_HOME / "omarchy" / "hyprskin.json"
+SHELL_JSON = CONFIG_HOME / "omarchy" / "shell.json"
+BAR_STATE = STATE_HOME / "hyprskin" / "omabar16-base.json"
+STATE_DIR = STATE_HOME / "hyprskin"
+STATE_FILE = STATE_DIR / "state.json"
+LOCK_FILE = STATE_DIR / "lock"
+THUMB_DIR = CACHE_HOME / "hyprskin" / "thumbs"
+LOCAL_THUMB_DIR = CACHE_HOME / "hyprskin" / "local-thumbs"
+LOCAL_INDEX = CACHE_HOME / "hyprskin" / "local-index.json"
+DATA_HOME = Path(os.environ.get("XDG_DATA_HOME", HOME / ".local/share"))
+FAVORITES_FILE = DATA_HOME / "hyprskin" / "favorites.json"
+LOCAL_PAGE_SIZE = 48
+LOCAL_SCAN_LIMIT = 50000
+LOCAL_RESCAN_AFTER = 120  # seconds; the panel's Rescan button forces one
+# Big trees that never hold wallpapers but would slow a home-folder scan.
+SKIP_DIRS = {"node_modules", "__pycache__", "site-packages", "venv", ".venv", "target", "build", "dist", "Steam", "steamapps"}
+THEME_SLUG = "hyprskin"
+THEME_DIR = CONFIG_HOME / "omarchy" / "themes" / THEME_SLUG
+OMARCHY_CURRENT = STATE_HOME / "omarchy" / "current"
+
+API = "https://wallhaven.cc/api/v1"
+USER_AGENT = "hyprskin/1.0 (+omarchy shell plugin)"
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
+HISTORY_LIMIT = 40
+
+DEFAULTS = {
+    "library": str(HOME / "Pictures" / "Wallhaven"),
+    "apiKey": "",
+    "username": "",            # Wallhaven account name; the API needs it to open collections
+    "search": {
+        "query": "",
+        "categories": "111",   # general / anime / people
+        "purity": "100",       # sfw / sketchy / nsfw (nsfw needs an API key)
+        "sorting": "toplist",  # date_added relevance random views favorites toplist hot
+        "topRange": "1M",      # 1d 3d 1w 1M 3M 6M 1y
+        "atleast": "",         # e.g. 2560x1440
+        "ratios": "",          # e.g. 16x9,21x9
+        "color": "",           # hex without '#'
+    },
+    "transition": {
+        "type": "grow",        # see Background.qml for the list
+        "duration": 900,       # ms
+        "easing": "InOutCubic",
+        "direction": "left",   # wipe / slide / push
+        "position": "center",  # grow / outer origin
+    },
+    "fill": "crop",            # crop fit stretch center tile
+    "fillColor": "",           # letterbox colour for fit/center; "" = theme background
+    "dynamicColors": True,
+    "colorizeBar": True,       # recolor omabar16's own fixed colours too
+    "palette": {
+        "mode": "auto",        # auto dark light
+        "style": "balanced",   # balanced vibrant pastel muted mono
+        "accent": "auto",      # auto, or a palette role to use as the accent (blue, magenta, ...)
+        "scheme": "material",  # material matugen wallbash pywal flavours classic
+        "engine": "auto",      # auto: the real wal / matugen / flavours when installed; builtin: never
+        "contrast": "normal",  # soft normal high: text minimums and bar/wallpaper separation
+    },
+    # Interface parts that keep a regular theme's colors instead of the
+    # wallpaper's, e.g. {"terminals": false}. Missing means "follow".
+    "targets": {},
+    "keepTheme": "",           # theme those parts keep; "" = the last regular theme used
+    "rotation": {
+        "interval": 0,         # minutes; 0 = off
+        "source": "search",    # search library local favorites
+    },
+    "local": {
+        "folders": ["~/Pictures"],
+        "minWidth": 1280,      # skip icons and small images; 0 = everything
+        "sort": "newest",      # newest oldest name random
+    },
+}
+
+
+# --------------------------------------------------------------------- utils
+
+def die(message, code=1):
+    print(f"hyprskin: {message}", file=sys.stderr)
+    sys.exit(code)
+
+
+def deep_merge(base, override):
+    out = dict(base)
+    for key, value in (override or {}).items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = deep_merge(out[key], value)
+        else:
+            out[key] = value
+    return out
+
+
+def read_json(path, fallback):
+    try:
+        return json.loads(Path(path).read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return fallback
+
+
+def write_json(path, data, mode=None):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(data, indent=2) + "\n")
+    if mode is not None:
+        os.chmod(tmp, mode)
+    os.replace(tmp, path)
+
+
+def load_settings():
+    return deep_merge(DEFAULTS, read_json(SETTINGS_FILE, {}))
+
+
+def save_settings(settings):
+    # The file can hold an API key, so keep it private.
+    write_json(SETTINGS_FILE, settings, mode=0o600)
+
+
+def load_state():
+    return read_json(STATE_FILE, {})
+
+
+def save_state(state):
+    write_json(STATE_FILE, state)
+
+
+def library_dir(settings):
+    path = Path(os.path.expanduser(settings.get("library") or DEFAULTS["library"]))
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def notify(title, body="", icon="󰸉"):
+    if shutil.which("omarchy-notification-send"):
+        subprocess.run(["omarchy-notification-send", "-g", icon, title, body],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    elif shutil.which("notify-send"):
+        subprocess.run(["notify-send", title, body], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+class Lock:
+    """Serialize applies: the rotation timer and a click can race otherwise."""
+
+    def __enter__(self):
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        self.handle = open(LOCK_FILE, "w")
+        fcntl.flock(self.handle, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *exc):
+        fcntl.flock(self.handle, fcntl.LOCK_UN)
+        self.handle.close()
+
+
+def current_background():
+    try:
+        return str((OMARCHY_CURRENT / "background").resolve(strict=True))
+    except (FileNotFoundError, RuntimeError):
+        return ""
+
+
+def current_theme():
+    try:
+        return (OMARCHY_CURRENT / "theme.name").read_text().strip()
+    except FileNotFoundError:
+        return ""
+
+
+# ------------------------------------------------------------------- network
+
+def http_get(url, timeout=30):
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return response.read()
+    except urllib.error.HTTPError as error:
+        if error.code == 429:
+            die("Wallhaven rate limit hit (45 requests/minute); try again shortly")
+        if error.code == 401:
+            die("Wallhaven rejected the API key (needed for NSFW results)")
+        die(f"HTTP {error.code} from {urllib.parse.urlsplit(url).netloc}")
+    except urllib.error.URLError as error:
+        die(f"network error: {error.reason}")
+    except TimeoutError:
+        die("network timeout talking to Wallhaven")
+
+
+def api_get(path, params, settings):
+    params = {k: v for k, v in params.items() if v not in ("", None)}
+    if settings.get("apiKey"):
+        params["apikey"] = settings["apiKey"]
+    url = f"{API}/{path}"
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+    try:
+        return json.loads(http_get(url))
+    except json.JSONDecodeError:
+        die("Wallhaven returned something that is not JSON")
+
+
+def download(url, dest):
+    dest = Path(dest)
+    if dest.exists() and dest.stat().st_size > 0:
+        return dest
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    data = http_get(url, timeout=120)
+    tmp = dest.with_name("." + dest.name + ".part")
+    tmp.write_bytes(data)
+    os.replace(tmp, dest)
+    return dest
+
+
+def search_params(search, page=1, seed=None):
+    params = {
+        "q": search.get("query", ""),
+        "categories": search.get("categories") or "111",
+        "purity": search.get("purity") or "100",
+        "sorting": search.get("sorting") or "toplist",
+        "atleast": search.get("atleast", ""),
+        "ratios": search.get("ratios", ""),
+        "colors": (search.get("color") or "").lstrip("#"),
+        "page": page,
+    }
+    if params["sorting"] == "toplist":
+        params["topRange"] = search.get("topRange") or "1M"
+    if params["sorting"] == "random" and seed:
+        params["seed"] = seed
+    return params
+
+
+def normalize(item):
+    return {
+        "id": item.get("id", ""),
+        "url": item.get("url", ""),
+        "full": item.get("path", ""),
+        "thumbRemote": (item.get("thumbs") or {}).get("small", ""),
+        "resolution": item.get("resolution", ""),
+        "ratio": item.get("ratio", ""),
+        "fileType": item.get("file_type", ""),
+        "fileSize": item.get("file_size", 0),
+        "category": item.get("category", ""),
+        "purity": item.get("purity", ""),
+        "favorites": item.get("favorites", 0),
+        "views": item.get("views", 0),
+        "colors": item.get("colors", []),
+    }
+
+
+def cache_thumbs(results):
+    """Fetch one page of previews (24) in parallel; the panel shows local files."""
+    THUMB_DIR.mkdir(parents=True, exist_ok=True)
+
+    def fetch(result):
+        remote = result.get("thumbRemote")
+        result["thumb"] = ""
+        if not remote:
+            return
+        dest = THUMB_DIR / (Path(urllib.parse.urlsplit(remote).path).name or f"{result['id']}.jpg")
+        try:
+            if not dest.exists() or dest.stat().st_size == 0:
+                request = urllib.request.Request(remote, headers={"User-Agent": USER_AGENT})
+                with urllib.request.urlopen(request, timeout=20) as response:
+                    tmp = dest.with_name("." + dest.name + ".part")
+                    tmp.write_bytes(response.read())
+                    os.replace(tmp, dest)
+            result["thumb"] = str(dest)
+        except Exception:
+            pass
+
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        list(pool.map(fetch, results))
+    prune_thumbs()
+
+
+def prune_thumbs(keep=1200):
+    files = sorted(THUMB_DIR.glob("*"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for stale in files[keep:]:
+        stale.unlink(missing_ok=True)
+
+
+# ------------------------------------------------------------------ commands
+
+SEARCH_FLAGS = {
+    "--query": "query", "--sorting": "sorting", "--top-range": "topRange",
+    "--categories": "categories", "--purity": "purity", "--atleast": "atleast",
+    "--ratios": "ratios", "--color": "color",
+}
+
+
+def cmd_search(args):
+    settings = load_settings()
+    search = dict(settings["search"])
+    page = 1
+    seed = ""
+    as_json = "--json" in args
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg in SEARCH_FLAGS:
+            if i + 1 >= len(args):
+                die(f"{arg} needs a value")
+            search[SEARCH_FLAGS[arg]] = args[i + 1]
+            i += 2
+        elif arg == "--page":
+            page = max(1, int(args[i + 1]))
+            i += 2
+        elif arg == "--seed":
+            seed = args[i + 1]
+            i += 2
+        elif arg == "--json":
+            i += 1
+        else:
+            die(f"unknown search option: {arg}")
+
+    if search.get("purity", "100")[-1:] == "1" and not settings.get("apiKey"):
+        die("NSFW results need a Wallhaven API key (hyprskin set apiKey <key>)")
+
+    # The last search doubles as the rotation source, so remember it.
+    settings["search"] = search
+    save_settings(settings)
+
+    # One page (24 results) and its previews; the panel asks for the next page on scroll.
+    data = api_get("search", search_params(search, page, seed=seed), settings)
+    meta = data.get("meta") or {}
+    results = [normalize(item) for item in data.get("data") or []]
+    cache_thumbs(results)
+    out = {
+        "seed": meta.get("seed") or seed,
+        "page": meta.get("current_page", page),
+        "lastPage": meta.get("last_page", page),
+        "total": meta.get("total", len(results)),
+        "results": results,
+    }
+    if as_json:
+        print(json.dumps(out))
+    else:
+        for r in results:
+            print(f"{r['id']}  {r['resolution']:>10}  {r['category']:<8} {r['url']}")
+        print(f"page {out['page']}/{out['lastPage']} · {out['total']} results")
+
+
+WALLHAVEN_ID = re.compile(r"^[a-z0-9]{6,8}$")
+
+
+def resolve_wallpaper(target, settings):
+    """Return a local file for a wallhaven id, wallhaven url, image url or path."""
+    path = Path(os.path.expanduser(target))
+    lib = library_dir(settings)
+    if path.is_file():
+        path = path.resolve()
+        # omarchy-theme-set replaces current/theme wholesale, so prefer a stable copy.
+        if (OMARCHY_CURRENT / "theme") in path.parents:
+            stable = lib / path.name
+            if stable.is_file():
+                return stable
+            for theme_root in (CONFIG_HOME / "omarchy" / "themes", Path("/usr/share/omarchy/themes")):
+                candidate = theme_root / current_theme() / "backgrounds" / path.name
+                if candidate.is_file() and THEME_DIR not in candidate.parents:
+                    return candidate
+        return path
+
+    match = re.search(r"wallhaven\.cc/(?:w/|full/\w+/wallhaven-)([a-z0-9]+)", target)
+    wid = match.group(1) if match else (target if WALLHAVEN_ID.match(target) else None)
+
+    if target.startswith("https://w.wallhaven.cc/full/"):
+        name = Path(urllib.parse.urlsplit(target).path).name
+        return download(target, lib / name)
+
+    if wid:
+        for existing in lib.glob(f"wallhaven-{wid}.*"):
+            return existing
+        info = api_get(f"w/{wid}", {}, settings).get("data") or {}
+        full = info.get("path")
+        if not full:
+            die(f"Wallhaven has no wallpaper with id {wid}")
+        return download(full, lib / Path(urllib.parse.urlsplit(full).path).name)
+
+    if target.startswith(("http://", "https://")):
+        name = Path(urllib.parse.urlsplit(target).path).name or f"wallpaper-{int(time.time())}.jpg"
+        return download(target, lib / name)
+
+    die(f"not a file, url or wallhaven id: {target}")
+
+
+def apply_wallpaper(path, settings, theme=None, auto=False):
+    path = Path(path).resolve()
+    theme = settings.get("dynamicColors", True) if theme is None else theme
+
+    with Lock():
+        if theme:
+            previous = current_theme()
+            if previous and previous != THEME_SLUG:
+                state = load_state()
+                state["previousTheme"] = previous
+                save_state(state)
+            palette = build_theme(path, settings)
+            if settings.get("colorizeBar", True):
+                colorize_bar(palette)
+            run_theme_set()
+        else:
+            palette = None
+            # The background service reports every wallpaper it is handed to
+            # `hyprskin follow`; this one was asked not to recolour.
+            state = load_state()
+            state["skipFollow"] = str(path)
+            save_state(state)
+            subprocess.run(["omarchy-theme-bg-set", str(path)], check=False)
+
+        state = load_state()
+        history = [h for h in state.get("history", []) if h != str(path)]
+        history.insert(0, str(path))
+        state.update({
+            "current": str(path),
+            "lastChangedAt": int(time.time()),
+            "history": history[:HISTORY_LIMIT],
+            "lastError": "",
+        })
+        if palette:
+            state["palette"] = palette
+        save_state(state)
+
+    if not auto:
+        print(str(path))
+
+
+def run_theme_set():
+    command = "omarchy-theme-set" if shutil.which("omarchy-theme-set") else None
+    if command is None:
+        die("omarchy-theme-set not found on PATH")
+    result = subprocess.run([command, THEME_SLUG], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    if result.returncode != 0:
+        die(f"omarchy theme set failed: {result.stderr.strip()}")
+
+
+def cmd_apply(args):
+    if not args:
+        die("usage: hyprskin apply <wallhaven-id | url | path> [--no-theme] [--auto]")
+    settings = load_settings()
+    theme = False if "--no-theme" in args else (True if "--theme" in args else None)
+    target = next(a for a in args if not a.startswith("--"))
+    apply_wallpaper(resolve_wallpaper(target, settings), settings, theme, auto="--auto" in args)
+
+
+def library_files(settings):
+    lib = library_dir(settings)
+    files = [p for p in lib.iterdir() if p.is_file() and p.suffix.lower() in IMAGE_EXTS and not p.name.startswith(".")]
+    return sorted(files, key=lambda p: p.stat().st_mtime, reverse=True)
+
+
+def cmd_next(args):
+    settings = load_settings()
+    state = load_state()
+    auto = "--auto" in args
+    recent = set(state.get("history", [])[:HISTORY_LIMIT // 2])
+    source = settings["rotation"].get("source", "search")
+
+    try:
+        if source == "local":
+            files = [Path(e["path"]) for e in local_entries(settings, settings["local"].get("folders") or [],
+                                                             int(settings["local"].get("minWidth") or 0))]
+            if not files:
+                die("no wallpapers found in your local folders")
+            fresh = [f for f in files if str(f) not in recent] or files
+            chosen = random.choice(fresh)
+        elif source == "favorites":
+            views = [favorite_view(f, settings) for f in load_favorites()]
+            targets = [v["target"] for v in views if not v["missing"]]
+            if not targets:
+                die("no favorites yet; heart a few wallpapers first")
+            fresh = [t for t in targets if t not in recent] or targets
+            chosen = resolve_wallpaper(random.choice(fresh), settings)
+        elif source == "library":
+            files = library_files(settings)
+            if not files:
+                die("the wallpaper library is empty; download a few first")
+            fresh = [f for f in files if str(f.resolve()) not in recent] or files
+            chosen = random.choice(fresh)
+        else:
+            search = dict(settings["search"])
+            search["sorting"] = "random"
+            data = api_get("search", search_params(search, 1, seed=f"{random.randrange(36**6):06x}"), settings)
+            results = [normalize(i) for i in data.get("data") or []]
+            if not results:
+                die("the rotation search returned nothing")
+            lib = library_dir(settings)
+            downloaded = {p.name for p in lib.iterdir()}
+            fresh = [r for r in results if Path(urllib.parse.urlsplit(r["full"]).path).name not in downloaded] or results
+            pick = random.choice(fresh)
+            chosen = download(pick["full"], lib / Path(urllib.parse.urlsplit(pick["full"]).path).name)
+        apply_wallpaper(chosen, settings, auto=auto)
+    except SystemExit as exit_:
+        if exit_.code:
+            state = load_state()
+            state["lastError"] = "rotation failed"
+            state["lastErrorAt"] = int(time.time())
+            save_state(state)
+        raise
+
+
+def cmd_theme(args):
+    settings = load_settings()
+    target = next((a for a in args if not a.startswith("--")), "") or current_background()
+    if not target:
+        die("no wallpaper given and no current background")
+    path = resolve_wallpaper(target, settings)
+    apply_wallpaper(path, settings, theme=True)
+
+
+def cmd_follow(args):
+    """Called by the background service when a wallpaper is set outside a
+    theme switch (the background switcher, `omarchy theme bg next/set`), so
+    the desktop and bar follow it like any wallpaper Studio applies."""
+    settings = load_settings()
+    if not settings.get("dynamicColors", True):
+        return
+    target = next((a for a in args if not a.startswith("--")), "") or current_background()
+    if not target or not Path(os.path.expanduser(target)).is_file():
+        return
+    if Path(target).suffix.lower() not in IMAGE_EXTS:
+        return  # video backgrounds have no palette to read
+    path = resolve_wallpaper(target, settings)
+    state = load_state()
+    if state.get("skipFollow") in (str(path), str(Path(target).resolve())):
+        state.pop("skipFollow", None)
+        save_state(state)
+        return
+    if current_theme() == THEME_SLUG and state.get("current") == str(path):
+        return  # already themed from this wallpaper
+    apply_wallpaper(path, settings, theme=True, auto=True)
+
+
+def cmd_colors(args):
+    settings = load_settings()
+    target = next((a for a in args if not a.startswith("--")), "") or current_background()
+    if not target or not Path(target).is_file():
+        die("no image to read colours from")
+    palette = extract_palette(Path(target), settings["palette"])
+    if "--json" in args:
+        print(json.dumps(palette))
+        return
+    for key, value in palette.items():
+        if isinstance(value, dict):
+            print(f"\n[{key}]")
+            for sub, color in value.items():
+                print(f"{sub:<28} {color}")
+        else:
+            print(f"{key:<28} {value}")
+
+
+# -------------------------------------------------------------- local folders
+
+def expand_folder(path):
+    return Path(os.path.expanduser(str(path))).resolve()
+
+
+def scan_folder(root, limit):
+    """Image files under root, skipping hidden and known-heavy directories."""
+    found = []
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        dirnames[:] = [d for d in dirnames if not d.startswith(".") and d not in SKIP_DIRS]
+        for name in filenames:
+            if name.startswith(".") or Path(name).suffix.lower() not in IMAGE_EXTS:
+                continue
+            found.append(os.path.join(dirpath, name))
+            if len(found) >= limit:
+                return found
+    return found
+
+
+def image_size(path):
+    try:
+        from PIL import Image
+        with Image.open(path) as img:
+            return img.size
+    except Exception:
+        pass
+    result = subprocess.run(["magick", "identify", "-ping", "-format", "%w %h", f"{path}[0]"],
+                            capture_output=True, text=True)
+    try:
+        w, h = result.stdout.split()
+        return int(w), int(h)
+    except ValueError:
+        return 0, 0
+
+
+def local_entries(settings, folders, min_width, refresh=False):
+    """Indexed images in the folders: path, name, mtime, width, height.
+
+    The scan is cached briefly and image sizes are cached by mtime, so paging
+    and filtering stay quick even over a whole home folder.
+    """
+    roots = sorted({str(expand_folder(f)) for f in folders if expand_folder(f).is_dir()})
+    index = read_json(LOCAL_INDEX, {})
+    sizes = index.get("sizes", {})
+    scan_key = "|".join(roots)
+    scan = index.get("scans", {}).get(scan_key)
+    now = time.time()
+
+    dirty = False
+    if refresh or not scan or now - scan.get("at", 0) > LOCAL_RESCAN_AFTER:
+        files = []
+        for root in roots:
+            files.extend(scan_folder(root, LOCAL_SCAN_LIMIT - len(files)))
+        scan = {"at": now, "files": sorted(set(files))}
+        index.setdefault("scans", {})[scan_key] = scan
+        dirty = True
+
+    entries = []
+    for path in scan["files"]:
+        try:
+            mtime = int(os.stat(path).st_mtime)
+        except OSError:
+            continue
+        cached = sizes.get(path)
+        if not cached or cached[0] != mtime:
+            w, h = image_size(path)
+            cached = sizes[path] = [mtime, w, h]
+            dirty = True
+        if min_width and cached[1] < min_width:
+            continue
+        entries.append({"path": path, "name": os.path.basename(path), "mtime": mtime,
+                        "width": cached[1], "height": cached[2]})
+
+    if dirty:
+        # Forget sizes for files no scan mentions any more.
+        live = set()
+        for kept in index.get("scans", {}).values():
+            live.update(kept.get("files", []))
+        index["sizes"] = {k: v for k, v in sizes.items() if k in live}
+        LOCAL_INDEX.parent.mkdir(parents=True, exist_ok=True)
+        write_json(LOCAL_INDEX, index)
+    return entries
+
+
+def local_thumb(entry):
+    import hashlib
+    LOCAL_THUMB_DIR.mkdir(parents=True, exist_ok=True)
+    key = hashlib.sha1(f"{entry['path']}:{entry['mtime']}".encode()).hexdigest()[:20]
+    dest = LOCAL_THUMB_DIR / f"{key}.jpg"
+    if dest.exists():
+        return str(dest)
+    try:
+        from PIL import Image
+        with Image.open(entry["path"]) as img:
+            img.draft("RGB", (480, 320))  # JPEG: decode at reduced size, much faster
+            img = img.convert("RGB")
+            img.thumbnail((480, 320))
+            tmp = dest.with_name("." + dest.name)
+            img.save(tmp, "JPEG", quality=82)
+            os.replace(tmp, dest)
+    except Exception:
+        result = subprocess.run(["magick", f"{entry['path']}[0]", "-thumbnail", "480x320^", str(dest)],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if result.returncode != 0:
+            return ""
+    return str(dest)
+
+
+def prune_local_thumbs(keep=4000):
+    files = sorted(LOCAL_THUMB_DIR.glob("*.jpg"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for stale in files[keep:]:
+        stale.unlink(missing_ok=True)
+
+
+def cmd_local(args):
+    settings = load_settings()
+    local = settings["local"]
+    folders, query, page, seed = [], "", 1, ""
+    sort = local.get("sort", "newest")
+    min_width = int(local.get("minWidth") or 0)
+    refresh = "--refresh" in args
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        value = args[i + 1] if i + 1 < len(args) else None
+        if arg in ("--json", "--refresh"):
+            i += 1
+            continue
+        if value is None:
+            die(f"{arg} needs a value")
+        if arg == "--dir":
+            folders.append(value)
+        elif arg == "--query":
+            query = value
+        elif arg == "--sort":
+            sort = value
+        elif arg == "--min-width":
+            min_width = int(value or 0)
+        elif arg == "--page":
+            page = max(1, int(value))
+        elif arg == "--seed":
+            seed = value
+        else:
+            die(f"unknown local option: {arg}")
+        i += 2
+
+    folders = folders or local.get("folders") or []
+    missing = [f for f in folders if not expand_folder(f).is_dir()]
+    entries = local_entries(settings, folders, min_width, refresh=refresh)
+
+    # Words starting with ~ or / limit results to that folder; the rest match names.
+    prefixes, terms = [], []
+    for word in query.split():
+        if word.startswith(("~", "/")):
+            prefixes.append(str(expand_folder(word)).rstrip("/") + "/")
+        else:
+            terms.append(word.lower())
+    if prefixes:
+        entries = [e for e in entries if any(e["path"].startswith(p) for p in prefixes)]
+    if terms:
+        entries = [e for e in entries if all(t in e["path"].lower() for t in terms)]
+
+    if sort == "name":
+        entries.sort(key=lambda e: e["name"].lower())
+    elif sort == "oldest":
+        entries.sort(key=lambda e: e["mtime"])
+    elif sort == "random":
+        seed = seed or f"{random.randrange(36**6):06x}"
+        random.Random(seed).shuffle(entries)
+    else:
+        entries.sort(key=lambda e: e["mtime"], reverse=True)
+
+    total = len(entries)
+    last_page = max(1, math.ceil(total / LOCAL_PAGE_SIZE))
+    chunk = entries[(page - 1) * LOCAL_PAGE_SIZE: page * LOCAL_PAGE_SIZE]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        thumbs = list(pool.map(local_thumb, chunk))
+    prune_local_thumbs()
+
+    home = str(HOME)
+    results = [{
+        "path": e["path"],
+        "name": e["name"],
+        "dir": os.path.dirname(e["path"]).replace(home, "~", 1),
+        "thumb": thumb,
+        "resolution": f"{e['width']}x{e['height']}" if e["width"] else "",
+    } for e, thumb in zip(chunk, thumbs)]
+
+    out = {"page": page, "lastPage": last_page, "total": total, "seed": seed,
+           "missing": missing, "results": results}
+    if "--json" in args:
+        print(json.dumps(out))
+    else:
+        for r in results:
+            print(f"{r['resolution']:>10}  {r['path']}")
+        print(f"page {page}/{last_page} · {total} images")
+
+
+def cmd_folder(args):
+    if len(args) < 2 or args[0] not in ("add", "remove"):
+        die("usage: hyprskin folder add|remove <path>")
+    settings = load_settings()
+    folders = list(settings["local"].get("folders") or [])
+    target = expand_folder(args[1])
+    home = str(HOME)
+    pretty = str(target).replace(home, "~", 1) if str(target).startswith(home) else str(target)
+    if args[0] == "add":
+        if not target.is_dir():
+            die(f"not a folder: {args[1]}")
+        if all(expand_folder(f) != target for f in folders):
+            folders.append(pretty)
+    else:
+        folders = [f for f in folders if expand_folder(f) != target and f != args[1]]
+    settings["local"]["folders"] = folders
+    save_settings(settings)
+    print(json.dumps(folders))
+
+
+def cmd_library(args):
+    settings = load_settings()
+    files = library_files(settings)
+    if "--json" in args:
+        print(json.dumps([{"path": str(f), "name": f.name} for f in files]))
+    else:
+        for f in files:
+            print(f)
+
+
+def cmd_delete(args):
+    if not args:
+        die("usage: hyprskin delete <path>")
+    settings = load_settings()
+    lib = library_dir(settings).resolve()
+    path = Path(args[0]).resolve()
+    if lib not in path.parents:
+        die("only wallpapers inside the library can be deleted")
+    path.unlink(missing_ok=True)
+
+
+# ----------------------------------------------------------------- favorites
+#
+# Studio's own favorites. Wallhaven's API is read-only, so these cannot be
+# pushed to a Wallhaven collection; they live in favorites.json. A Wallhaven
+# wallpaper is keyed by its id, so the search result, the downloaded library
+# file and a collection entry all share one heart; anything else is keyed by
+# its path.
+
+def favorite_key(target):
+    target = str(target)
+    name = Path(urllib.parse.urlsplit(target).path).name if "://" in target else Path(target).name
+    match = re.match(r"wallhaven-([a-z0-9]+)\.\w+$", name)
+    if match:
+        return match.group(1)
+    match = re.search(r"wallhaven\.cc/w/([a-z0-9]+)", target)
+    if match:
+        return match.group(1)
+    if WALLHAVEN_ID.match(target):
+        return target
+    return str(Path(os.path.expanduser(target)).resolve())
+
+
+def wallhaven_thumb_url(wid):
+    return f"https://th.wallhaven.cc/small/{wid[:2]}/{wid}.jpg"
+
+
+def load_favorites():
+    data = read_json(FAVORITES_FILE, [])
+    return data if isinstance(data, list) else []
+
+
+def save_favorites(favorites):
+    write_json(FAVORITES_FILE, favorites)
+
+
+def favorite_entry(target, meta):
+    key = favorite_key(target)
+    wallhaven = WALLHAVEN_ID.match(key) is not None and not key.startswith("/")
+    entry = {"key": key, "addedAt": int(time.time())}
+    if wallhaven:
+        entry["id"] = key
+        entry["full"] = meta.get("full") or (target if str(target).startswith("https://w.wallhaven.cc/") else "")
+        entry["thumbRemote"] = meta.get("thumbRemote") or wallhaven_thumb_url(key)
+        entry["url"] = meta.get("url") or f"https://wallhaven.cc/w/{key}"
+    else:
+        entry["path"] = key
+    for field in ("resolution", "colors"):
+        if meta.get(field):
+            entry[field] = meta[field]
+    return entry
+
+
+def favorite_view(entry, settings):
+    """A favorite as the panel shows it: something to preview and something to apply."""
+    view = dict(entry)
+    if entry.get("path"):
+        view["thumb"] = entry["path"]
+        view["local"] = True
+        view["target"] = entry["path"]
+        view["missing"] = not Path(entry["path"]).is_file()
+        return view
+    wid = entry.get("id", "")
+    downloaded = next(iter(library_dir(settings).glob(f"wallhaven-{wid}.*")), None)
+    view["target"] = str(downloaded) if downloaded else (entry.get("full") or wid)
+    view["downloaded"] = bool(downloaded)
+    view["local"] = False
+    view["missing"] = False
+    return view
+
+
+def cmd_favorite(args):
+    """favorite add|remove|toggle <target> [--meta JSON]"""
+    if len(args) < 2 or args[0] not in ("add", "remove", "toggle"):
+        die("usage: hyprskin favorite add|remove|toggle <wallhaven-id | url | path> [--meta JSON]")
+    action, target = args[0], args[1]
+    meta = {}
+    if "--meta" in args:
+        try:
+            meta = json.loads(args[args.index("--meta") + 1]) or {}
+        except (IndexError, json.JSONDecodeError):
+            die("--meta needs a JSON object")
+    key = favorite_key(target)
+    favorites = load_favorites()
+    present = any(f.get("key") == key for f in favorites)
+    if action == "toggle":
+        action = "remove" if present else "add"
+    if action == "remove":
+        favorites = [f for f in favorites if f.get("key") != key]
+    elif not present:
+        if not key.startswith("/") or Path(key).is_file():
+            favorites.insert(0, favorite_entry(target, meta))
+        else:
+            die(f"no such file: {key}")
+    save_favorites(favorites)
+    print(json.dumps({"key": key, "favorite": action == "add"}))
+
+
+def cmd_favorites(args):
+    settings = load_settings()
+    views = [favorite_view(f, settings) for f in load_favorites()]
+    remote = [v for v in views if not v["local"]]
+    if remote:
+        for v in remote:
+            v["thumbRemote"] = v.get("thumbRemote") or wallhaven_thumb_url(v["id"])
+        cache_thumbs(remote)
+        for v in remote:
+            if v.get("downloaded") and not v["thumb"]:
+                v["thumb"], v["local"] = v["target"], True
+    if "--json" in args:
+        print(json.dumps(views))
+    else:
+        for v in views:
+            print(v["target"])
+
+
+# ------------------------------------------------------------------- account
+#
+# What the API key unlocks. Wallhaven's API returns a key's collections and
+# its browsing settings but not the account's username, and listing what is in
+# a collection needs that name, so it is asked for once (settings.username).
+
+def require_key(settings):
+    if not settings.get("apiKey"):
+        die("add your Wallhaven API key first (wallhaven.cc/settings/account)")
+
+
+def cmd_account(args):
+    settings = load_settings()
+    require_key(settings)
+    account = (api_get("settings", {}, settings).get("data") or {})
+    collections = api_get("collections", {}, settings).get("data") or []
+    username = (settings.get("username") or "").strip()
+    verified = None
+    if username:
+        # A user's collection list includes the private ones only for their own key.
+        theirs = api_get(f"collections/{urllib.parse.quote(username)}", {}, settings).get("data") or []
+        verified = {c.get("id") for c in theirs} == {c.get("id") for c in collections}
+    out = {
+        "username": username,
+        "verified": verified,
+        "settings": account,
+        "collections": collections,
+    }
+    if "--json" in args:
+        print(json.dumps(out))
+    else:
+        print(f"user: {username or '(not set)'}")
+        for c in collections:
+            print(f"{c.get('id')}  {c.get('label')}  ({c.get('count')} wallpapers{'' if c.get('public') else ', private'})")
+
+
+def cmd_collection(args):
+    if not args:
+        die("usage: hyprskin collection <id> [--page N] [--json]")
+    settings = load_settings()
+    require_key(settings)
+    username = (settings.get("username") or "").strip()
+    if not username:
+        die("set your Wallhaven username on the Account page to open collections")
+    page = int(args[args.index("--page") + 1]) if "--page" in args else 1
+    data = api_get(f"collections/{urllib.parse.quote(username)}/{int(args[0])}", {"page": page}, settings)
+    meta = data.get("meta") or {}
+    results = [normalize(item) for item in data.get("data") or []]
+    cache_thumbs(results)
+    out = {
+        "page": meta.get("current_page", page),
+        "lastPage": meta.get("last_page", page),
+        "total": meta.get("total", len(results)),
+        "results": results,
+    }
+    if "--json" in args:
+        print(json.dumps(out))
+    else:
+        for r in results:
+            print(f"{r['id']}  {r['resolution']:>10}  {r['url']}")
+
+
+def cmd_use_account_filters(args):
+    """Copy the account's purity, categories, toplist range and minimum size into the saved search."""
+    settings = load_settings()
+    require_key(settings)
+    account = api_get("settings", {}, settings).get("data") or {}
+    search = settings["search"]
+    purity = account.get("purity") or []
+    categories = account.get("categories") or []
+    if purity:
+        search["purity"] = "".join("1" if p in purity else "0" for p in ("sfw", "sketchy", "nsfw"))
+    if categories:
+        search["categories"] = "".join("1" if c in categories else "0" for c in ("general", "anime", "people"))
+    if account.get("toplist_range"):
+        search["topRange"] = account["toplist_range"]
+    sizes = [r for r in account.get("resolutions") or [] if re.match(r"^\d+x\d+$", r)]
+    if sizes:
+        search["atleast"] = min(sizes, key=lambda r: int(r.split("x")[0]) * int(r.split("x")[1]))
+    save_settings(settings)
+    print(json.dumps(search))
+
+
+def cmd_status(args):
+    settings = load_settings()
+    state = load_state()
+    redacted = dict(settings)
+    redacted["apiKey"] = "set" if settings.get("apiKey") else ""
+    status = {
+        "settings": redacted,
+        "current": current_background(),
+        "theme": current_theme(),
+        "themeIsDynamic": current_theme() == THEME_SLUG,
+        "barId": (read_json(SHELL_JSON, {}).get("bar") or {}).get("id", ""),
+        "lastChangedAt": state.get("lastChangedAt", 0),
+        "palette": state.get("palette") or {},
+        "lastError": state.get("lastError", ""),
+        "schemes": list(SCHEMES),
+        "tools": tool_versions(),
+    }
+    if "--json" in args:
+        print(json.dumps(status))
+    else:
+        print(json.dumps(status, indent=2))
+
+
+def walk(settings, key):
+    node = settings
+    parts = key.split(".")
+    for part in parts[:-1]:
+        node = node.setdefault(part, {})
+        if not isinstance(node, dict):
+            die(f"{key} is not a settings path")
+    return node, parts[-1]
+
+
+def cmd_get(args):
+    if not args:
+        die("usage: hyprskin get <key>")
+    node, leaf = walk(load_settings(), args[0])
+    print(json.dumps(node.get(leaf)))
+
+
+def cmd_set(args):
+    if len(args) < 2:
+        die("usage: hyprskin set <key> <value>")
+    key, raw = args[0], args[1]
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        value = raw
+    settings = load_settings()
+    node, leaf = walk(settings, key)
+    node[leaf] = value
+    save_settings(settings)
+    if key == "colorizeBar":
+        if value:
+            palette = load_state().get("palette")
+            if palette and current_theme() == THEME_SLUG:
+                colorize_bar(palette)
+        else:
+            restore_bar()
+    if key == "rotation.interval":
+        # Count the new interval from now rather than from the last change.
+        state = load_state()
+        state["lastChangedAt"] = int(time.time())
+        save_state(state)
+
+
+# ------------------------------------------------------------- colour science
+#
+# Palettes are built in OKLCH: hue comes from the wallpaper, lightness and
+# chroma are set per role so text stays readable whatever the image is.
+
+def srgb_to_linear(c):
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def linear_to_srgb(c):
+    return 12.92 * c if c <= 0.0031308 else 1.055 * (c ** (1 / 2.4)) - 0.055
+
+
+def rgb_to_oklch(rgb):
+    r, g, b = (srgb_to_linear(v / 255) for v in rgb)
+    l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b
+    m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b
+    s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b
+    l, m, s = (math.copysign(abs(v) ** (1 / 3), v) for v in (l, m, s))
+    L = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s
+    a = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s
+    bb = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s
+    return L, math.hypot(a, bb), math.degrees(math.atan2(bb, a)) % 360
+
+
+def oklch_to_linear(L, C, H):
+    a = C * math.cos(math.radians(H))
+    b = C * math.sin(math.radians(H))
+    l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3
+    m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3
+    s = (L - 0.0894841775 * a - 1.2914855480 * b) ** 3
+    return (
+        4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+        -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+        -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s,
+    )
+
+
+def oklch_to_hex(L, C, H):
+    L = min(max(L, 0.0), 1.0)
+    # Gamut-map by shedding chroma until the colour fits in sRGB.
+    for _ in range(40):
+        rgb = oklch_to_linear(L, C, H)
+        if all(-1e-4 <= v <= 1 + 1e-4 for v in rgb):
+            break
+        C *= 0.9
+    rgb = [min(max(linear_to_srgb(min(max(v, 0.0), 1.0)), 0.0), 1.0) for v in oklch_to_linear(L, C, H)]
+    return "#" + "".join(f"{round(v * 255):02x}" for v in rgb)
+
+
+def hex_to_rgb(value):
+    value = value.lstrip("#")
+    return tuple(int(value[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def luminance(hex_value):
+    r, g, b = (srgb_to_linear(v / 255) for v in hex_to_rgb(hex_value))
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def contrast(a, b):
+    la, lb = luminance(a), luminance(b)
+    return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+
+
+def hue_distance(a, b):
+    d = abs(a - b) % 360
+    return min(d, 360 - d)
+
+
+def mix_hue(a, b, t):
+    d = ((b - a + 180) % 360) - 180
+    return (a + d * t) % 360
+
+
+def readable(L, C, H, against, dark, minimum):
+    """Nudge lightness until the colour reaches `minimum` contrast."""
+    color = oklch_to_hex(L, C, H)
+    step = 0.02 if dark else -0.02
+    for _ in range(30):
+        if contrast(color, against) >= minimum:
+            break
+        L = min(max(L + step, 0.0), 1.0)
+        color = oklch_to_hex(L, C, H)
+    return color
+
+
+def sample_image(path):
+    try:
+        from PIL import Image
+    except ImportError:
+        return sample_with_magick(path)
+    with Image.open(path) as img:
+        img = img.convert("RGB")
+        img.thumbnail((160, 160))
+        quant = img.quantize(colors=24, method=Image.Quantize.MEDIANCUT)
+        palette = quant.getpalette()
+        counts = quant.getcolors() or []
+    out = []
+    for count, index in counts:
+        out.append((count, tuple(palette[index * 3:index * 3 + 3])))
+    return out
+
+
+def sample_with_magick(path):
+    result = subprocess.run(
+        ["magick", str(path), "-resize", "160x160", "-colors", "24", "-depth", "8", "-format", "%c", "histogram:info:-"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        die(f"could not read colours from {path}")
+    out = []
+    for line in result.stdout.splitlines():
+        m = re.match(r"\s*(\d+):.*#([0-9A-Fa-f]{6})", line)
+        if m:
+            out.append((int(m.group(1)), hex_to_rgb(m.group(2))))
+    return out
+
+
+# Canonical OKLCH hues for the ANSI roles.
+ANSI_HUES = {
+    "red": 27, "orange": 55, "yellow": 95, "green": 145,
+    "cyan": 195, "blue": 255, "magenta": 330,
+}
+
+STYLES = {
+    #            ansi chroma, accent chroma range, neutral tint, hue pull toward image
+    "balanced": {"chroma": 0.13, "accent": (0.09, 0.16), "tint": 0.022, "pull": 0.55},
+    "vibrant":  {"chroma": 0.18, "accent": (0.14, 0.22), "tint": 0.030, "pull": 0.45},
+    "pastel":   {"chroma": 0.085, "accent": (0.06, 0.10), "tint": 0.018, "pull": 0.55, "lift": 0.06},
+    "muted":    {"chroma": 0.07, "accent": (0.04, 0.08), "tint": 0.012, "pull": 0.70},
+    "mono":     {"chroma": 0.035, "accent": (0.03, 0.06), "tint": 0.010, "pull": 0.90},
+}
+
+
+# How each scheme turns the image into roles.
+#   tint       multiplier on how much of the image's hue the neutrals carry
+#   pull       how far ANSI hues move toward the image's own (None: the style's)
+#   fidelity   ANSI chroma follows the image more closely
+#   harmonize  Material-style: rotate each role hue at most this many degrees
+#              toward the source colour, so red stays red but belongs to the image
+SCHEMES = {
+    "material": {"tint": 1.0, "pull": None, "fidelity": False, "harmonize": 15},
+    "wallbash": {"tint": 1.8, "pull": 0.75, "fidelity": True, "harmonize": None},
+    "pywal":    {"tint": 1.4, "pull": 0.95, "fidelity": True, "harmonize": None},
+    "classic":  {"tint": 1.0, "pull": None, "fidelity": False, "harmonize": None},
+    # matugen is Material You's tonal-spot scheme, so its built-in fallback is
+    # the material one; flavours builds a base16 scheme, closest to pywal's
+    # fidelity but with neutrals that keep the image's average hue.
+    "matugen":  {"tint": 1.0, "pull": None, "fidelity": False, "harmonize": 15},
+    "flavours": {"tint": 1.2, "pull": 0.85, "fidelity": True, "harmonize": None},
+}
+
+# Schemes that can hand the work to a real program when it is installed.
+# The built-in extraction still runs first, for the roles a tool doesn't
+# give (wallbash's set, Material roles from pywal, ...).
+ENGINE_TOOLS = {"pywal": "wal", "matugen": "matugen", "flavours": "flavours"}
+
+# Minimum WCAG contrast ratios per level.
+#   text  accents and ANSI colours on the background
+#   body  the main foreground on the background
+#   bar   bar text on every bar segment
+#   gap   OKLCH lightness distance between bar segments and the wallpaper edge
+#         the bar sits on, so the bar does not melt into the image
+CONTRAST = {
+    "soft":   {"text": 3.0, "body": 7.0, "bar": 3.5, "gap": 0.14},
+    "normal": {"text": 4.5, "body": 9.0, "bar": 4.5, "gap": 0.22},
+    "high":   {"text": 6.0, "body": 12.0, "bar": 7.0, "gap": 0.32},
+}
+
+
+def tone_l(t):
+    """Material tone (CIE L*, 0-100) as OKLCH lightness; exact for greys."""
+    if t <= 0:
+        return 0.0
+    return min(1.0, (t + 16) / 116)
+
+
+def tone(hue, chroma, t):
+    return oklch_to_hex(tone_l(t), chroma, hue)
+
+
+def ensure(color, against, minimum):
+    """Move `color` away from `against` in lightness until it reaches `minimum`."""
+    if contrast(color, against) >= minimum:
+        return color
+    L, C, H = rgb_to_oklch(hex_to_rgb(color))
+    step = 0.02 if luminance(color) >= luminance(against) else -0.02
+    for _ in range(60):
+        L = min(max(L + step, 0.0), 1.0)
+        color = oklch_to_hex(L, C, H)
+        if contrast(color, against) >= minimum or L in (0.0, 1.0):
+            break
+    if contrast(color, against) < minimum:
+        color = max(("#000000", "#ffffff"), key=lambda c: contrast(c, against))
+    return color
+
+
+def harmonize(hue, source, limit):
+    d = ((source - hue + 180) % 360) - 180
+    return (hue + max(-limit, min(limit, d * 0.5))) % 360
+
+
+def dominant_hues(colors, count=4, separation=30):
+    """The image's main colourful areas, one per distinct hue, biggest first."""
+    pool = sorted((c for c in colors if c["C"] > 0.03), key=lambda c: c["w"] * c["C"] ** 0.5, reverse=True)
+    picked = []
+    for c in pool:
+        if all(hue_distance(c["H"], p["H"]) >= separation for p in picked):
+            picked.append(c)
+        if len(picked) == count:
+            break
+    return picked
+
+
+def ui_roles(dark, primary, secondary, tertiary, neutral, level):
+    """Material 3 colour roles from tonal palettes, each palette a (hue, chroma)."""
+    minimum = CONTRAST[level]["text"]
+    variant = (neutral[0], neutral[1] * 2.2)
+    error = (27, 0.16)
+    if dark:
+        key = {"main": 80, "on": 20, "container": 30, "on_container": 90}
+        surfaces = {"surface": 6, "surface_dim": 6, "surface_bright": 24, "surface_container_lowest": 4,
+                    "surface_container_low": 10, "surface_container": 12, "surface_container_high": 17,
+                    "surface_container_highest": 22, "on_surface": 90, "inverse_surface": 90,
+                    "inverse_on_surface": 20}
+        variants = {"surface_variant": 30, "on_surface_variant": 80, "outline": 60, "outline_variant": 30}
+        inverse_primary = 40
+    else:
+        key = {"main": 40, "on": 100, "container": 90, "on_container": 10}
+        surfaces = {"surface": 98, "surface_dim": 87, "surface_bright": 98, "surface_container_lowest": 100,
+                    "surface_container_low": 96, "surface_container": 94, "surface_container_high": 92,
+                    "surface_container_highest": 90, "on_surface": 10, "inverse_surface": 20,
+                    "inverse_on_surface": 95}
+        variants = {"surface_variant": 90, "on_surface_variant": 30, "outline": 50, "outline_variant": 80}
+        inverse_primary = 80
+
+    roles = {}
+    for name, (hue, chroma) in (("primary", primary), ("secondary", secondary),
+                                ("tertiary", tertiary), ("error", error)):
+        roles[name] = tone(hue, chroma, key["main"])
+        roles[f"on_{name}"] = ensure(tone(hue, chroma * 0.5, key["on"]), roles[name], minimum)
+        roles[f"{name}_container"] = tone(hue, chroma * 0.8, key["container"])
+        roles[f"on_{name}_container"] = ensure(tone(hue, chroma * 0.6, key["on_container"]),
+                                               roles[f"{name}_container"], minimum)
+    for name, t in surfaces.items():
+        roles[name] = tone(neutral[0], neutral[1], t)
+    for name, t in variants.items():
+        roles[name] = tone(variant[0], variant[1], t)
+    roles["on_surface"] = ensure(roles["on_surface"], roles["surface"], CONTRAST[level]["body"])
+    roles["on_surface_variant"] = ensure(roles["on_surface_variant"], roles["surface"], minimum)
+    roles["outline"] = ensure(roles["outline"], roles["surface"], 3.0)
+    roles["inverse_primary"] = tone(primary[0], primary[1], inverse_primary)
+    roles["shadow"] = "#000000"
+    roles["scrim"] = "#000000"
+    return roles
+
+
+def wallbash_set(colors, hues, dark, level):
+    """Four primaries with a text colour and nine accent tones each, named as
+    in wallbash's dcol files (dcol_pry1-4, dcol_txt1-4, dcol_1xa1-dcol_4xa9)."""
+    picks = list(hues)
+    for c in sorted(colors, key=lambda c: c["w"], reverse=True):
+        if len(picks) >= 4:
+            break
+        if all(c is not p for p in picks):
+            picks.append(c)
+    while len(picks) < 4:
+        picks.append(picks[-1] if picks else {"L": 0.5, "C": 0.02, "H": 250.0, "w": 0.0})
+    picks = sorted(picks[:4], key=lambda c: c["L"], reverse=not dark)
+    out = {}
+    for i, c in enumerate(picks, 1):
+        primary = oklch_to_hex(c["L"], c["C"], c["H"])
+        text = tone(c["H"], 0.02, 95 if luminance(primary) < 0.18 else 10)
+        out[f"dcol_pry{i}"] = primary
+        out[f"dcol_txt{i}"] = ensure(text, primary, CONTRAST[level]["text"])
+        for j in range(1, 10):
+            out[f"dcol_{i}xa{j}"] = tone(c["H"], max(c["C"], 0.04), 10 * j if dark else 100 - 10 * j)
+    return out
+
+
+EDGE_BAND = 0.06  # share of the image a bar's edge strip covers
+
+
+def sample_edges(path):
+    """Average colour of each edge strip, where a bar would sit."""
+    try:
+        from PIL import Image
+    except ImportError:
+        return edges_with_magick(path)
+    out = {}
+    with Image.open(path) as img:
+        img = img.convert("RGB")
+        img.thumbnail((256, 256))
+        w, h = img.size
+        bw, bh = max(1, round(w * EDGE_BAND)), max(1, round(h * EDGE_BAND))
+        boxes = {"top": (0, 0, w, bh), "bottom": (0, h - bh, w, h),
+                 "left": (0, 0, bw, h), "right": (w - bw, 0, w, h)}
+        for side, box in boxes.items():
+            r, g, b = img.crop(box).resize((1, 1), Image.Resampling.BOX).getpixel((0, 0))
+            out[side] = f"#{r:02x}{g:02x}{b:02x}"
+    return out
+
+
+def edges_with_magick(path):
+    out = {}
+    for side, gravity in (("top", "north"), ("bottom", "south"), ("left", "west"), ("right", "east")):
+        crop = "100%x6%+0+0" if side in ("top", "bottom") else "6%x100%+0+0"
+        result = subprocess.run(
+            ["magick", f"{path}[0]", "-resize", "256x256", "-gravity", gravity, "-crop", crop, "+repage",
+             "-resize", "1x1!", "-format", "%[hex:p{0,0}]", "info:"],
+            capture_output=True, text=True,
+        )
+        value = result.stdout.strip()[:6]
+        if re.fullmatch(r"[0-9A-Fa-f]{6}", value):
+            out[side] = "#" + value.lower()
+    return out
+
+
+def extract_palette(path, options):
+    samples = sample_image(path)
+    if not samples:
+        die(f"no colours found in {path}")
+    total = sum(count for count, _ in samples)
+    colors = []
+    for count, rgb in samples:
+        L, C, H = rgb_to_oklch(rgb)
+        colors.append({"w": count / total, "L": L, "C": C, "H": H})
+
+    style = STYLES.get(options.get("style", "balanced"), STYLES["balanced"])
+    requested = options.get("scheme", "material")
+    requested = requested if requested in SCHEMES else "material"
+    scheme = SCHEMES[requested]
+    # The branches below know four families; matugen is material's.
+    scheme_id = "material" if requested == "matugen" else requested
+    level = options.get("contrast", "normal")
+    level = level if level in CONTRAST else "normal"
+    levels = CONTRAST[level]
+    avg_l = sum(c["w"] * c["L"] for c in colors)
+    mode = options.get("mode", "auto")
+    dark = (avg_l < 0.62) if mode == "auto" else (mode != "light")
+
+    # Dominant hue: circular mean of the colourful samples, weighted by area x chroma.
+    sx = sy = 0.0
+    chromatic = [c for c in colors if c["C"] > 0.025]
+    for c in chromatic:
+        weight = c["w"] * c["C"]
+        sx += weight * math.cos(math.radians(c["H"]))
+        sy += weight * math.sin(math.radians(c["H"]))
+    base_hue = math.degrees(math.atan2(sy, sx)) % 360 if chromatic else 250
+    hues = dominant_hues(colors)
+    image_chroma = sum(c["w"] * c["C"] for c in colors)
+    tint = min(style["tint"] * scheme["tint"], max(0.006, image_chroma * 0.4 * scheme["tint"]))
+
+    # Surfaces take their hue from the image: wallbash from its biggest
+    # colourful area, pywal from its darkest (or lightest) substantial colour.
+    neutral_hue = base_hue
+    if scheme_id == "wallbash" and hues:
+        neutral_hue = hues[0]["H"]
+    elif scheme_id == "pywal":
+        substantial = [c for c in colors if c["w"] > 0.02] or colors
+        edge = (min if dark else max)(substantial, key=lambda c: c["L"])
+        if edge["C"] > 0.02:
+            neutral_hue = edge["H"]
+
+    # Accent: the colour that stands out most, area and chroma together;
+    # wallbash takes the image's main colour instead.
+    def accent_score(c):
+        return (c["w"] ** 0.5) * c["C"] * (1.2 - abs(c["L"] - 0.62))
+    accent_src = hues[0] if scheme_id == "wallbash" and hues else max(colors, key=accent_score)
+    lo, hi = style["accent"]
+    accent_c = min(max(accent_src["C"] * 1.1, lo), hi)
+    accent_h = accent_src["H"] if accent_src["C"] > 0.03 else base_hue
+    lift = style.get("lift", 0.0)
+
+    if dark:
+        L_bg, L_fg = 0.19, 0.91
+        neutrals = {
+            "darker_background": 0.13, "dark_background": 0.16, "background": L_bg,
+            "lighter_background": 0.25, "selection": 0.32, "muted": 0.52,
+            "dark_foreground": 0.68, "light_foreground": 0.86, "foreground": L_fg,
+            "bright_foreground": 0.96,
+        }
+        L_ansi, L_bright, L_accent = 0.72 + lift, 0.80 + lift, 0.74 + lift
+    else:
+        L_bg, L_fg = 0.965, 0.30
+        neutrals = {
+            "darker_background": 0.885, "dark_background": 0.925, "background": L_bg,
+            "lighter_background": 0.90, "selection": 0.86, "muted": 0.58,
+            "dark_foreground": 0.48, "light_foreground": 0.36, "foreground": L_fg,
+            "bright_foreground": 0.20,
+        }
+        L_ansi, L_bright, L_accent = 0.54 - lift / 2, 0.47 - lift / 2, 0.55
+
+    palette = {"mode": "dark" if dark else "light"}
+    for key, L in neutrals.items():
+        # Text carries a little less tint than surfaces.
+        chroma = tint * (0.6 if "foreground" in key else 1.0)
+        palette[key] = oklch_to_hex(L, chroma, neutral_hue)
+    bg = palette["background"]
+    palette["foreground"] = readable(L_fg, tint * 0.6, neutral_hue, bg, dark, levels["body"])
+    palette["muted"] = readable(neutrals["muted"], tint, neutral_hue, bg, dark, 3)
+    palette["accent"] = readable(L_accent, accent_c, accent_h, bg, dark, levels["text"])
+    if scheme_id != "classic":
+        # Selections carry the accent, as a Material container does, so a
+        # chosen row reads as chosen rather than as more background.
+        palette["selection"] = oklch_to_hex(neutrals["selection"], max(tint * 2, accent_c * 0.45), accent_h)
+
+    pull = scheme["pull"] if scheme["pull"] is not None else style["pull"]
+    for name, canonical in ANSI_HUES.items():
+        near = [c for c in colors if c["C"] > 0.04 and hue_distance(c["H"], canonical) < 40]
+        if near:
+            src = max(near, key=lambda c: c["w"] * c["C"])
+            if scheme["harmonize"]:
+                hue = harmonize(canonical, src["H"], scheme["harmonize"])
+            else:
+                hue = mix_hue(canonical, src["H"], pull)
+            if scheme["fidelity"]:
+                chroma = min(max(src["C"], style["chroma"] * 0.6), style["chroma"] * 1.6)
+            else:
+                chroma = min(max(src["C"], style["chroma"] * 0.75), style["chroma"] * 1.25)
+        else:
+            # Not in the image: keep the role's hue, lean slightly toward the image.
+            if scheme["harmonize"]:
+                hue = harmonize(canonical, accent_h, scheme["harmonize"])
+            else:
+                hue = mix_hue(canonical, base_hue, 0.12 * pull)
+            chroma = style["chroma"]
+        palette[name] = readable(L_ansi, chroma, hue, bg, dark, levels["text"])
+        if name != "orange":
+            palette[f"bright_{name}"] = readable(L_bright, chroma * 1.08, hue, bg, dark,
+                                                 max(5.5, levels["text"] + 1))
+
+    palette["brown"] = oklch_to_hex(0.48 if dark else 0.42, 0.06, mix_hue(60, base_hue, 0.2))
+
+    # Tonal palettes behind the Material roles. Material derives secondary and
+    # tertiary from the source colour; wallbash and pywal use the image's
+    # next biggest colours.
+    primary = (accent_h, accent_c)
+    others = [h for h in hues if hue_distance(h["H"], accent_h) >= 30]
+    if scheme_id in ("material", "classic") or not others:
+        secondary = (accent_h, max(0.02, accent_c * 0.4))
+    else:
+        secondary = (others[0]["H"], min(max(others[0]["C"], 0.04), hi))
+    if scheme_id in ("material", "classic") or len(others) < 2:
+        tertiary = ((accent_h + 60) % 360, accent_c * 0.75)
+    else:
+        tertiary = (others[1]["H"], min(max(others[1]["C"], 0.04), hi))
+    palette["ui"] = ui_roles(dark, primary, secondary, tertiary, (neutral_hue, tint), level)
+    palette["wallbash"] = wallbash_set(colors, hues, dark, level)
+    try:
+        palette["edges"] = sample_edges(path)
+    except Exception:
+        palette["edges"] = {}
+    palette["scheme"] = requested
+    palette["contrast"] = level
+    palette["_hue"] = round(accent_h, 1)
+    palette["engine"] = "built-in"
+    if options.get("engine", "auto") != "builtin" and requested in ENGINE_TOOLS:
+        apply_engine(palette, path, requested, dark, levels)
+    return palette
+
+
+# ------------------------------------------------------------ real programs
+#
+# pywal, matugen and flavours each pick colours their own way. When one is
+# installed (and palette.engine isn't "builtin"), its colours replace the
+# built-in ones for the roles it knows, then go through the same contrast
+# floor so the theme stays readable. A tool that fails leaves the built-in
+# palette and says why in palette.engineNote.
+
+def tool_versions():
+    found = {}
+    for scheme, program in ENGINE_TOOLS.items():
+        found[scheme] = shutil.which(program) or ""
+    return found
+
+
+def run_tool(command, timeout=60):
+    result = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
+    if result.returncode != 0:
+        lines = (result.stderr or result.stdout).strip().splitlines()
+        raise RuntimeError(lines[-1] if lines else f"{command[0]} exited with {result.returncode}")
+    return result.stdout
+
+
+def hexify(value):
+    value = str(value or "").strip().strip('"').strip("'")
+    if not value.startswith("#"):
+        value = "#" + value
+    return value.lower() if HEX.match(value) else ""
+
+
+def pywal_engine(path, dark):
+    command = ["wal", "-n", "-s", "-t", "-e", "-q", "-i", str(path)]
+    if not dark:
+        command.insert(1, "-l")
+    run_tool(command)
+    data = json.loads((CACHE_HOME / "wal" / "colors.json").read_text())
+    special, colors = data.get("special") or {}, data.get("colors") or {}
+    c = lambda i: hexify(colors.get(f"color{i}"))
+    out = {
+        "background": hexify(special.get("background")) or c(0),
+        "foreground": hexify(special.get("foreground")) or c(15),
+        "muted": c(8), "light_foreground": c(7), "bright_foreground": c(15),
+    }
+    for i, name in enumerate(["red", "green", "yellow", "blue", "magenta", "cyan"], start=1):
+        out[name] = c(i)
+        out[f"bright_{name}"] = c(i + 8)
+    return out
+
+
+def matugen_value(entry, mode):
+    """matugen's JSON changed shape between releases; take any of them."""
+    if isinstance(entry, str):
+        return hexify(entry)
+    if isinstance(entry, dict):
+        picked = entry.get(mode) or entry.get("default") or entry.get("color")
+        if isinstance(picked, dict):
+            picked = picked.get("color") or picked.get("hex")
+        return hexify(picked)
+    return ""
+
+
+def matugen_engine(path, dark):
+    mode = "dark" if dark else "light"
+    raw = run_tool(["matugen", "image", str(path), "--json", "hex", "--dry-run", "-m", mode,
+                    "-t", "scheme-tonal-spot"])
+    data = json.loads(raw[raw.find("{"):])
+    colors = data.get("colors") or {}
+    if isinstance(colors.get(mode), dict) and "primary" in colors[mode]:
+        colors = colors[mode]     # matugen 2: colors.dark.primary
+    roles = {k: matugen_value(v, mode) for k, v in colors.items()}
+    roles = {k: v for k, v in roles.items() if v}
+    if "primary" not in roles:
+        raise RuntimeError("matugen gave no primary colour")
+    out = {"ui": roles, "accent": roles["primary"]}
+    for key, role in (("background", "surface"), ("foreground", "on_surface"),
+                      ("lighter_background", "surface_container_high"), ("selection", "primary_container"),
+                      ("muted", "outline"), ("dark_background", "surface_container_low"),
+                      ("darker_background", "surface_container_lowest"), ("dark_foreground", "on_surface_variant")):
+        if role in roles:
+            out[key] = roles[role]
+    return out
+
+
+def flavours_engine(path, dark):
+    raw = run_tool(["flavours", "generate", "dark" if dark else "light", str(path), "--stdout"])
+    base = {}
+    for line in raw.splitlines():
+        m = re.match(r'\s*(base0[0-9A-Fa-f])\s*:\s*"?#?([0-9A-Fa-f]{6})"?', line)
+        if m:
+            base[m.group(1)[:-1] + m.group(1)[-1].upper()] = "#" + m.group(2).lower()
+    if len(base) < 16:
+        raise RuntimeError("flavours gave an incomplete base16 scheme")
+    roles = ["background", "lighter_background", "selection", "muted", "dark_foreground", "foreground",
+             "light_foreground", "bright_foreground", "red", "orange", "yellow", "green", "cyan", "blue",
+             "magenta", "brown"]
+    out = {role: base[f"base0{'0123456789ABCDEF'[i]}"] for i, role in enumerate(roles)}
+    out["accent"] = out["blue"]
+    return out
+
+
+ENGINES = {"pywal": pywal_engine, "matugen": matugen_engine, "flavours": flavours_engine}
+
+
+def apply_engine(palette, path, scheme_id, dark, levels):
+    program = ENGINE_TOOLS[scheme_id]
+    if not shutil.which(program):
+        palette["engineNote"] = f"{program} isn't installed; using the built-in {scheme_id} scheme"
+        return
+    try:
+        found = ENGINES[scheme_id](path, dark)
+    except Exception as error:  # a tool's failure must never block a theme
+        palette["engineNote"] = f"{program} failed ({error}); using the built-in {scheme_id} scheme"
+        return
+    ui = found.pop("ui", None)
+    if ui:
+        palette["ui"] = {**palette.get("ui", {}), **ui}
+    for key, value in found.items():
+        if value:
+            palette[key] = value
+    if scheme_id == "pywal":
+        # pywal picks no accent; its most colourful ANSI colour stands out most.
+        palette["accent"] = max((palette[k] for k in ANSI_HUES if k in palette),
+                                key=lambda h: rgb_to_oklch(hex_to_rgb(h))[1])
+    # The tool's colours, held to the same floor as the built-in ones.
+    bg = palette["background"]
+    palette["foreground"] = ensure(palette["foreground"], bg, levels["body"])
+    palette["accent"] = ensure(palette["accent"], bg, levels["text"])
+    palette["muted"] = ensure(palette["muted"], bg, 3)
+    for name in ANSI_HUES:
+        if name in palette:
+            palette[name] = ensure(palette[name], bg, levels["text"])
+        if f"bright_{name}" in palette:
+            palette[f"bright_{name}"] = ensure(palette[f"bright_{name}"], bg, max(5.5, levels["text"] + 1))
+    palette["_hue"] = round(rgb_to_oklch(hex_to_rgb(palette["accent"]))[2], 1)
+    palette["engine"] = program
+
+
+# ------------------------------------------------------------------- exports
+#
+# Like pywal and matugen, every theme build also leaves the palette where
+# other programs can read it, and renders the user's own templates:
+#
+#   ~/.cache/hyprskin/colors.json     pywal's format (special + color0-15)
+#   ~/.cache/hyprskin/palette.json    every role: theme, Material, wallbash, pywal
+#   ~/.cache/hyprskin/colors.css      CSS custom properties (--on-primary: #...)
+#   ~/.cache/hyprskin/colors.scss     SCSS variables
+#   ~/.cache/hyprskin/colors.sh       shell variables
+#   ~/.config/hyprskin/templates/*    rendered to ~/.cache/hyprskin/templates/,
+#                                     or to the path on a first line reading
+#                                     `hyprskin-target: ~/somewhere/file`
+#
+# Templates use {{role}} (#rrggbb), {{role.strip}} (rrggbb), {{role.rgb}}
+# (r,g,b) and {{role.rgba}} (rgba(r,g,b,1)), e.g. {{primary}}, {{on_surface}},
+# {{color4}}, {{dcol_pry1}}, {{background.strip}}.
+
+EXPORT_DIR = CACHE_HOME / "hyprskin"
+TEMPLATE_DIR = CONFIG_HOME / "hyprskin" / "templates"
+TEMPLATE_TOKEN = re.compile(r"\{\{\s*([A-Za-z0-9_]+)(?:\.(hex|strip|rgb|rgba))?\s*\}\}")
+
+
+def pywal_colors(p):
+    order = ["background", "red", "green", "yellow", "blue", "magenta", "cyan", "light_foreground",
+             "muted", "bright_red", "bright_green", "bright_yellow", "bright_blue", "bright_magenta",
+             "bright_cyan", "bright_foreground"]
+    return {f"color{i}": p[name] for i, name in enumerate(order) if name in p}
+
+
+def flat_palette(palette):
+    """Every colour by name: theme roles, Material roles, wallbash's set, pywal's color0-15."""
+    out = {k: v for k, v in palette.items() if isinstance(v, str) and HEX.match(v)}
+    out.update(palette.get("ui") or {})
+    out.update(palette.get("wallbash") or {})
+    out.update(pywal_colors(palette))
+    return out
+
+
+def render_templates(flat):
+    if not TEMPLATE_DIR.is_dir():
+        return []
+
+    def substitute(match):
+        value = flat.get(match.group(1))
+        if value is None:
+            return match.group(0)
+        form = match.group(2) or "hex"
+        if form == "strip":
+            return value.lstrip("#")
+        if form == "rgb":
+            return ",".join(str(v) for v in hex_to_rgb(value))
+        if form == "rgba":
+            return "rgba(" + ",".join(str(v) for v in hex_to_rgb(value)) + ",1)"
+        return value
+
+    written = []
+    for template in sorted(TEMPLATE_DIR.iterdir()):
+        if not template.is_file() or template.name.startswith("."):
+            continue
+        lines = template.read_text().splitlines(keepends=True)
+        target = EXPORT_DIR / "templates" / template.name
+        if lines and "hyprskin-target:" in lines[0]:
+            target = Path(os.path.expanduser(lines[0].split("hyprskin-target:", 1)[1].strip()))
+            lines = lines[1:]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(TEMPLATE_TOKEN.sub(substitute, "".join(lines)))
+        written.append(str(target))
+    return written
+
+
+def write_exports(palette, wallpaper):
+    flat = flat_palette(palette)
+    EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    write_json(EXPORT_DIR / "colors.json", {
+        "wallpaper": str(wallpaper), "alpha": "100",
+        "special": {"background": palette["background"], "foreground": palette["foreground"],
+                    "cursor": palette["accent"]},
+        "colors": pywal_colors(palette),
+    })
+    write_json(EXPORT_DIR / "palette.json", {
+        "wallpaper": str(wallpaper), "mode": palette.get("mode"), "scheme": palette.get("scheme"),
+        "contrast": palette.get("contrast"), "edges": palette.get("edges") or {}, "colors": flat,
+    })
+    (EXPORT_DIR / "colors.css").write_text(
+        ":root {\n" + "".join(f"  --{k.replace('_', '-')}: {v};\n" for k, v in flat.items()) + "}\n")
+    (EXPORT_DIR / "colors.scss").write_text("".join(f"${k.replace('_', '-')}: {v};\n" for k, v in flat.items()))
+    (EXPORT_DIR / "colors.sh").write_text("".join(f"{k}='{v}'\n" for k, v in flat.items()))
+    return render_templates(flat)
+
+
+def cmd_export(args):
+    palette = load_state().get("palette")
+    if not palette:
+        die("no wallpaper palette yet; apply a wallpaper or run `hyprskin theme`")
+    for path in write_exports(palette, current_background()):
+        print(path)
+
+
+# Omarchy's icon themes (Yaru variants) keyed by OKLCH hue.
+YARU = [
+    (15, "Yaru-red"), (45, "Yaru"), (75, "Yaru-wartybrown"), (110, "Yaru-olive"),
+    (150, "Yaru-sage"), (180, "Yaru-viridian"), (215, "Yaru-prussiangreen"),
+    (280, "Yaru-blue"), (315, "Yaru-purple"), (345, "Yaru-magenta"), (361, "Yaru-red"),
+]
+
+
+def icon_theme_for(hue):
+    for limit, name in YARU:
+        if hue < limit:
+            return name
+    return "Yaru"
+
+
+COLOR_ORDER = [
+    "accent", "selection", "muted", "",
+    "background", "dark_background", "darker_background", "lighter_background", "",
+    "foreground", "dark_foreground", "light_foreground", "bright_foreground", "",
+    "red", "yellow", "orange", "green", "cyan", "blue", "magenta", "brown", "",
+    "bright_red", "bright_yellow", "bright_green", "bright_cyan", "bright_blue", "bright_magenta",
+]
+
+
+def build_theme(path, settings):
+    palette = extract_palette(path, settings["palette"])
+    role = settings["palette"].get("accent", "auto")
+    if role in ACCENT_ROLES:
+        palette["accent"] = palette[role]
+    THEME_DIR.mkdir(parents=True, exist_ok=True)
+
+    lines = [f"# Generated by hyprskin from {path.name}", f'mode = "{palette["mode"]}"', ""]
+    for key in COLOR_ORDER:
+        lines.append(f'{key} = "{palette[key]}"' if key else "")
+    (THEME_DIR / "colors.toml").write_text("\n".join(lines) + "\n")
+    (THEME_DIR / "icons.theme").write_text(icon_theme_for(palette["_hue"]) + "\n")
+    apply_targets(settings)
+    try:
+        write_exports(palette, path)
+    except OSError as error:
+        print(f"hyprskin: could not write exports: {error}", file=sys.stderr)
+
+    # omarchy-theme-set picks the first file in backgrounds/, so it must hold
+    # exactly the wallpaper being applied.
+    backgrounds = THEME_DIR / "backgrounds"
+    if backgrounds.exists():
+        shutil.rmtree(backgrounds)
+    backgrounds.mkdir()
+    dest = backgrounds / path.name
+    try:
+        os.link(path, dest)
+    except OSError:
+        shutil.copy2(path, dest)
+
+    if shutil.which("magick"):
+        subprocess.run(
+            ["magick", f"{path}[0]", "-resize", "960x540^", "-gravity", "center", "-extent", "960x540",
+             str(THEME_DIR / "preview.png")],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    return {k: v for k, v in palette.items() if not k.startswith("_")}
+
+
+# ------------------------------------------------------------------- targets
+#
+# omarchy-theme-set only renders a template when the theme does not already
+# ship that file. So a part that should keep a regular theme's look gets that
+# theme's rendered file copied into the hyprskin theme, and every other part
+# is left to the templates and follows the wallpaper.
+
+TARGETS = [
+    {"id": "shell", "label": "Shell surfaces", "files": ["shell.toml", "hyprland-preview-share-picker.css"],
+     "description": "Bar, menus, notifications, OSD, lock screen and the screen-share picker. "
+                    "Spots that use the bare accent still follow the wallpaper."},
+    {"id": "borders", "label": "Window borders", "files": ["hyprland.lua"],
+     "description": "Hyprland's active and inactive borders, groups included"},
+    {"id": "terminals", "label": "Terminals", "files": ["alacritty.toml", "kitty.conf", "ghostty.conf", "foot.ini"],
+     "description": "Alacritty, Kitty, Ghostty and Foot"},
+    {"id": "editors", "label": "Editors", "files": ["neovim.lua", "helix.toml", "vscode-theme.json"],
+     "description": "Neovim, Helix and VS Code"},
+    {"id": "btop", "label": "btop", "files": ["btop.theme"], "description": "System monitor"},
+    {"id": "browser", "label": "Browser", "files": ["chromium.theme"], "description": "Chromium and Brave toolbar color"},
+    {"id": "icons", "label": "Icons", "files": ["icons.theme"], "description": "Yaru icon color matched to the accent"},
+    {"id": "obsidian", "label": "Obsidian", "files": ["obsidian.css"], "description": "Obsidian's theme snippet"},
+    {"id": "cli", "label": "Prompts & AI tools", "files": ["gum_env.lua", "claude.json", "pi.json", "hermes.yaml", "t3code.json"],
+     "description": "gum prompts, Claude Code, pi, Hermes and T3 Code"},
+    {"id": "keyboard", "label": "Keyboard lighting", "files": ["keyboard.rgb"], "description": "RGB keyboards Omarchy supports"},
+]
+TARGET_FILES = {f for t in TARGETS for f in t["files"]}
+ACCENT_ROLES = ("red", "orange", "yellow", "green", "cyan", "blue", "magenta",
+                "bright_red", "bright_yellow", "bright_green", "bright_cyan", "bright_blue", "bright_magenta")
+OMARCHY_PATH = Path(os.environ.get("OMARCHY_PATH") or "/usr/share/omarchy")
+USER_THEMES = CONFIG_HOME / "omarchy" / "themes"
+# What omarchy-theme-set drops from a theme cloned from a repo.
+REPO_THEME_DENIED = {"alacritty.toml", "foot.ini", "ghostty.conf", "kitty.conf", "vscode.json"}
+
+
+def theme_slugs():
+    names = set()
+    for root in (OMARCHY_PATH / "themes", USER_THEMES):
+        if root.is_dir():
+            names.update(d.name for d in root.iterdir() if d.is_dir())
+    names.discard(THEME_SLUG)
+    return sorted(names)
+
+
+def keep_source(settings):
+    """The regular theme kept parts take their look from, or "" if none is known."""
+    slug = settings.get("keepTheme") or load_state().get("previousTheme") or ""
+    slug = slug.strip().lower().replace(" ", "-")
+    return slug if slug in theme_slugs() else ""
+
+
+def render_theme(slug, dest):
+    """Stage a theme the way omarchy-theme-set does and render its templates into dest."""
+    with tempfile.TemporaryDirectory(prefix="hyprskin-keep-") as tmp:
+        home = Path(tmp)
+        stage = home / ".local/state/omarchy/current/next-theme"
+        stage.mkdir(parents=True)
+        user = USER_THEMES / slug
+        from_repo = (user / ".git").exists()
+        for root in (OMARCHY_PATH / "themes" / slug, user):
+            if not root.is_dir():
+                continue
+            for item in root.iterdir():
+                if item.name in ("backgrounds", ".git") or not item.is_file():
+                    continue
+                if root == user and from_repo and (item.name in REPO_THEME_DENIED or item.suffix == ".lua"):
+                    continue
+                shutil.copy2(item, stage / item.name)
+        # A cloned theme's alacritty.toml is dropped above, but Omarchy still
+        # derives colors.toml from it, so read the palette from the source.
+        alacritty = user / "alacritty.toml" if from_repo else stage / "alacritty.toml"
+        if not (stage / "colors.toml").exists() and alacritty.is_file():
+            scratch = home / "from-alacritty"
+            scratch.mkdir()
+            shutil.copy2(alacritty, scratch / "alacritty.toml")
+            subprocess.run(["omarchy-theme-colors-from-alacritty", str(scratch)],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if (scratch / "colors.toml").is_file():
+                shutil.copy2(scratch / "colors.toml", stage / "colors.toml")
+        themed = CONFIG_HOME / "omarchy" / "themed"
+        if themed.is_dir():
+            (home / ".config/omarchy").mkdir(parents=True)
+            (home / ".config/omarchy/themed").symlink_to(themed)
+        env = {**os.environ, "HOME": str(home), "OMARCHY_PATH": str(OMARCHY_PATH)}
+        subprocess.run(["omarchy-theme-set-templates"], env=env,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        dest.mkdir(parents=True, exist_ok=True)
+        for name in TARGET_FILES:
+            if (stage / name).is_file():
+                shutil.copy2(stage / name, dest / name)
+
+
+def kept_targets(settings):
+    wanted = settings.get("targets") or {}
+    return [t for t in TARGETS if wanted.get(t["id"]) is False]
+
+
+def apply_targets(settings):
+    """Copy the kept parts' files into the hyprskin theme; clear the rest."""
+    kept = kept_targets(settings)
+    source = keep_source(settings) if kept else ""
+    keep_files = set()
+    if source:
+        with tempfile.TemporaryDirectory(prefix="hyprskin-kept-") as tmp:
+            rendered = Path(tmp)
+            render_theme(source, rendered)
+            for target in kept:
+                for name in target["files"]:
+                    if (rendered / name).is_file():
+                        shutil.copy2(rendered / name, THEME_DIR / name)
+                        keep_files.add(name)
+    # icons.theme is ours to write; everything else must be left to the templates.
+    for name in TARGET_FILES - keep_files - {"icons.theme"}:
+        (THEME_DIR / name).unlink(missing_ok=True)
+    state = load_state()
+    state["kept"] = {"source": source, "files": sorted(keep_files)}
+    save_state(state)
+
+
+def cmd_targets(args):
+    settings = load_settings()
+    wanted = settings.get("targets") or {}
+    kept = load_state().get("kept") or {}
+    rows = [{
+        "id": t["id"], "label": t["label"], "description": t["description"], "files": t["files"],
+        "follow": wanted.get(t["id"]) is not False,
+        "keptFiles": [f for f in t["files"] if f in (kept.get("files") or [])],
+    } for t in TARGETS]
+    out = {"targets": rows, "keepTheme": settings.get("keepTheme", ""),
+           "keepSource": keep_source(settings), "themes": theme_slugs(),
+           "accentRoles": list(ACCENT_ROLES)}
+    if "--json" in args:
+        print(json.dumps(out))
+    else:
+        for r in rows:
+            print(f"{r['id']:<10} {'follows wallpaper' if r['follow'] else 'keeps ' + (out['keepSource'] or '?')}")
+
+
+# ------------------------------------------------------------------ omabar16
+#
+# omabar16 follows colors.toml until its style carries literal colours (a
+# base16 scheme, a saved theme, Studio picks). Those are recoloured here: each
+# fixed colour is swapped for the wallpaper colour playing the same role, at
+# the original colour's lightness, so the bar keeps its design (dark segments
+# stay dark, light text stays light) and only changes hue. The style as the
+# user left it is kept as the base, so repeated wallpapers never drift from it.
+#
+# A contrast pass then makes sure the bar text is readable on every segment,
+# and that the segments stand apart from the strip of wallpaper the bar sits
+# on: they keep their hue but move in lightness, and a hairline outline in a
+# colour that contrasts with the wallpaper is written for the bar to draw.
+
+BAR_COLOR_KEYS = ("bg", "fg", "accent", "outlineColor", "hoverColor",
+                  # hyprbar16's frame, island and effect colours
+                  "gradientTo", "borderColor", "shadowColor", "islandBg", "islandBorderColor",
+                  "glowColor", "highlight")
+# Written by the contrast pass, never part of the user's base.
+BAR_GUARD_KEYS = ("outlineColor",)
+# Colours a module carries on its own layout entry (Studio's per-module
+# icon & text and hover colours). Kept under "entries" in the colour set.
+ENTRY_COLOR_KEYS = ("color", "hoverColor")
+# Bars that share omabar16's style schema (hyprbar16 extends it).
+BAR_IDS = ("omabar16", "hyprbar16")
+CHROMATIC_ROLES = ("red", "orange", "yellow", "green", "cyan", "blue", "magenta")
+NEUTRAL_ROLES = ("darker_background", "dark_background", "background", "lighter_background",
+                 "selection", "muted", "dark_foreground", "light_foreground", "foreground",
+                 "bright_foreground")
+HEX = re.compile(r"^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$")
+
+
+def entry_colors(layout):
+    """{widget id: {key: hex}} for the colours set on layout entries."""
+    out = {}
+    for lane in (layout or {}).values():
+        for entry in lane if isinstance(lane, list) else []:
+            if not isinstance(entry, dict) or not isinstance(entry.get("id"), str):
+                continue
+            found = {k: entry[k] for k in ENTRY_COLOR_KEYS if isinstance(entry.get(k), str) and HEX.match(entry[k])}
+            if found:
+                out[entry["id"]] = found
+    return out
+
+
+def bar_colors(style, layout=None):
+    """Just the colour-bearing parts of an omabar16 bar: its style, plus the
+    colours on its layout entries under "entries"."""
+    out = {k: style[k] for k in BAR_COLOR_KEYS if isinstance(style.get(k), str)}
+    entries = entry_colors(layout)
+    if entries:
+        out["entries"] = entries
+    for key in ("palette",):
+        if isinstance(style.get(key), list):
+            out[key] = list(style[key])
+    for key in ("regions", "modules"):
+        if isinstance(style.get(key), dict):
+            out[key] = dict(style[key])
+    return out
+
+
+def retone(role_hex, original):
+    """The role's hue and chroma at the original colour's lightness."""
+    L, _, _ = rgb_to_oklch(hex_to_rgb(original[:7]))
+    _, C, H = rgb_to_oklch(hex_to_rgb(role_hex[:7]))
+    return oklch_to_hex(L, C, H) + original[7:]  # keep any alpha suffix
+
+
+def nearest_role(hex_value, palette, accent_hex=None, used=None):
+    """The wallpaper colour playing hex_value's role. With `used`, a role is
+    handed out once, so a list of distinct colours stays distinct."""
+    used = used if used is not None else set()
+    if accent_hex and hex_value.lower()[:7] == accent_hex.lower()[:7] and "accent" not in used:
+        used.add("accent")
+        return palette["accent"] + hex_value[7:]
+    L, C, H = rgb_to_oklch(hex_to_rgb(hex_value[:7]))
+    if C < 0.045:
+        ranked = sorted(NEUTRAL_ROLES, key=lambda r: abs(rgb_to_oklch(hex_to_rgb(palette[r]))[0] - L))
+    else:
+        ranked = sorted(CHROMATIC_ROLES, key=lambda r: hue_distance(ANSI_HUES[r], H))
+    role = next((r for r in ranked if r not in used), ranked[0])
+    used.add(role)
+    return retone(palette[role], hex_value)
+
+
+def recolor_list(values, palette, accent):
+    """Recolour a palette list so each colourful entry gets its own role, with
+    the smallest total hue shift (orange stays orange, red stays red)."""
+    out = list(values)
+    used_accent = False
+    chromatic = []  # (index, hue)
+    for i, v in enumerate(values):
+        if not (isinstance(v, str) and HEX.match(v)):
+            continue
+        if accent and not used_accent and v.lower()[:7] == accent.lower()[:7]:
+            used_accent = True
+            out[i] = palette["accent"] + v[7:]
+            continue
+        L, C, H = rgb_to_oklch(hex_to_rgb(v[:7]))
+        if C < 0.045:
+            out[i] = nearest_role(v, palette)
+        else:
+            chromatic.append((i, H))
+
+    roles = list(CHROMATIC_ROLES)
+    assigned = chromatic[:len(roles)]
+    # Exact minimum-cost assignment by DP over used-role bitmasks (7 roles).
+    memo = {}
+
+    def best(k, mask):
+        if k == len(assigned):
+            return 0.0, ()
+        key = (k, mask)
+        if key not in memo:
+            options = []
+            for r, role in enumerate(roles):
+                if mask & (1 << r):
+                    continue
+                cost, rest = best(k + 1, mask | (1 << r))
+                options.append((cost + hue_distance(ANSI_HUES[role], assigned[k][1]), (role,) + rest))
+            memo[key] = min(options)
+        return memo[key]
+
+    _, picks = best(0, 0)
+    for (i, _), role in zip(assigned, picks):
+        out[i] = retone(palette[role], values[i])
+    for i, _ in chromatic[len(roles):]:  # more entries than roles: reuse the nearest
+        out[i] = nearest_role(values[i], palette)
+    return out
+
+
+def recolor(colors, palette):
+    accent = colors.get("accent") if isinstance(colors.get("accent"), str) else None
+    out = {}
+    for key, value in colors.items():
+        if key == "accent" and HEX.match(value):
+            out[key] = palette["accent"] + value[7:]
+        elif isinstance(value, str):
+            out[key] = nearest_role(value, palette, accent) if HEX.match(value) else value
+        elif isinstance(value, list):
+            out[key] = recolor_list(value, palette, accent)
+        elif key == "entries" and isinstance(value, dict):
+            out[key] = {wid: {k: nearest_role(v, palette, accent) for k, v in cols.items()}
+                        for wid, cols in value.items()}
+        elif isinstance(value, dict):
+            out[key] = {k: (nearest_role(v, palette, accent) if isinstance(v, str) and HEX.match(v) else v)
+                        for k, v in value.items()}
+    return out
+
+
+def lightness_options(color, text, minimum, edge=None, gap=0.0):
+    """(fits, fallback) for fit_lightness. `fits` is the closest lightness that
+    keeps `text` readable and stands `gap` apart from `edge` without crossing
+    to the edge's other side, so a segment darker than the wallpaper stays
+    darker and a lighter one stays lighter. `fallback` is the best readable choice when
+    that is impossible: furthest from the edge on the same side, else the
+    closest readable lightness anywhere."""
+    L0, C, H = rgb_to_oklch(hex_to_rgb(color[:7]))
+    edge_l = rgb_to_oklch(hex_to_rgb(edge))[0] if edge else None
+    above = edge_l is None or L0 >= edge_l
+    fits = same = anywhere = None
+    for step in range(101):
+        L = step / 100
+        candidate = oklch_to_hex(L, C, H)
+        if contrast(candidate, text[:7]) < minimum:
+            continue
+        cost = abs(L - L0)
+        separation = abs(L - edge_l) if edge_l is not None else 1.0
+        same_side = edge_l is None or (L >= edge_l) == above
+        if same_side and separation >= gap and (fits is None or cost < fits[0]):
+            fits = (cost, candidate)
+        if same_side and (same is None or (separation, -cost) > (same[0], -same[1])):
+            same = (separation, cost, candidate)
+        if anywhere is None or cost < anywhere[0]:
+            anywhere = (cost, candidate)
+    fallback = same[2] if same else (anywhere[1] if anywhere else None)
+    return (fits[1] if fits else None), fallback
+
+
+def fit_lightness(color, text, minimum, edge=None, gap=0.0):
+    """The lightness closest to `color`'s that keeps `text` readable on it and,
+    where the two allow it, stands `gap` apart from the wallpaper `edge`."""
+    fits, fallback = lightness_options(color, text, minimum, edge, gap)
+    return (fits or fallback or color[:7]) + color[7:]
+
+
+def bar_contrast(colors, style, palette, level, position):
+    """Readable text on every segment, segments apart from the wallpaper."""
+    levels = CONTRAST.get(level, CONTRAST["normal"])
+    out = json.loads(json.dumps(colors))
+    edge = (palette.get("edges") or {}).get(position)
+    fg = out.get("fg") or style.get("fg")
+    if isinstance(fg, str) and HEX.match(fg):
+        fills = [out.get("bg")] + list((out.get("regions") or {}).values()) \
+            + list((out.get("modules") or {}).values()) + list(out.get("palette") or [])
+        fills = [f for f in fills if isinstance(f, str) and HEX.match(f)]
+        # When text, segments and wallpaper leave no room, push the text
+        # further from the segments before giving up on the separation.
+        if edge and fills and "fg" in out:
+            L, C, H = rgb_to_oklch(hex_to_rgb(fg[:7]))
+            mean = sum(luminance(f[:7]) for f in fills) / len(fills)
+            step = 0.02 if luminance(fg[:7]) >= mean else -0.02
+            for _ in range(15):
+                if all(lightness_options(f, fg, levels["bar"], edge, levels["gap"])[0] for f in fills):
+                    break
+                L = min(max(L + step, 0.0), 1.0)
+                fg = oklch_to_hex(L, C, H) + fg[7:]
+            out["fg"] = fg
+
+        def fix(value):
+            if isinstance(value, str) and HEX.match(value):
+                return fit_lightness(value, fg, levels["bar"], edge, levels["gap"])
+            return value
+        if "bg" in out:
+            out["bg"] = fix(out["bg"])
+        for key in ("regions", "modules"):
+            if isinstance(out.get(key), dict):
+                out[key] = {k: fix(v) for k, v in out[key].items()}
+        if isinstance(out.get("palette"), list):
+            out["palette"] = [fix(v) for v in out["palette"]]
+    if edge:
+        candidates = [palette.get(k) for k in ("darker_background", "bright_foreground", "accent")]
+        candidates = [c for c in candidates if isinstance(c, str) and HEX.match(c)]
+        if candidates:
+            out["outlineColor"] = max(candidates, key=lambda c: contrast(c, edge))
+    return out
+
+
+def write_shell_style(update, remove=()):
+    shell = read_json(SHELL_JSON, None)
+    if not isinstance(shell, dict):
+        return False
+    bar = shell.setdefault("bar", {})
+    update = dict(update)
+    entries = update.pop("entries", None)
+    style = dict(bar.get("style") or {})
+    style.update(update)
+    for key in remove:
+        style.pop(key, None)
+    bar["style"] = style
+    # Per-module colours go back onto their layout entries.
+    if isinstance(entries, dict):
+        for lane in (bar.get("layout") or {}).values():
+            for entry in lane if isinstance(lane, list) else []:
+                cols = entries.get(entry.get("id")) if isinstance(entry, dict) else None
+                if cols:
+                    entry.update({k: v for k, v in cols.items() if k in ENTRY_COLOR_KEYS})
+    tmp = SHELL_JSON.with_name(f".{SHELL_JSON.name}.hyprskin")
+    tmp.write_text(json.dumps(shell, indent=2) + "\n")
+    os.chmod(tmp, os.stat(SHELL_JSON).st_mode & 0o777)
+    os.replace(tmp, SHELL_JSON)  # the shell hot-reloads shell.json
+    return True
+
+
+def colorize_bar(palette, settings=None):
+    settings = settings or load_settings()
+    shell = read_json(SHELL_JSON, {})
+    bar = shell.get("bar") or {}
+    if bar.get("id") not in BAR_IDS:
+        return
+    style = bar.get("style") or {}
+    current = bar_colors(style, bar.get("layout"))
+    saved = read_json(BAR_STATE, {})
+    # A style that differs from what we last wrote was changed by the user:
+    # that becomes the new base.
+    if "base" not in saved or current != saved.get("written"):
+        saved["base"] = {k: v for k, v in current.items() if k not in BAR_GUARD_KEYS}
+    base = saved["base"]
+    written = recolor(base, palette) if base else {}
+    level = (settings.get("palette") or {}).get("contrast", "normal")
+    written = bar_contrast(written, style, palette, level, bar.get("position", "top"))
+    if not written:
+        return
+    if write_shell_style(written):
+        saved["written"] = written
+        write_json(BAR_STATE, saved)
+
+
+def restore_bar():
+    saved = read_json(BAR_STATE, {})
+    if "base" not in saved:
+        return False
+    base = saved["base"]
+    shell = read_json(SHELL_JSON, {})
+    bar = shell.get("bar") or {}
+    current = bar_colors(bar.get("style") or {}, bar.get("layout"))
+    if current != saved.get("written"):
+        return False  # the user restyled it since; leave their choice alone
+    write_shell_style(base, remove=[k for k in BAR_GUARD_KEYS if k not in base])
+    BAR_STATE.unlink(missing_ok=True)
+    return True
+
+
+def cmd_bar(args):
+    action = args[0] if args else "status"
+    if action == "apply":
+        palette = load_state().get("palette")
+        if not palette:
+            die("no wallpaper palette yet; apply a wallpaper or run `hyprskin theme`")
+        colorize_bar(palette)
+    elif action == "restore":
+        print("restored" if restore_bar() else "nothing to restore")
+    elif action == "style":
+        if len(args) < 3:
+            die("usage: hyprskin bar style <key> <json|null>")
+        try:
+            value = json.loads(args[2])
+        except json.JSONDecodeError:
+            value = args[2]
+        ok = write_shell_style({}, remove=[args[1]]) if value is None else write_shell_style({args[1]: value})
+        if not ok:
+            die("could not update shell.json")
+    elif action == "status":
+        shell = read_json(SHELL_JSON, {})
+        bar = shell.get("bar") or {}
+        print(json.dumps({"bar": bar.get("id", ""), "style": bar.get("style") or {},
+                          "position": bar.get("position", "top"),
+                          "colorized": bool(read_json(BAR_STATE, {}).get("written"))}))
+    else:
+        die("usage: hyprskin bar apply|restore|style|status")
+
+
+# ---------------------------------------------------------------------- main
+
+COMMANDS = {
+    "search": cmd_search, "apply": cmd_apply, "next": cmd_next, "theme": cmd_theme,
+    "colors": cmd_colors, "library": cmd_library, "local": cmd_local, "folder": cmd_folder, "delete": cmd_delete,
+    "favorite": cmd_favorite, "favorites": cmd_favorites, "account": cmd_account,
+    "collection": cmd_collection, "use-account-filters": cmd_use_account_filters,
+    "status": cmd_status, "bar": cmd_bar, "export": cmd_export, "get": cmd_get, "set": cmd_set, "targets": cmd_targets, "follow": cmd_follow,
+}
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(__doc__.strip())
+        return
+    command = COMMANDS.get(argv[0])
+    if not command:
+        die(f"unknown command '{argv[0]}' (try --help)")
+    command(argv[1:])
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

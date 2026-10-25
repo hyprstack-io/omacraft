@@ -1,0 +1,27 @@
+#!/bin/bash
+# Compiles every effect in shaders/src to shaders/<name>.frag.qsb, with
+# common.glsl in front. Needs Qt's qsb (qt6-shadertools).
+set -euo pipefail
+
+here="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+src="$here/shaders/src"
+out="$here/shaders"
+qsb="$(command -v qsb6 || command -v qsb || echo /usr/lib/qt6/bin/qsb)"
+[[ -x $qsb ]] || { echo "qsb not found; install qt6-shadertools" >&2; exit 1; }
+
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+status=0
+for frag in "$src"/*.frag; do
+  name="$(basename "$frag" .frag)"
+  [[ $# -gt 0 && " $* " != *" $name "* ]] && continue
+  cat "$src/common.glsl" "$frag" >"$tmp/$name.frag"
+  if "$qsb" --glsl "100es,120,150" --hlsl 50 --msl 12 -o "$out/$name.frag.qsb" "$tmp/$name.frag" >"$tmp/$name.log" 2>&1; then
+    echo "ok    $name"
+  else
+    echo "FAIL  $name" >&2
+    sed "s|$tmp/||" "$tmp/$name.log" >&2
+    status=1
+  fi
+done
+exit $status

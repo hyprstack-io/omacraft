@@ -1,15 +1,31 @@
 pkgname=omacraft
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
-pkgdesc='One home for the skll Omarchy plugins, HyprFIGZ and HyprBUILDZ (the hyprbuildz ISO builder)'
+pkgdesc='One home for the skll Omarchy plugins, Dotfile Generator and OmaBuilds (the hyprbuildz ISO builder)'
 arch=('x86_64')
+url='https://github.com/SK33M/omacraft'
 license=('MIT')
-depends=('qt6-base' 'qt6-declarative' 'qt6-wayland' 'qt6-webengine' 'xdg-desktop-portal'
-         'python' 'archiso' 'polkit' 'util-linux' 'coreutils' 'pacman')
-optdepends=('nodejs: omascii, the boot screen designer'
-            'plymouth: the HyprStack boot animation'
-            'libnotify: a notification when a HyprFIGZ export is saved')
-makedepends=('gcc' 'make')
+# Everything OmaCraft and the plugins it carries need to run is a dependency,
+# so pacman brings it in with the package.
+depends=('qt6-base' 'qt6-declarative' 'qt6-wayland' 'qt6-svg' 'qt6-imageformats' 'layer-shell-qt'
+         'qt6-webengine' 'xdg-desktop-portal' 'polkit'
+         'python' 'python-pillow' 'nodejs' 'zstd' 'unzip' 'inotify-tools' 'libnotify' 'gtk3' 'xdg-utils'
+         'archiso' 'squashfs-tools' 'util-linux' 'coreutils' 'pacman')
+optdepends=('omarchy: the desktop every plugin and page sets up'
+            'ttfx: the animated boot splash intros (Omarchy repo)'
+            'plymouth: the boot screen, from Boot Splash'
+            'matugen: the matugen wallpaper colour scheme'
+            'python-pywal16: the pywal wallpaper colour scheme (AUR)'
+            'flavours: the flavours wallpaper colour scheme (AUR)'
+            'alienflare: the Alienware keyboard lights on the Lights page'
+            'imagemagick: image ASCII art in omascii'
+            "rofi: ROFIoma's popups"
+            "jq: ROFIoma's keybinding cheatsheet"
+            "wl-clipboard: ROFIoma's emoji and glyph pickers, copying exports"
+            "wtype: ROFIoma's pickers typing what is picked"
+            'swaync: notifications styled in ROFIoma'
+            'erofs-utils: EROFS live images in OmaBuilds')
+makedepends=('gcc' 'make' 'rsync')
 options=('!debug')
 source=()
 sha256sums=()
@@ -23,22 +39,26 @@ package() {
   cd "$startdir/.."
   install -Dm755 build/omacraft "$pkgdir/usr/bin/omacraft"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 THIRD-PARTY-NOTICES.md "$pkgdir/usr/share/licenses/$pkgname/THIRD-PARTY-NOTICES.md"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
   install -Dm644 "$startdir/omacraft.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/omacraft.svg"
   install -Dm644 "$startdir/omacraft.desktop" "$pkgdir/usr/share/applications/omacraft.desktop"
 
-  # The HyprStack boot animation, which HyprSPLASH can make the boot screen.
+  # Every plugin OmaCraft manages, under its id. Installing one from the app
+  # links ~/.config/omarchy/plugins/<id> here unless its project is checked
+  # out, so the plugins update with the package. Their own licences go along.
+  local plugins="$pkgdir/usr/share/omacraft/plugins" dir id
+  for dir in plugins/*/; do
+    id=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["id"])' "$dir/manifest.json")
+    install -dm755 "$plugins/$id"
+    rsync -r --perms --chmod=u+rwX,go+rX,go-w \
+      --exclude='.claude' --exclude='__pycache__' --exclude='node_modules' --exclude='*.bak*' \
+      "$dir" "$plugins/$id/"
+  done
+
+  # The HyprStack boot animation, which Boot Splash can make the boot screen.
   local splash="$pkgdir/usr/share/plymouth/themes/hyprstack-boot"
   install -dm755 "$splash/frames"
   install -m644 plymouth/hyprstack-boot/*.{plymouth,script,png} "$splash/"
   install -m644 plymouth/hyprstack-boot/frames/*.png "$splash/frames/"
-
-  # A copy of HyprFIGZ's built web app, for when the project or its plugin
-  # isn't on the machine. OMAcraft prefers the live plugin's build.
-  local hyprcraft="${HYPRCRAFT_APP:-$HOME/Projects/HyprCraft/omarchy-plugin/app}"
-  if [[ -f $hyprcraft/index.html ]]; then
-    install -dm755 "$pkgdir/usr/share/omacraft/hyprcraft"
-    cp -r --no-preserve=ownership "$hyprcraft/." "$pkgdir/usr/share/omacraft/hyprcraft/"
-  else
-    echo "No HyprFIGZ build at $hyprcraft; the package won't carry one." >&2
-  fi
 }

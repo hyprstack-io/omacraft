@@ -1,0 +1,24 @@
+#!/bin/bash
+# omascii — FIGlet ASCII art (every TAAG font) for the Plymouth boot screen.
+# Thin launcher: finds node (Hyprland sessions don't always carry the mise
+# PATH) and hands off to lib/cli.mjs. Run `omascii help` for commands.
+set -euo pipefail
+
+root=$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")")
+
+node=$(command -v node || true)
+if [[ -z $node ]]; then
+  for candidate in "$HOME"/.local/share/mise/installs/node/latest/bin/node \
+                   "$HOME"/.local/share/mise/shims/node /usr/local/bin/node; do
+    [[ -x $candidate ]] && { node=$candidate; break; }
+  done
+fi
+if [[ -z $node ]] && command -v mise >/dev/null; then
+  node=$(mise which node 2>/dev/null || true)
+fi
+if [[ -z $node ]]; then
+  echo "omascii: node not found — install it with: omarchy pkg add nodejs" >&2
+  exit 1
+fi
+
+exec "$node" "$root/lib/cli.mjs" "$@"

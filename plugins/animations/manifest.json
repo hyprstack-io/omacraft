@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "omacraft.animations",
+  "name": "Animations",
+  "version": "1.0.0",
+  "author": "skll",
+  "license": "MIT",
+  "description": "Pick Hyprland animation presets and tune their speed from the bar.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Animations",
+    "description": "Hyprland animation presets with a speed slider",
+    "category": "System",
+    "aliases": [
+      "animations",
+      "anims"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

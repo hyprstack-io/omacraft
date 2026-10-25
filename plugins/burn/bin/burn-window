@@ -1,0 +1,104 @@
+#!/bin/bash
+# The plugin's hands on Hyprland. Burn.qml runs this to look up a window and
+# to hide it while an effect plays over a copy of it.
+#
+#   burn-window info [ADDRESS]   the window (default: the active one) as JSON,
+#                                with the pointer and the border colour
+#   burn-window hide ADDRESS     saves its opacity, then makes it invisible and
+#                                turns Hyprland's own animation off for it;
+#                                prints the same JSON as info
+#   burn-window show ADDRESS     puts back what hide saved
+#   burn-window rescue           shows every window a crashed shell left hidden
+#
+# Hidden windows are remembered in ~/.local/state/omarchy/burn-hidden, so a
+# restart of the shell never leaves a window invisible.
+set -uo pipefail
+
+state="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/burn-hidden"
+props=(opacity opacity_inactive opacity_fullscreen)
+
+setprop() { # address prop value
+  printf 'dispatch hl.dsp.window.set_prop({ window = "address:%s", prop = "%s", value = "%s" }) ; ' "$1" "$2" "$3"
+}
+
+info() {
+  local address="${1:-}" clients
+  clients="$(hyprctl clients -j 2>/dev/null)" || exit 1
+  [[ -n $address ]] || address="$(hyprctl activewindow -j 2>/dev/null | jq -r '.address // empty')"
+  [[ -n $address ]] || { echo '{}'; return 1; }
+  local border cursor monitors
+  border="$(hyprctl getoption general:col.active_border -j 2>/dev/null | jq -r '(.gradient // .str // "") | split(" ")[0]')"
+  cursor="$(hyprctl cursorpos -j 2>/dev/null || echo '{"x":0,"y":0}')"
+  monitors="$(hyprctl monitors -j 2>/dev/null || echo '[]')"
+  local size
+  size="$(hyprctl getoption general:border_size -j 2>/dev/null | jq -r '.int // 0')"
+  jq -c --arg a "$address" --arg border "$border" --argjson cursor "$cursor" \
+     --argjson monitors "$monitors" --argjson borderSize "${size:-0}" '
+    (.[] | select(.address == $a)) as $c
+    | ($monitors | map(select(.id == $c.monitor)) | first // {}) as $m
+    | ($monitors | map(.activeWorkspace.id, .specialWorkspace.id) | map(select(. != null and . != 0))) as $shown
+    | {
+        address: $c.address,
+        class: $c.class,
+        title: $c.title,
+        at: $c.at,
+        size: $c.size,
+        floating: $c.floating,
+        fullscreen: ($c.fullscreen // 0),
+        monitor: ($m.name // ""),
+        monitorAt: [($m.x // 0), ($m.y // 0)],
+        visible: ($shown | index($c.workspace.id) != null),
+        cursor: [$cursor.x, $cursor.y],
+        border: $border,
+        borderSize: (if ($c.fullscreen // 0) != 0 then 0 else $borderSize end)
+      }' <<<"$clients"
+}
+
+hide() {
+  local address="$1" saved="{}" value
+  [[ -n $address ]] || exit 2
+  mkdir -p "$state"
+  for prop in "${props[@]}"; do
+    value="$(hyprctl getprop "address:$address" "$prop" 2>/dev/null)"
+    [[ $value =~ ^[0-9.]+$ ]] || value=1
+    saved="$(jq -c --arg p "$prop" --argjson v "$value" '. + {($p): $v}' <<<"$saved")"
+  done
+  printf '%s\n' "$saved" >"$state/$address.json"
+  local batch=""
+  for prop in "${props[@]}"; do batch+="$(setprop "$address" "$prop" 0)"; done
+  batch+="$(setprop "$address" no_anim 1)"
+  hyprctl --batch "$batch" >/dev/null
+  info "$address"
+}
+
+show() {
+  local address="$1" file="$state/$1.json" batch=""
+  if [[ -f $file ]]; then
+    for prop in "${props[@]}"; do
+      batch+="$(setprop "$address" "$prop" "$(jq -r --arg p "$prop" '.[$p] // 1' "$file")")"
+    done
+    rm -f "$file"
+  fi
+  batch+="$(setprop "$address" no_anim 0)"
+  hyprctl --batch "$batch" >/dev/null
+}
+
+rescue() {
+  [[ -d $state ]] || return 0
+  local live
+  live="$(hyprctl clients -j 2>/dev/null | jq -r '.[].address')"
+  for file in "$state"/*.json; do
+    [[ -e $file ]] || continue
+    local address
+    address="$(basename "$file" .json)"
+    if grep -qx "$address" <<<"$live"; then show "$address"; else rm -f "$file"; fi
+  done
+}
+
+case "${1:-}" in
+  info) info "${2:-}" ;;
+  hide) hide "${2:-}" ;;
+  show) show "${2:-}" ;;
+  rescue) rescue ;;
+  *) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac

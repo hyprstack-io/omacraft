@@ -2,8 +2,15 @@ MIT License
 
 Copyright (c) 2026 skll
 
+This covers OmaCraft and the plugins in plugins/ (omabar16, Studio and
+hyprskin, Side Dock, Burn My Windows, Window Transitions, omascii, Folder
+trays, Wallpaper picker, Dotfile Generator) and the keyboard lights code
+shared with AlienFlare, all by skll.
+
 Portions (the theme watcher and the portal file picker) are adapted from
-Omacut, Copyright (c) 2026 David Heinemeier Hansson, under the same license.
+Omacut, Copyright (c) David Heinemeier Hansson, under the same license.
+Other people's work that OmaCraft includes or follows, and its licenses, are
+listed in THIRD-PARTY-NOTICES.md.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

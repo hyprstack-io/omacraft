@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "omacraft.omascii",
+  "name": "omascii",
+  "version": "1.4.0",
+  "author": "skll",
+  "license": "MIT",
+  "description": "Turn any text or image into ASCII art for the Plymouth boot screen: all 332 FIGlet fonts from patorjk.com's Text to ASCII Art Generator (figlet.js), more FIGlet/toilet fonts, TheDraw colour fonts and your system fonts, with borders, shadows, gradients and a live preview, animated by ttfx effects or shown still.",
+  "kinds": [
+    "overlay",
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "Omascii.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Boot ASCII",
+    "description": "Opens the omascii boot screen font browser",
+    "category": "Appearance",
+    "aliases": [
+      "omascii",
+      "boot",
+      "plymouth",
+      "ascii"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

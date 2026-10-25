@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+# Hyprland side of the Agent Dock plugin. Each agent runs in its own foot
+# window (app-id agentdock-<id>). Visible agents are floated and pinned over
+# the dock's panel area; hidden ones wait on the special:agentdock workspace,
+# so their sessions keep running between toggles.
+#
+#   agentdock show  <id> <x> <y> <w> <h> <title> <command> [install] [cwd]
+#   agentdock place <id> <x> <y> <w> <h>      (rect local to the dock surface)
+#   agentdock hide  <id|all>
+#   agentdock close <id>
+#   agentdock status                 -> {"claude":true,"gemini":false}
+#   agentdock installed <cmd>...     -> {"claude":true,"gemini":false}
+#   agentdock cursor                 -> pointer position local to the dock surface
+
+set -uo pipefail
+
+STASH="special:agentdock"
+
+clients() { hyprctl clients -j 2>/dev/null || echo '[]'; }
+
+address_of() {
+  clients | jq -r --arg c "agentdock-$1" 'first(.[] | select(.class == $c) | .address) // empty'
+}
+
+dsp() {
+  # One eval per call: several dispatches separated by `;`.
+  hyprctl eval "$1" >/dev/null 2>&1
+}
+
+# Global origin (x y) of the dock's layer surface.
+layer_origin() {
+  hyprctl layers -j 2>/dev/null | jq -r '[.[] | .levels[] | .[] | select(.namespace == "skll-agentdock")] | first | "\(.x) \(.y)"'
+}
+
+# Rect (x y w h) for the terminal, from a rect local to the dock surface.
+# The window border is drawn outside the client area, so inset by it.
+rect_for() {
+  local lx=$1 ly=$2 w=$3 h=$4 ox oy b
+  read -r ox oy < <(layer_origin)
+  b=$(hyprctl getoption general:border_size -j 2>/dev/null | jq -r '.int // 2')
+  echo $((ox + lx + b)) $((oy + ly + b)) $((w - 2 * b)) $((h - 2 * b))
+}
+
+# Everything below builds Lua for one `hyprctl eval`, from one clients
+# snapshot, so a show or hide is a single round trip to Hyprland.
+
+# Lua that floats, pins and places window $2 at x y w h ($3..$6).
+place_lua() {
+  local json=$1 addr=$2 x=$3 y=$4 w=$5 h=$6 ws
+  ws=$(hyprctl activeworkspace -j | jq -r '.id')
+  jq -r --arg a "$addr" --arg ws "$ws" --argjson x "$x" --argjson y "$y" --argjson w "$w" --argjson h "$h" '
+    first(.[] | select(.address == $a)) as $c
+    | "window = \"address:\($a)\"" as $win
+    # No Hyprland animation: the dock animates its own card, and a window
+    # fading in or out behind it is what looked glitchy.
+    | "hl.dispatch(hl.dsp.window.set_prop({ \($win), prop = \"no_anim\", value = \"1\" }));"
+    + (if $c.floating then "" else "hl.dispatch(hl.dsp.window.float({ \($win), action = \"enable\" }));" end)
+    + (if $c.pinned then "" else
+        "hl.dispatch(hl.dsp.window.move({ \($win), workspace = \"\($ws)\", follow = false }));"
+        + "hl.dispatch(hl.dsp.window.pin({ \($win) }));" end)
+    + "hl.dispatch(hl.dsp.window.resize({ \($win), x = \($w), y = \($h) }));"
+    + "hl.dispatch(hl.dsp.window.move({ \($win), x = \($x), y = \($y) }));"
+    + "hl.dispatch(hl.dsp.window.alter_zorder({ \($win), mode = \"top\" }));"
+    + "hl.dispatch(hl.dsp.focus({ \($win) }));"' <<<"$json"
+}
+
+# Lua that unpins and stashes every visible agent window matching $2
+# ("all" or an id), except agent $3.
+stash_lua() {
+  jq -r --arg t "$2" --arg keep "agentdock-${3:-}" '
+    [.[] | select((.class | startswith("agentdock-")) and .workspace.name != "special:agentdock"
+                  and ($t == "all" or .class == "agentdock-" + $t) and .class != $keep)]
+    | map("window = \"address:\(.address)\"" as $win
+          | "hl.dispatch(hl.dsp.window.set_prop({ \($win), prop = \"no_anim\", value = \"1\" }));"
+          + (if .pinned then "hl.dispatch(hl.dsp.window.pin({ \($win) }));" else "" end)
+          + "hl.dispatch(hl.dsp.window.move({ \($win), workspace = \"special:agentdock\", follow = false }));")
+    | join("")' <<<"$1"
+}
+
+lua_long_string() {
+  # Wrap in a Lua long bracket whose level the text can't close early.
+  local s=$1 eq=""
+  while [[ $s == *"]$eq]"* ]]; do eq+="="; done
+  printf '[%s[%s]%s]' "$eq" "$s" "$eq"
+}
+
+launch() {
+  local id=$1 title=$2 command=$3 install=${4:-} cwd=${5:-$HOME} x=$6 y=$7 w=$8 h=$9
+  local bin=${command%% *} script
+  [[ -d $cwd ]] || cwd=$HOME
+  script="printf '\\033]0;%s\\007' $(printf '%q' "$title");"
+  if [[ -n $install ]]; then
+    script+="if ! command -v $(printf '%q' "$bin") >/dev/null 2>&1; then"
+    script+=" echo $(printf '%q' "$title isn't installed yet. Running: $install"); echo;"
+    script+=" $install || { echo; read -r -p 'Install failed. Press Enter to close.'; exit 1; };"
+    script+=" fi;"
+  fi
+  # The interactive login shell may print a banner (fastfetch etc.); clear it.
+  script+="printf '\\033[H\\033[2J\\033[3J';"
+  script+="exec $command"
+
+  local shell=${SHELL:-/bin/bash}
+  local argv
+  argv="foot --app-id=agentdock-$id --title=$(printf '%q' "$title") --working-directory=$(printf '%q' "$cwd") -- $(printf '%q' "$shell") -lic $(printf '%q' "$script")"
+  dsp "hl.dispatch(hl.dsp.exec_cmd($(lua_long_string "[workspace $STASH silent; float; size $w $h; move $x $y] $argv")))"
+
+  local addr="" i
+  for i in $(seq 1 60); do
+    addr=$(address_of "$id")
+    [[ -n $addr ]] && break
+    sleep 0.1
+  done
+  printf '%s' "$addr"
+}
+
+case "${1:-}" in
+  show)
+    id=$2 title=$7 command=$8 install=${9:-} cwd=${10:-}
+    read -r x y w h < <(rect_for "$3" "$4" "$5" "$6")
+    addr=$(address_of "$id")
+    [[ -z $addr ]] && addr=$(launch "$id" "$title" "$command" "$install" "$cwd" "$x" "$y" "$w" "$h")
+    [[ -z $addr ]] && { echo "agentdock: $id did not start" >&2; exit 1; }
+    # Only one agent is shown at a time: stash the others in the same eval.
+    json=$(clients)
+    dsp "$(stash_lua "$json" all "$id")$(place_lua "$json" "$addr" "$x" "$y" "$w" "$h")"
+    ;;
+  place)
+    id=$2
+    json=$(clients)
+    addr=$(jq -r --arg c "agentdock-$id" 'first(.[] | select(.class == $c and .workspace.name != "special:agentdock") | .address) // empty' <<<"$json")
+    [[ -z $addr ]] && exit 0
+    read -r x y w h < <(rect_for "$3" "$4" "$5" "$6")
+    dsp "$(place_lua "$json" "$addr" "$x" "$y" "$w" "$h")"
+    ;;
+  hide)
+    lua=$(stash_lua "$(clients)" "${2:-all}")
+    [[ -z $lua ]] || dsp "$lua"
+    ;;
+  close)
+    addr=$(address_of "$2")
+    [[ -n $addr ]] && dsp "hl.dispatch(hl.dsp.window.close({ window = \"address:$addr\" }))"
+    ;;
+  status)
+    clients | jq -c 'map(select(.class | startswith("agentdock-")) | {key: (.class | ltrimstr("agentdock-")), value: true}) | from_entries'
+    ;;
+  cursor)
+    read -r ox oy < <(layer_origin)
+    hyprctl cursorpos -j | jq -r --argjson ox "${ox:-0}" --argjson oy "${oy:-0}" '"\(.x - $ox) \(.y - $oy)"'
+    ;;
+  installed)
+    shift
+    out="{"
+    for cmd in "$@"; do
+      bin=${cmd%% *}
+      if "${SHELL:-/bin/bash}" -lic "command -v $(printf '%q' "$bin")" >/dev/null 2>&1 </dev/null; then ok=true; else ok=false; fi
+      [[ $out != "{" ]] && out+=","
+      out+="$(jq -cn --arg k "$bin" '$k'):$ok"
+    done
+    echo "$out}"
+    ;;
+  *)
+    sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+    exit 2
+    ;;
+esac

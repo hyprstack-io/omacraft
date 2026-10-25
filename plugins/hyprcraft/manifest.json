@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "id": "omacraft.hyprcraft",
+  "name": "HyprCraft",
+  "version": "1.0.0",
+  "author": "skll",
+  "license": "Apache-2.0",
+  "description": "Hyprland and desktop config customizer that drops down from the Omarchy bar and can pop out into its own window.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "HyprCraft",
+    "description": "Hyprland, Waybar, Rofi, SwayNC, GTK/Qt and terminal customizer in a bar dropdown.",
+    "category": "System",
+    "aliases": [
+      "hyprcraft"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "width": 1280,
+      "height": 840,
+      "hideOnBlur": false,
+      "preload": false
+    },
+    "schema": [
+      {
+        "key": "width",
+        "type": "integer",
+        "label": "Dropdown width (px, clamped to the monitor)",
+        "min": 640,
+        "max": 3840,
+        "step": 20,
+        "defaultValue": 1280
+      },
+      {
+        "key": "height",
+        "type": "integer",
+        "label": "Dropdown height (px, clamped to the monitor)",
+        "min": 420,
+        "max": 2160,
+        "step": 20,
+        "defaultValue": 840
+      },
+      {
+        "key": "hideOnBlur",
+        "type": "boolean",
+        "label": "Hide the dropdown when it loses focus (best with follow_mouse = 0)",
+        "defaultValue": false
+      },
+      {
+        "key": "preload",
+        "type": "boolean",
+        "label": "Start the HyprCraft host with the shell so the first open is instant",
+        "defaultValue": false
+      }
+    ]
+  }
+}
