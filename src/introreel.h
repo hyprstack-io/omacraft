@@ -7,8 +7,9 @@
 
 class Omascii;
 
-// The Plugin Suite's title: "OmaCraft" played through each of the Boot
-// Splash page's intro effects, rendered by omascii in a font of its own.
+// The Plugin Suite's title: "OMACRAFT" in the TheDraw font balistcx, without
+// a shadow, played through every one of the Boot Splash page's intro effects
+// in turn, round and round, rendered by omascii.
 // It starts on a random effect each launch. Rendering an intro takes a few
 // seconds, so each one is kept in ~/.cache/omacraft/intro (keyed by the
 // effect, the art's settings and the palette, so a new theme renders
@@ -45,6 +46,8 @@ public:
     // The settings the title is drawn with: the boot design's colours, the
     // word in its own font, no picture, border or padding.
     static QVariantMap titleConfig(const QVariantMap &boot);
+    // "TDF balistcx" once omascii has its TheDraw fonts, else "ANSI Shadow".
+    static QString titleFont();
     // Where one intro is kept: its effect and a hash of everything it's drawn from.
     QString cachePath(const QString &effect) const;
 

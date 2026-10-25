@@ -3,16 +3,16 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Omacraft
 
-// The Plugin Suite's title: "OmaCraft" played through the Boot Splash
+// The Plugin Suite's title: "OMACRAFT" played through the Boot Splash
 // page's intro effects (introReel renders them with omascii). It starts on a
-// random one each launch and loops it; the arrows step through them, and
-// autoplay moves on to the next each time one finishes. A click on the art
-// plays it again from the start.
+// random one each launch and, with autoplay (on unless it's switched off),
+// moves on to the next each time one finishes, round all of them in a loop.
+// The arrows step through them; a click on the art plays it again.
 ColumnLayout {
     id: title
 
     property bool running: true
-    property bool autoplay: false
+    property bool autoplay: true
     property int frame: 0
 
     readonly property var frames: introReel.frames

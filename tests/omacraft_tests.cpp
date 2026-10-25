@@ -774,10 +774,19 @@ void OmacraftTests::introReelDrawsTheTitleItsOwnWay()
     // The boot design's colours, but the word, its font and no picture or frame.
     const QVariantMap config = IntroReel::titleConfig(QVariantMap{
         {"source", "image"}, {"image", "/tmp/x.png"}, {"text", "Hello"}, {"font", "TDF x"},
-        {"border", "rounded"}, {"color", "accent"}, {"colorMode", "split"}});
+        {"border", "rounded"}, {"color", "accent"}, {"colorMode", "split"}, {"shadow", "drop"}});
     QCOMPARE(config.value("source").toString(), QString("text"));
-    QCOMPARE(config.value("text").toString(), QString("OmaCraft"));
-    QCOMPARE(config.value("font").toString(), QString("ANSI Shadow"));
+    QCOMPARE(config.value("text").toString(), QString("OMACRAFT"));
+    QCOMPARE(config.value("shadow").toString(), QString("none"));
+    // balistcx once the TheDraw fonts are there, a FIGlet font until then.
+    QTemporaryDir fonts;
+    qputenv("OMASCII_TDF_DIR", fonts.path().toUtf8());
+    QCOMPARE(IntroReel::titleFont(), QString("ANSI Shadow"));
+    QFile font(fonts.path() + "/balistcx.tdf");
+    QVERIFY(font.open(QIODevice::WriteOnly));
+    font.close();
+    QCOMPARE(IntroReel::titleFont(), QString("TDF balistcx"));
+    qunsetenv("OMASCII_TDF_DIR");
     QCOMPARE(config.value("border").toString(), QString("none"));
     QCOMPARE(config.value("color").toString(), QString("accent"));
     QCOMPARE(config.value("inkBg").toString(), QString("none"));

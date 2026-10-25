@@ -1,5 +1,7 @@
 #include "introreel.h"
 
+#include <QFileInfo>
+
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
@@ -34,11 +36,19 @@ IntroReel::~IntroReel() {
     }
 }
 
+QString IntroReel::titleFont() {
+    // TheDraw fonts are fetched on request (omascii tdf fetch); until
+    // balistcx is there, the title is drawn in a FIGlet font omascii carries.
+    const QString data = qEnvironmentVariable("XDG_DATA_HOME", QDir::homePath() + "/.local/share");
+    const QString dir = qEnvironmentVariable("OMASCII_TDF_DIR", data + "/omascii/tdf");
+    return QFileInfo::exists(dir + "/balistcx.tdf") ? QString("TDF balistcx") : QString("ANSI Shadow");
+}
+
 QVariantMap IntroReel::titleConfig(const QVariantMap &boot) {
     QVariantMap config = boot;
     config.insert("source", "text");
-    config.insert("text", "OmaCraft");
-    config.insert("font", "ANSI Shadow");
+    config.insert("text", "OMACRAFT");
+    config.insert("font", titleFont());
     config.insert("hlayout", "default");
     config.insert("vlayout", "default");
     config.insert("width", 120);
