@@ -1,10 +1,10 @@
 [Desktop Entry]
 Type=Application
-Name=OMAcraft
-Comment=Install, enable and set up your Omarchy plugins, HyprFIGZ and HyprBUILDZ in one place
+Name=OmaCraft
+Comment=Install, enable and set up your Omarchy plugins, Dotfile Generator and OmaBuilds in one place
 Exec=omacraft %U
 Icon=omacraft
 Terminal=false
 Categories=Settings;DesktopSettings;Utility;
-Keywords=omarchy;plugins;bar;omabar16;dock;animations;ascii;plymouth;hyprcraft;iso;archiso;
+Keywords=omarchy;plugins;bar;omabar16;dock;animations;ascii;plymouth;screensaver;omasavr;hyprcraft;iso;archiso;
 StartupWMClass=omacraft

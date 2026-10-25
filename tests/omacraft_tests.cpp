@@ -13,6 +13,9 @@
 #include "animations.h"
 #include "asciiview.h"
 #include "bar.h"
+#include "edgetab.h"
+#include "introreel.h"
+#include "omascii.h"
 #include "bootsplash.h"
 #include "burn.h"
 #include "hyprcraft.h"
@@ -20,9 +23,12 @@
 #include "omascii.h"
 #include "plugins.h"
 #include "proc.h"
+#include "rofioma.h"
+#include "screensaver.h"
 #include "theme.h"
 #include "themesync.h"
 #include "wallpaper.h"
+#include "wallpicker.h"
 #include "folders.h"
 #include "omacraft_tests.h"
 
@@ -53,6 +59,15 @@ void writeManifest(const QString &dir, const QString &id) {
 } // namespace
 
 // --- theme ---
+
+void OmacraftTests::initTestCase()
+{
+    // The bar's Omarchy themes come from the system's; the tests have none
+    // unless they make some.
+    qputenv("OMACRAFT_OMARCHY_THEMES", "/nonexistent");
+    // Nor do they see the plugins an installed package carries.
+    qputenv("OMACRAFT_PLUGINS_DIR", "/nonexistent");
+}
 
 void OmacraftTests::themeFallsBack()
 {
@@ -97,12 +112,83 @@ void OmacraftTests::expandsHomeAndQuotes()
 void OmacraftTests::readsBarSections()
 {
     const auto shell = QJsonDocument::fromJson(R"({"bar":{"id":"omabar16","layout":{
-        "left":[{"id":"a"}],"center":[{"id":"b"}],"right":[{"id":"c"},{"id":"omacraft.agentdock"}]}}})").object();
-    QCOMPARE(Plugins::sectionIn(shell, "omacraft.agentdock"), QString("right"));
-    QCOMPARE(Plugins::sectionIn(shell, "b"), QString("center"));
-    QCOMPARE(Plugins::sectionIn(shell, "missing"), QString());
+        "left":[{"id":"omacraft.studio","role":"launcher"},{"id":"omacraft.folders","name":"Apps"}],
+        "right":[{"id":"omacraft.agentdock"},{"id":"omacraft.studio","role":"studio"}]}},
+        "plugins":[{"id":"omacraft.burn"},{"id":"omacraft.omascii"}],"disabledPlugins":["omacraft.omascii"]})").object();
     QCOMPARE(Plugins::barIn(shell), QString("omabar16"));
     QCOMPARE(Plugins::barIn(QJsonObject()), QString("omarchy.bar"));
+    QVERIFY(Plugins::isOnIn(shell, "omacraft.burn"));
+    QVERIFY(Plugins::isOnIn(shell, "omacraft.agentdock"));
+    QVERIFY(!Plugins::isOnIn(shell, "omacraft.omascii"));
+    QVERIFY(!Plugins::isOnIn(shell, "omacraft.animations"));
+    // Folder trays and Studio's launcher button belong on the bar; the rest
+    // are icons OmaCraft takes over.
+    QCOMPARE(Plugins::barIconsIn(shell, "omacraft.agentdock"), 1);
+    QCOMPARE(Plugins::barIconsIn(shell, "omacraft.studio"), 1);
+    QCOMPARE(Plugins::barIconsIn(shell, "omacraft.folders"), 0);
+}
+
+void OmacraftTests::switchesPluginsWithoutBarIcons()
+{
+    auto shell = QJsonDocument::fromJson(R"({"bar":{"id":"omabar16","layout":{
+        "left":[{"id":"omacraft.studio","role":"launcher"},{"id":"omacraft.folders","name":"Apps"}],
+        "right":[{"id":"omarchy.clock"},{"id":"omacraft.agentdock"},{"id":"omacraft.studio","role":"studio"}]}},
+        "plugins":[{"id":"other.thing"}],"theme":"kept"})").object();
+
+    // On: listed in plugins[], its icon gone, everything else left alone.
+    Plugins::switchIn(shell, "omacraft.agentdock", true);
+    QVERIFY(Plugins::isOnIn(shell, "omacraft.agentdock"));
+    QCOMPARE(Plugins::barIconsIn(shell, "omacraft.agentdock"), 0);
+    QCOMPARE(shell.value("plugins").toArray().size(), 2);
+    QCOMPARE(shell.value("bar").toObject().value("layout").toObject().value("right").toArray().size(), 2);
+    QCOMPARE(shell.value("theme").toString(), QString("kept"));
+    Plugins::switchIn(shell, "omacraft.agentdock", true);
+    QCOMPARE(shell.value("plugins").toArray().size(), 2);
+
+    // Off: out of plugins[], and nothing is said in disabledPlugins[] when
+    // nothing of it is left to load it.
+    Plugins::switchIn(shell, "omacraft.agentdock", false);
+    QVERIFY(!Plugins::isOnIn(shell, "omacraft.agentdock"));
+    QVERIFY(!shell.contains("disabledPlugins"));
+
+    // Studio keeps its launcher button, so off is said, and on unsays it.
+    Plugins::switchIn(shell, "omacraft.studio", false);
+    QVERIFY(!Plugins::isOnIn(shell, "omacraft.studio"));
+    QCOMPARE(shell.value("disabledPlugins").toArray(), QJsonArray{"omacraft.studio"});
+    QCOMPARE(shell.value("bar").toObject().value("layout").toObject().value("left").toArray().size(), 2);
+    Plugins::switchIn(shell, "omacraft.studio", true);
+    QVERIFY(Plugins::isOnIn(shell, "omacraft.studio"));
+    QVERIFY(!shell.contains("disabledPlugins"));
+    QCOMPARE(Plugins::barIconsIn(shell, "omacraft.studio"), 0);
+}
+
+void OmacraftTests::switchingAPluginEditsShellJsonInPlace()
+{
+    QTemporaryDir home;
+    writeManifest(home.path() + "/.config/omarchy/plugins/omacraft.animations", "omacraft.animations");
+    const QString shellPath = home.path() + "/.config/omarchy/shell.json";
+    writeFile(shellPath, R"({"bar":{"layout":{"right":[{"id":"omacraft.animations"},{"id":"omarchy.clock"}]}}})");
+
+    Plugins plugins(home.path(), false);
+    auto item = plugins.plugin("omacraft.animations");
+    QVERIFY(item.value("enabled").toBool());
+    QCOMPARE(item.value("barIcons").toInt(), 1);
+    QCOMPARE(item.value("state").toString(), QString("On, with an icon on the bar"));
+
+    const auto born = QFileInfo(shellPath).fileTime(QFileDevice::FileBirthTime);
+    plugins.takeIconsOffBar();
+    QCOMPARE(plugins.error(), QString());
+    item = plugins.plugin("omacraft.animations");
+    QVERIFY(item.value("enabled").toBool());
+    QCOMPARE(item.value("barIcons").toInt(), 0);
+    QCOMPARE(item.value("state").toString(), QString("On"));
+    QCOMPARE(QFileInfo(shellPath).fileTime(QFileDevice::FileBirthTime), born);
+
+    plugins.setEnabled("omacraft.animations", false);
+    QVERIFY(!plugins.isEnabled("omacraft.animations"));
+    const auto shell = readJson(shellPath);
+    QCOMPARE(shell.value("plugins").toArray().size(), 0);
+    QCOMPARE(shell.value("bar").toObject().value("layout").toObject().value("right").toArray().size(), 1);
 }
 
 void OmacraftTests::installsByLinkingTheSource()
@@ -141,6 +227,23 @@ void OmacraftTests::flagsAFolderThatReusesAPluginId()
     QCOMPARE(item.value("duplicates").toStringList(), QStringList{"skll.omascii"});
     QCOMPARE(item.value("state").toString(), QString("Also installed as skll.omascii"));
     QVERIFY(plugins.plugin("omacraft.burn").value("duplicates").toStringList().isEmpty());
+}
+
+void OmacraftTests::installsFromThePackageWithoutTheProjects()
+{
+    QTemporaryDir home, packaged;
+    writeManifest(packaged.path() + "/omacraft.burn", "omacraft.burn");
+    writeManifest(packaged.path() + "/omacraft.omascii", "omacraft.omascii");
+    // omascii's project is checked out here; Burn's isn't.
+    writeManifest(home.path() + "/Projects/omascii", "omacraft.omascii");
+    qputenv("OMACRAFT_PLUGINS_DIR", packaged.path().toUtf8());
+    Plugins plugins(home.path(), false);
+    QCOMPARE(plugins.sourcePath("omacraft.burn"), packaged.path() + "/omacraft.burn");
+    QCOMPARE(plugins.sourcePath("omacraft.omascii"), home.path() + "/Projects/omascii");
+    QVERIFY(plugins.plugin("omacraft.burn").value("canInstall").toBool());
+    // A plugin the package doesn't carry still points at its project.
+    QCOMPARE(plugins.sourcePath("omacraft.studio"), home.path() + "/Work/skll-studio/plugin");
+    qputenv("OMACRAFT_PLUGINS_DIR", "/nonexistent");
 }
 
 void OmacraftTests::removingALinkKeepsTheCode()
@@ -293,7 +396,7 @@ void OmacraftTests::dockSavesSettingsWhileStopped()
     AgentDock dock({}, [] { return false; }, home.path());
     dock.set("gap", 6);
     dock.set("position", "left");
-    dock.set("activeTab", "sneaky"); // not a setting the dock takes from OMAcraft
+    dock.set("activeTab", "sneaky"); // not a setting the dock takes from OmaCraft
     const auto saved = readJson(dock.statePath());
     QCOMPARE(saved.value("gap").toInt(), 6);
     QCOMPARE(saved.value("position").toString(), QString("left"));
@@ -532,6 +635,163 @@ var LAYOUTS = [{ id: "rail", label: "Rail", anchor: "omarchy.clock", position: "
     QCOMPARE(bar.currentLayout(), QString());
 }
 
+void OmacraftTests::barHidesWidgetsAndBringsThemBack()
+{
+    QTemporaryDir home;
+    const QString plugin = home.path() + "/plugin";
+    writeFile(plugin + "/data/Presets.js", R"(var THEMES = [{ id: "a", label: "A", style: {} }]
+var LAYOUTS = [{ id: "all", label: "All", anchor: "omarchy.clock",
+  layout: { left: [{ id: "omarchy.menu" }], center: [{ id: "omarchy.clock" }], right: [{ id: "omarchy.audio" }] } }]
+)");
+    const QString shell = home.path() + "/.config/omarchy/shell.json";
+    writeFile(shell, R"({"bar":{"id":"omabar16","centerAnchor":"omarchy.clock","layout":{"left":[{"id":"omarchy.menu","icon":"X"}],
+        "center":[{"id":"omarchy.clock","format":"HH:mm"}],"right":[{"id":"omarchy.audio"},{"id":"omarchy.network"}]}}})");
+    Bar bar([plugin] { return plugin; }, {}, home.path(), false);
+
+    // Hidden: off the bar omabar16 draws, settings kept beside it.
+    bar.hideWidget("left", 0);
+    bar.hideWidget("center", 0);
+    QCOMPARE(bar.layout().value("left").toList().size(), 0);
+    QCOMPARE(bar.centerAnchor(), QString());
+    QCOMPARE(bar.hidden().size(), 2);
+    bar.flush();
+    QJsonObject saved = readJson(shell).value("bar").toObject();
+    QCOMPARE(saved.value("hidden").toArray().at(0).toObject().value("entry").toObject().value("icon").toString(), QString("X"));
+
+    // A preset leaves hidden widgets hidden.
+    bar.applyLayout("all");
+    QCOMPARE(bar.layout().value("left").toList().size(), 0);
+    QCOMPARE(bar.layout().value("center").toList().size(), 0);
+
+    // Shown again: back in place, the clock the anchor again.
+    bar.showWidget(1);
+    QCOMPARE(bar.layout().value("center").toList().at(0).toMap().value("format").toString(), QString("HH:mm"));
+    QCOMPARE(bar.centerAnchor(), QString("omarchy.clock"));
+    // Or dropped somewhere else.
+    bar.showWidget(0, "right", 1);
+    QCOMPARE(bar.layout().value("right").toList().at(1).toMap().value("id").toString(), QString("omarchy.menu"));
+    QVERIFY(bar.hidden().isEmpty());
+    bar.flush();
+    QVERIFY(!readJson(shell).value("bar").toObject().contains("hidden"));
+}
+
+void OmacraftTests::barAddsOmarchyAndBase16Themes()
+{
+    QTemporaryDir home;
+    const QString plugin = home.path() + "/plugin";
+    writeFile(plugin + "/data/Presets.js", R"(var THEMES = [{ id: "a", label: "A", style: {} }]
+var BASE16 = [{ id: "base16-nord", label: "Nord", style: { shape: "arrow" } }, { id: "base16-ocean", label: "Ocean", style: {} }]
+var LAYOUTS = []
+)");
+    const QString themes = home.path() + "/omarchy-themes";
+    writeFile(themes + "/tokyo-night/colors.toml", "accent = \"#7aa2f7\"\nbackground = \"#1a1b26\"\nforeground = \"#a9b1d6\"\n"
+                                                    "magenta = \"#ad8ee6\"\ncyan = \"#449dab\"\n");
+    writeFile(themes + "/white/colors.toml", "accent = \"#6e6e6e\"\nbackground = \"#ffffff\"\nforeground = \"#111111\"\n");
+    qputenv("OMACRAFT_OMARCHY_THEMES", themes.toUtf8());
+    Bar bar([plugin] { return plugin; }, {}, home.path(), false);
+    qputenv("OMACRAFT_OMARCHY_THEMES", "/nonexistent");
+
+    QVariantMap tokyo, white;
+    QStringList base16;
+    for (const auto &value : bar.themes()) {
+        const auto theme = value.toMap();
+        if (theme.value("id") == "omarchy-theme-tokyo-night") tokyo = theme;
+        if (theme.value("id") == "omarchy-theme-white") white = theme;
+        if (theme.value("group") == "base16") base16 << theme.value("label").toString();
+    }
+    // Only the Omarchy themes that are installed, in their own colours.
+    QCOMPARE(tokyo.value("group").toString(), QString("Omarchy"));
+    const auto style = tokyo.value("style").toMap();
+    QCOMPARE(style.value("bg").toString(), QString("#1a1b26"));
+    QCOMPARE(style.value("palette").toList().at(1).toString(), QString("#ad8ee6"));
+    // Its own background as ink, where that reads: dark on blue chevrons,
+    // white on grey pills.
+    QCOMPARE(style.value("fg").toString(), QString("#1a1b26"));
+    QCOMPARE(white.value("style").toMap().value("fg").toString(), QString("#ffffff"));
+    QVERIFY(!bar.themes().isEmpty());
+
+    // More base16, one of each name, A to Z: the plugin's Ocean stays.
+    QVERIFY(base16.contains("Tokyo Night Storm"));
+    QCOMPARE(base16.count("Ocean"), 1);
+    QStringList sorted = base16;
+    std::sort(sorted.begin(), sorted.end(), [](const QString &a, const QString &b) { return a.compare(b, Qt::CaseInsensitive) < 0; });
+    QCOMPARE(base16, sorted);
+    QVERIFY(base16.size() > 20);
+}
+
+void OmacraftTests::edgeTabFollowsThePointerRoundTheEdge()
+{
+    const QSizeF screen(1000, 800);
+    // Upright on the sides, lying down along the top and bottom.
+    QCOMPARE(EdgeTab::placement("right", 0.5, screen, QSizeF(40, 120)), QRectF(960, 340, 40, 120));
+    QCOMPARE(EdgeTab::placement("bottom", 0, screen, QSizeF(120, 40)), QRectF(0, 760, 120, 40));
+    QCOMPARE(EdgeTab::placement("left", 2, screen, QSizeF(40, 120)), QRectF(0, 680, 40, 120));
+
+    // The nearest edge takes it, the grab point staying under the pointer.
+    auto [edge, offset] = EdgeTab::nearest(QPointF(990, 400), QPointF(20, 60), screen, QSizeF(40, 120));
+    QCOMPARE(edge, QString("right"));
+    QCOMPARE(EdgeTab::placement(edge, offset, screen, QSizeF(40, 120)).y(), 340.0);
+    std::tie(edge, offset) = EdgeTab::nearest(QPointF(500, 795), QPointF(20, 60), screen, QSizeF(40, 120));
+    QCOMPARE(edge, QString("bottom"));
+    QCOMPARE(EdgeTab::placement(edge, offset, screen, QSizeF(120, 40)).x(), 480.0);
+    std::tie(edge, offset) = EdgeTab::nearest(QPointF(5, -50), QPointF(20, 0), screen, QSizeF(40, 120));
+    QCOMPARE(edge, QString("top"));
+    QCOMPARE(offset, 0.0);
+
+    // Where it's left is where it comes back.
+    QTemporaryDir home;
+    writeFile(home.path() + "/.config/omacraft/edge-tab.json", R"({"edge":"bottom","offset":0.25})");
+    EdgeTab tab(home.path());
+    QCOMPARE(tab.edge(), QString("bottom"));
+    QCOMPARE(tab.offset(), 0.25);
+    writeFile(home.path() + "/.config/omacraft/edge-tab.json", R"({"edge":"sideways","offset":9})");
+    EdgeTab bad(home.path());
+    QCOMPARE(bad.edge(), QString("bottom"));
+    QCOMPARE(bad.offset(), 1.0);
+
+    // Its look is set by name, kept in range, and comes back too.
+    bad.setOption("edge", "left");
+    bad.setOption("length", 9999);
+    bad.setOption("thickness", 2);
+    bad.setOption("opacity", 0.5);
+    bad.setOption("showIcon", false);
+    bad.setOption("title", "  Craft  ");
+    bad.setOption("nonsense", 1);
+    EdgeTab again(home.path());
+    QCOMPARE(again.edge(), QString("left"));
+    QCOMPARE(again.length(), 400);
+    QCOMPARE(again.thickness(), 24);
+    QCOMPARE(again.opacity(), 0.5);
+    QCOMPARE(again.showIcon(), false);
+    QCOMPARE(again.showTitle(), true);
+    QCOMPARE(again.title(), QString("Craft"));
+    again.reset();
+    QCOMPARE(EdgeTab(home.path()).length(), 150);
+}
+
+void OmacraftTests::introReelDrawsTheTitleItsOwnWay()
+{
+    // The boot design's colours, but the word, its font and no picture or frame.
+    const QVariantMap config = IntroReel::titleConfig(QVariantMap{
+        {"source", "image"}, {"image", "/tmp/x.png"}, {"text", "Hello"}, {"font", "TDF x"},
+        {"border", "rounded"}, {"color", "accent"}, {"colorMode", "split"}});
+    QCOMPARE(config.value("source").toString(), QString("text"));
+    QCOMPARE(config.value("text").toString(), QString("OmaCraft"));
+    QCOMPARE(config.value("font").toString(), QString("ANSI Shadow"));
+    QCOMPARE(config.value("border").toString(), QString("none"));
+    QCOMPARE(config.value("color").toString(), QString("accent"));
+    QCOMPARE(config.value("inkBg").toString(), QString("none"));
+
+    // Each effect is cached on its own, in the cache folder it was given.
+    QTemporaryDir cache;
+    Omascii omascii([] { return QString(); });
+    IntroReel reel(&omascii, cache.path());
+    QVERIFY(reel.cachePath("decrypt").startsWith(cache.path() + "/decrypt-"));
+    QVERIFY(reel.cachePath("decrypt") != reel.cachePath("matrix"));
+    QCOMPARE(reel.cachePath("decrypt"), reel.cachePath("decrypt"));
+    QVERIFY(!reel.available());
+}
+
 void OmacraftTests::barThemesSaveImportAndSanitize()
 {
     const QJsonObject clean = Bar::sanitizeStyle(QJsonObject{
@@ -619,7 +879,7 @@ int runOmacraftTests(int argc, char **argv)
 }
 
 
-// --- launcher (HyprLAUNCH) ---
+// --- launcher (Launcher) ---
 
 namespace {
 
@@ -696,6 +956,57 @@ static void writeBurnEffects(const QString &plugin)
         {"id": "doom", "name": "Doom", "pad": 0, "duration": 1300},
         {"id": "glide", "name": "Glide", "pad": 0, "duration": 450}
     ]})");
+}
+
+void OmacraftTests::wallPickerNormalizesKeys()
+{
+    QCOMPARE(WallPicker::normalizeKey("super alt w"), QString("SUPER + ALT + W"));
+    QCOMPARE(WallPicker::normalizeKey("ALT+SUPER+w"), QString("SUPER + ALT + W"));
+    QCOMPARE(WallPicker::normalizeKey("Win + Control + comma"), QString("SUPER + CTRL + comma"));
+    QCOMPARE(WallPicker::normalizeKey("SUPER + code:201"), QString("SUPER + code:201"));
+    QCOMPARE(WallPicker::normalizeKey("SUPER + ALT"), QString());
+    QCOMPARE(WallPicker::normalizeKey("SUPER + W + Q"), QString());
+    QCOMPARE(WallPicker::normalizeKey("SUPER + \"\")"), QString());
+    QCOMPARE(WallPicker::normalizeKey(""), QString());
+}
+
+void OmacraftTests::wallPickerBindsThroughHyprlandLua()
+{
+    QTemporaryDir home;
+    const QString main = home.path() + "/.config/hypr/hyprland.lua";
+    writeFile(main, "require(\"hypr.bindings\")\n");
+
+    WallPicker picker(home.path(), false);
+    QVERIFY(!picker.bound());
+    QVERIFY(!picker.bind("SUPER + ALT"));
+    QVERIFY(!picker.error().isEmpty());
+
+    QVERIFY(picker.bind("super alt w"));
+    QCOMPARE(picker.key(), QString("SUPER + ALT + W"));
+    QVERIFY(picker.error().isEmpty());
+    QFile keys(picker.keysPath());
+    QVERIFY(keys.open(QIODevice::ReadOnly));
+    const QString file = QString::fromUtf8(keys.readAll());
+    QVERIFY(file.contains("hl.unbind(\"SUPER + ALT + W\")"));
+    QVERIFY(file.contains(R"(o.bind("SUPER + ALT + W", "Wallpaper picker", "omarchy-shell shell toggle omacraft.wallpicker '{\"tab\":\"library\"}'"))"));
+    QCOMPARE(WallPicker::keyIn(file), QString("SUPER + ALT + W"));
+
+    // hyprland.lua gains the require once, with a copy kept of how it was.
+    QVERIFY(picker.bind("SUPER + CTRL + ALT + P"));
+    QFile hypr(main);
+    QVERIFY(hypr.open(QIODevice::ReadOnly));
+    QCOMPARE(QString::fromUtf8(hypr.readAll()).count("hypr.omacraft_wallpicker"), 1);
+    QCOMPARE(QDir(home.path() + "/.config/hypr").entryList({"hyprland.lua.before-wallpicker-*"}).size(), 1);
+
+    // A fresh look at the file finds the key again; removing it leaves none.
+    WallPicker again(home.path(), false);
+    QCOMPARE(again.key(), QString("SUPER + CTRL + ALT + P"));
+    again.unbind();
+    QVERIFY(!again.bound());
+    WallPicker after(home.path(), false);
+    QVERIFY(!after.bound());
+
+    QCOMPARE(WallPicker::summonArguments("library").value(3), QString(R"({"tab":"library"})"));
 }
 
 void OmacraftTests::burnReadsItsEffects()
@@ -1139,4 +1450,322 @@ void OmacraftTests::bootSplashReadsTheThemeAndWhereToGoBack() {
     QVERIFY(command.startsWith("sudo plymouth-set-default-theme 'hyprstack-boot' && "));
     QVERIFY(command.contains("limine-mkinitcpio"));
     QVERIFY(command.contains("mkinitcpio -P"));
+}
+
+
+// --- Screensaver ---
+
+namespace {
+
+QByteArray readBytes(const QString &path) {
+    QFile file(path);
+    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+}
+
+// An omascii that logs each command it's asked to run and answers the
+// read-only ones; anything else fails.
+QString fakeOmascii(const QString &dir) {
+    const QString path = dir + "/bin/omascii";
+    writeFile(path, QString(R"(#!/bin/sh
+echo "$*" >> '%1/omascii.log'
+case "$1" in
+status) echo '{"layouts":["default","fitted"],"borders":["none","single"]}' ;;
+fonts) echo '[{"name":"Standard"},{"name":"TDF dark","title":"Dark"}]' ;;
+images) echo '[]' ;;
+render) echo '{"text":"  ART\n  ART","cols":5,"rows":2}' ;;
+*) exit 3 ;;
+esac
+)").arg(dir).toUtf8());
+    QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+    return path;
+}
+
+} // namespace
+
+void OmacraftTests::screensaverNeverTouchesTheBootScreen() {
+    QTemporaryDir home;
+    const QString cli = fakeOmascii(home.path());
+    const QString bootConfig = home.path() + "/.config/omascii/config.json";
+    writeFile(bootConfig, R"({"text":"Boot","font":"TDF dark","border":"corners"})");
+    writeFile(home.path() + "/.config/omarchy/branding/screensaver.txt", "old art\n");
+    writeFile(home.path() + "/omarchy/logo.txt", "LOGO\n");
+
+    Screensaver saver([cli] { return cli; }, home.path(), home.path() + "/usr/local/bin/omarchy-screensaver",
+                      home.path() + "/omarchy");
+    saver.refresh();
+    QTRY_VERIFY(saver.loaded());
+    // Until something is picked, the screensaver keeps the art it has.
+    QCOMPARE(saver.artSource(), QString("current"));
+    QTRY_COMPARE(saver.art(), QString("old art"));
+
+    saver.setOption("text", "hello");
+    QCOMPARE(saver.artSource(), QString("design"));
+    QTRY_COMPARE(saver.art(), QString("  ART\n  ART"));
+    QVERIFY(saver.dirty());
+    saver.apply();
+    QTRY_COMPARE(readBytes(saver.artPath()), QByteArray("  ART\n  ART\n"));
+    QCOMPARE(readBytes(saver.backupPath()), QByteArray("old art\n"));
+    QVERIFY(!saver.dirty());
+
+    const auto settings = readJson(saver.settingsPath());
+    QCOMPARE(settings.value("applied").toObject().value("mode").toString(), QString("omarchy"));
+    QCOMPARE(settings.value("applied").toObject().value("design").toObject().value("text").toString(), QString("hello"));
+    QVERIFY(QFileInfo(saver.runnerDir() + "/omasavr-screensaver").isExecutable());
+    QVERIFY(QFileInfo::exists(saver.runnerDir() + "/omasavr-native.py"));
+
+    // The Omarchy logo is copied as it is, and the old text comes back.
+    saver.setArtSource("omarchy");
+    saver.apply();
+    QTRY_COMPARE(readBytes(saver.artPath()), QByteArray("LOGO\n"));
+    saver.restoreBackup();
+    QCOMPARE(readBytes(saver.artPath()), QByteArray("old art\n"));
+
+    // omascii was only ever asked to read: no set, apply, saved or restore,
+    // and every render carried the whole design, so nothing came from the boot one.
+    const QStringList calls = QString::fromUtf8(readBytes(home.path() + "/omascii.log")).split('\n', Qt::SkipEmptyParts);
+    QVERIFY(!calls.isEmpty());
+    for (const auto &call : calls) {
+        const QString command = call.section(' ', 0, 0);
+        QVERIFY2(QStringList({"status", "fonts", "images", "render"}).contains(command), qPrintable(call));
+        if (command == "render")
+            QVERIFY2(call.contains("\"border\":\"none\""), qPrintable(call));
+    }
+    QCOMPARE(readBytes(bootConfig), QByteArray(R"({"text":"Boot","font":"TDF dark","border":"corners"})"));
+    QVERIFY(!QFileInfo::exists(home.path() + "/usr/local/bin/omarchy-screensaver"));
+}
+
+void OmacraftTests::screensaverKeepsItsArtPlain() {
+    const auto settings = Screensaver::withDefaults({
+        {"art", "nonsense"}, {"mode", "loud"}, {"frameRate", 9000},
+        {"design", QVariantMap{{"text", "hi"}, {"color", "red"}, {"colorMode", "rainbow"}, {"unknown", 1}}}});
+    const auto design = settings.value("design").toMap();
+    QCOMPARE(design.value("text").toString(), QString("hi"));
+    // ttfx colours the screensaver; the art is shapes only.
+    QCOMPARE(design.value("color").toString(), QString("foreground"));
+    QCOMPARE(design.value("colorMode").toString(), QString("solid"));
+    QVERIFY(!design.contains("unknown"));
+    QCOMPARE(settings.value("art").toString(), QString("current"));
+    QCOMPARE(settings.value("mode").toString(), QString("omarchy"));
+    QCOMPARE(settings.value("frameRate").toInt(), 240);
+    // Every key omascii renders with is there.
+    for (const auto &key : {"border", "shadow", "padding", "width", "hlayout", "fill", "flip"})
+        QVERIFY2(design.contains(key), key);
+
+    QVariantMap custom = Screensaver::defaultSettings();
+    custom["mode"] = "custom";
+    custom["effects"] = QStringList();
+    QVERIFY(!Screensaver::applyProblem(custom).isEmpty());
+    custom["effects"] = QStringList{"matrix"};
+    QVERIFY(Screensaver::applyProblem(custom).isEmpty());
+
+    Screensaver saver([] { return QString(); });
+    saver.setOption("color", "red");
+    QCOMPARE(saver.design().value("color").toString(), QString("foreground"));
+    QCOMPARE(Screensaver::toHtml("a <b>\n c"), QString("a&nbsp;&lt;b&gt;<br>&nbsp;c"));
+}
+
+void OmacraftTests::screensaverKnowsWhoseHookItIs() {
+    QTemporaryDir dir;
+    const QString hook = dir.path() + "/omarchy-screensaver";
+    Screensaver saver([] { return QString(); }, dir.path(), hook, dir.path());
+    saver.refreshSystem();
+    QCOMPARE(saver.hook(), QString("none"));
+    writeFile(hook, "#!/bin/sh\nexec something-else\n");
+    saver.refreshSystem();
+    QCOMPARE(saver.hook(), QString("foreign"));
+    // Someone else's file is never replaced.
+    saver.installHook();
+    QVERIFY(!saver.busy());
+    QCOMPARE(readBytes(hook), QByteArray("#!/bin/sh\nexec something-else\n"));
+    QVERIFY(!saver.error().isEmpty());
+
+    QVERIFY(Screensaver::hookScript().contains("omacraft-omasavr-hook"));
+    QVERIFY(Screensaver::hookScript().contains("exec /usr/bin/omarchy-screensaver"));
+    QFile::remove(hook);
+    writeFile(hook, Screensaver::hookScript());
+    saver.refreshSystem();
+    QCOMPARE(saver.hook(), QString("ours"));
+    QFile::remove(hook);
+    writeFile(hook, Screensaver::hookScript() + "# older\n");
+    saver.refreshSystem();
+    QCOMPARE(saver.hook(), QString("outdated"));
+}
+
+void OmacraftTests::screensaverSetsTheIdleTimeInPlace() {
+    QTemporaryDir home;
+    const QString shell = home.path() + "/.config/omarchy/shell.json";
+    writeFile(shell, R"({"idle":{"screensaver":150,"lock":300},"bar":{"position":"top"}})");
+    const auto inode = inodeOf(shell);
+    Screensaver saver([] { return QString(); }, home.path());
+    saver.refreshSystem();
+    QCOMPARE(saver.idleSeconds(), 150);
+    QCOMPARE(saver.lockSeconds(), 300);
+    saver.setIdleSeconds(600);
+    const auto saved = readJson(shell);
+    QCOMPARE(saved.value("idle").toObject().value("screensaver").toInt(), 600);
+    QCOMPARE(saved.value("idle").toObject().value("lock").toInt(), 300);
+    QCOMPARE(saved.value("bar").toObject().value("position").toString(), QString("top"));
+    QCOMPARE(inodeOf(shell), inode);
+    saver.setIdleSeconds(1);
+    QCOMPARE(saver.idleSeconds(), 10);
+}
+
+void OmacraftTests::screensaverScriptsParse() {
+    QTemporaryDir dir;
+    const QList<QPair<QString, QStringList>> checks{
+        {":/omasavr-screensaver.sh", {"bash", "-n"}},
+        {":/omasavr-hook.sh", {"bash", "-n"}},
+        {":/omasavr-native.py", {"python3", "-m", "py_compile"}},
+    };
+    for (const auto &[resource, command] : checks) {
+        const QString path = dir.path() + "/" + QFileInfo(resource).fileName();
+        writeFile(path, readBytes(resource));
+        QProcess process;
+        process.start(command.first(), command.mid(1) + QStringList{path});
+        QVERIFY(process.waitForFinished());
+        QVERIFY2(process.exitCode() == 0, qPrintable(resource + ": " + process.readAllStandardError()));
+    }
+}
+
+// --- ROFIoma ---
+
+void OmacraftTests::rofiomaWritesEveryPopup() {
+    QTemporaryDir home;
+    Rofioma rofioma(home.path(), false);
+    rofioma.set("power.style", "grid");
+    const QString dir = rofioma.outputDir();
+    for (const char *name : {"colors.rasi", "power.rasi", "confirm.rasi", "power.sh", "symbols.rasi", "symbols.sh",
+                             "keybinds.rasi", "keybinds.sh", "emoji.tsv", "glyphs.tsv"})
+        QVERIFY2(QFileInfo::exists(dir + "/" + name), name);
+    QVERIFY(QFileInfo(dir + "/power.sh").permissions() & QFile::ExeOwner);
+    QCOMPARE(readJson(rofioma.configPath()).value("power").toObject().value("style").toString(), QString("grid"));
+
+    const QString power = QString::fromUtf8(readBytes(dir + "/power.sh"));
+    QVERIFY(power.contains("-kb-select-1 l"));
+    QVERIFY(power.contains("    2) systemctl suspend ;;"));
+    // Logout asks first; lock doesn't.
+    QVERIFY(power.contains("    1) ask 'Logout' || exit 0 ;;"));
+    QVERIFY(!power.contains("ask 'Lock'"));
+    QVERIFY(QString::fromUtf8(readBytes(dir + "/power.rasi")).contains("columns: 3;"));
+
+    // A button switched off drops out, and the rest renumber.
+    rofioma.setPowerButton(0, "enabled", false);
+    QVERIFY(QString::fromUtf8(readBytes(dir + "/power.sh")).contains("    1) systemctl suspend ;;"));
+
+    // swaync's files are only written once asked for, keeping what was there.
+    QVERIFY(!QFileInfo::exists(rofioma.swayncDir() + "/style.css"));
+    writeFile(rofioma.swayncDir() + "/style.css", "/* mine */");
+    rofioma.set("notify.position", "bottom-left");
+    rofioma.set("notify.manage", true);
+    QVERIFY(QString::fromUtf8(readBytes(rofioma.swayncDir() + "/style.css")).contains("@define-color rf-accent"));
+    const QJsonObject config = readJson(rofioma.swayncDir() + "/config.json");
+    QCOMPARE(config.value("positionX").toString(), QString("left"));
+    QCOMPARE(config.value("positionY").toString(), QString("bottom"));
+    const QStringList kept = QDir(rofioma.swayncDir()).entryList({"style.css.before-omacraft-*"});
+    QCOMPARE(kept.size(), 1);
+    QCOMPARE(readBytes(rofioma.swayncDir() + "/" + kept.first()), QByteArray("/* mine */"));
+    rofioma.set("notify.width", 420);
+    QCOMPARE(QDir(rofioma.swayncDir()).entryList({"style.css.before-omacraft-*"}).size(), 1);
+
+    // Custom colours reach rofi and swaync.
+    rofioma.set("look.colors", "custom");
+    rofioma.set("look.custom.accent", "#123456");
+    QVERIFY(QString::fromUtf8(readBytes(dir + "/colors.rasi")).contains("rf-accent: #123456;"));
+    QVERIFY(QString::fromUtf8(readBytes(rofioma.swayncDir() + "/style.css")).contains("@define-color rf-accent #123456;"));
+}
+
+void OmacraftTests::rofiomaScriptsParse() {
+    QTemporaryDir home;
+    Rofioma rofioma(home.path(), false);
+    rofioma.addMenu("Apps");
+    rofioma.set("symbols.action", "both");
+    for (const QString &name : QDir(rofioma.outputDir()).entryList({"*.sh"}, QDir::Files)) {
+        QProcess process;
+        process.start("sh", {"-n", rofioma.outputDir() + "/" + name});
+        QVERIFY(process.waitForFinished());
+        QVERIFY2(process.exitCode() == 0, qPrintable(name + ": " + process.readAllStandardError()));
+    }
+}
+
+void OmacraftTests::rofiomaKeepsMenusTidy() {
+    QTemporaryDir home;
+    Rofioma rofioma(home.path(), false);
+    const QString id = rofioma.addMenu("Screen Shots!");
+    QCOMPARE(id, QString("screen-shots"));
+    QCOMPARE(rofioma.addMenu("Screen shots"), QString("screen-shots-2"));
+    rofioma.addMenuItem(id);
+    rofioma.setMenuItem(id, 3, "command", "grim -g \"$(slurp)\"\nnotify-send done");
+    const QString script = QString::fromUtf8(readBytes(rofioma.outputDir() + "/menu-" + id + ".sh"));
+    QVERIFY(script.contains("    3) grim -g \"$(slurp)\"; notify-send done ;;"));
+    rofioma.moveMenuItem(id, 3, 0);
+    QVERIFY(QString::fromUtf8(readBytes(rofioma.outputDir() + "/menu-" + id + ".sh")).contains("    0) grim"));
+
+    QVERIFY(rofioma.bindKey("menu-" + id, "super alt m"));
+    rofioma.removeMenu(id);
+    QVERIFY(!QFileInfo::exists(rofioma.outputDir() + "/menu-" + id + ".sh"));
+    QVERIFY(!QFileInfo::exists(rofioma.outputDir() + "/menu-" + id + ".rasi"));
+    QVERIFY(QFileInfo::exists(rofioma.outputDir() + "/menu-screen-shots-2.sh"));
+    QVERIFY(!readJson(rofioma.configPath()).value("keys").toObject().contains("menu-" + id));
+    QVERIFY(!QString::fromUtf8(readBytes(rofioma.keysPath())).contains("SUPER + ALT + M"));
+}
+
+void OmacraftTests::rofiomaBindsKeysThroughHyprlandLua() {
+    QTemporaryDir home;
+    const QString main = home.path() + "/.config/hypr/hyprland.lua";
+    writeFile(main, "require(\"hypr.bindings\")\n");
+    Rofioma rofioma(home.path(), false);
+
+    QVERIFY(!rofioma.bindKey("power", "SUPER + CTRL"));
+    QVERIFY(!rofioma.error().isEmpty());
+    QVERIFY(rofioma.bindKey("power", "super ctrl ESCAPE"));
+    QVERIFY(rofioma.bindKey("emoji", "SUPER + ALT + PERIOD"));
+    // One key opens one popup.
+    QVERIFY(!rofioma.bindKey("glyphs", "super alt period"));
+
+    const QString keys = QString::fromUtf8(readBytes(rofioma.keysPath()));
+    QVERIFY(keys.contains("hl.unbind(\"SUPER + CTRL + ESCAPE\")"));
+    QVERIFY(keys.contains("o.bind(\"SUPER + CTRL + ESCAPE\", \"Power menu\", \"sh '" + rofioma.outputDir() + "/power.sh'\")"));
+    QVERIFY(keys.contains("o.bind(\"SUPER + ALT + PERIOD\", \"Emoji picker\", \"sh '" + rofioma.outputDir() + "/symbols.sh' emoji\")"));
+    QVERIFY(!keys.contains("swaync"));
+    QCOMPARE(QString::fromUtf8(readBytes(main)).count("hypr.omacraft_rofioma"), 1);
+    QCOMPARE(QDir(home.path() + "/.config/hypr").entryList({"hyprland.lua.before-rofioma-*"}).size(), 1);
+
+    QVERIFY(rofioma.bindKey("power", ""));
+    QVERIFY(!QString::fromUtf8(readBytes(rofioma.keysPath())).contains("Power menu"));
+}
+
+void OmacraftTests::rofiomaHandsNotificationsToSwaync() {
+    QTemporaryDir home;
+    writeFile(home.path() + "/.config/omarchy/shell.json",
+              R"({"plugins":[{"id":"omacraft.burn"}],"disabledPlugins":["omarchy.dock"]})");
+    Rofioma rofioma(home.path(), false);
+    QVERIFY(!rofioma.swayncOwns());
+
+    rofioma.handNotificationsToSwaync(true);
+    QVERIFY(rofioma.swayncOwns());
+    QJsonObject shell = readJson(rofioma.shellPath());
+    QCOMPARE(shell.value("disabledPlugins").toArray(), (QJsonArray{"omarchy.dock", "omarchy.notifications"}));
+    QCOMPARE(shell.value("plugins").toArray().size(), 1);
+    QVERIFY(rofioma.config().value("notify").toMap().value("manage").toBool());
+    QVERIFY(QString::fromUtf8(readBytes(rofioma.keysPath())).contains("o.launch_on_start(\"swaync\")"));
+    // Twice is still once.
+    rofioma.handNotificationsToSwaync(true);
+    QCOMPARE(readJson(rofioma.shellPath()).value("disabledPlugins").toArray().size(), 2);
+
+    rofioma.handNotificationsToSwaync(false);
+    QVERIFY(!rofioma.swayncOwns());
+    QCOMPARE(readJson(rofioma.shellPath()).value("disabledPlugins").toArray(), (QJsonArray{"omarchy.dock"}));
+    QVERIFY(!QString::fromUtf8(readBytes(rofioma.keysPath())).contains("swaync"));
+}
+
+void OmacraftTests::rofiomaFindsSymbols() {
+    QTemporaryDir home;
+    Rofioma rofioma(home.path(), false);
+    const auto power = rofioma.searchSymbols("glyphs", "power settings", "Material Design");
+    QVERIFY(!power.isEmpty());
+    QCOMPARE(power.first().toMap().value("code").toString(), QString("F0426"));
+    QCOMPARE(rofioma.searchSymbols("glyphs", "f0425").first().toMap().value("name").toString(), QString("power"));
+    QCOMPARE(rofioma.searchSymbols("emoji", "grinning face", {}, 1).size(), 1);
+    QVERIFY(rofioma.symbolSets("emoji").contains("Smileys & Emotion"));
+    QCOMPARE(Rofioma::slug("  Hello, World  "), QString("hello-world"));
 }

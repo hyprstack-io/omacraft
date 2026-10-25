@@ -212,7 +212,33 @@ QString baseProfile(const BuildConfig &config) {
     return config.profile == "replica" ? "releng" : config.profile;
 }
 
-QString validate(const BuildConfig &config, const QString &configsDir) {
+static bool isInside(const QString &path, const QString &root) {
+    return path == root || root == "/" || path.startsWith(root + "/");
+}
+
+QString overlayProblem(const Overlay &overlay, const QString &workDir) {
+    const QString source = QFileInfo(overlay.source).canonicalFilePath();
+    // The profile is put together in workDir, so a folder holding it would
+    // be copied into itself.
+    const QString work = QFileInfo(workDir).absoluteFilePath();
+    if (!workDir.isEmpty() && isInside(work, source))
+        return QString("%1 holds the folder the ISO is put together in, so it would be copied into itself. "
+                       "To take your home along, use This desktop, or include the folders inside it you need.")
+            .arg(overlay.source);
+    // These belong to the packages the ISO installs: pacman refuses to
+    // install over files already there, and they're largely root-only here.
+    for (const char *system : {"/boot", "/etc", "/usr", "/var"}) {
+        if (source == QLatin1String(system) || source == "/")
+            return QString("All of %1 can't go on the ISO: it's root-only in places, and pacman won't install over it. "
+                           "Use This desktop to copy this machine, or Configuration files for the files you changed.")
+                .arg(source);
+    }
+    if (isInside(overlay.target, "/boot"))
+        return QString("Nothing can go in /boot on the ISO: it's made from the kernel package, so files there clash with it.");
+    return {};
+}
+
+QString validate(const BuildConfig &config, const QString &configsDir, const QString &workDir) {
     const QString base = baseProfile(config);
     if (!QFileInfo(configsDir + "/" + base + "/profiledef.sh").isFile())
         return QString("archiso's %1 profile isn't in %2. Install archiso first.").arg(base, configsDir);
@@ -224,12 +250,15 @@ QString validate(const BuildConfig &config, const QString &configsDir) {
         if (!isValidPackageName(package))
             return QString("“%1” isn't a valid package name.").arg(package);
     }
-    for (const Overlay &overlay : config.overlays) {
+    // A copy of this desktop doesn't use the folders, so leftover ones don't matter.
+    for (const Overlay &overlay : config.profile == "replica" ? QList<Overlay>() : config.overlays) {
         if (!QFileInfo(overlay.source).isDir())
             return QString("The folder to include, %1, doesn't exist.").arg(overlay.source);
         if (!isValidLivePath(overlay.target))
             return QString("Where %1 goes, “%2”, needs to be a full path like /etc or /root, without “..”.")
                 .arg(QFileInfo(overlay.source).fileName(), overlay.target);
+        if (const QString problem = overlayProblem(overlay, workDir); !problem.isEmpty())
+            return problem;
     }
     if (!config.timezone.isEmpty() && !isValidTimezone(config.timezone))
         return QString("“%1” isn't a time zone. Use a name like Europe/London or America/New_York.").arg(config.timezone);
@@ -294,8 +323,14 @@ QString copyTree(const QString &from, const QString &to) {
     QProcess cp;
     cp.setProcessChannelMode(QProcess::MergedChannels);
     cp.start("cp", {"-a", "--no-preserve=ownership", "--remove-destination", "--", from + "/.", to});
-    if (!cp.waitForFinished(-1) || cp.exitStatus() != QProcess::NormalExit || cp.exitCode() != 0)
-        return QString("Couldn't copy %1: %2").arg(from, QString::fromUtf8(cp.readAll()).trimmed());
+    if (!cp.waitForFinished(-1) || cp.exitStatus() != QProcess::NormalExit || cp.exitCode() != 0) {
+        // cp names every file it couldn't read; the first says enough.
+        const QStringList lines = QString::fromUtf8(cp.readAll()).trimmed().split('\n', Qt::SkipEmptyParts);
+        QString message = QString("Couldn't copy %1: %2").arg(from, lines.value(0));
+        if (lines.size() > 1)
+            message += QString(" (and %1 more problems)").arg(lines.size() - 1);
+        return message;
+    }
     return {};
 }
 
@@ -352,8 +387,9 @@ QByteArray profiledefExtras(const BuildConfig &config, const QString &imageType)
     QByteArray lines;
     const bool erofs = imageType == "erofs";
     if (config.compression == "fast") {
+        // LZ4: the quickest to make and to boot, for a bigger image.
         lines += erofs ? "airootfs_image_tool_options=('-zlz4hc,12' -E 'ztailpacking')\n"
-                       : "airootfs_image_tool_options=('-comp' 'zstd' '-Xcompression-level' '15' '-b' '1M')\n";
+                       : "airootfs_image_tool_options=('-comp' 'lz4' '-Xhc' '-b' '1M')\n";
     } else if (config.compression == "small") {
         lines += erofs ? "airootfs_image_tool_options=('-zlzma,109' -E 'ztailpacking')\n"
                        : "airootfs_image_tool_options=('-comp' 'xz' '-Xbcj' 'x86' '-b' '1M' '-Xdict-size' '1M')\n";

@@ -12,7 +12,7 @@ Item {
     property var motion: ({})
     property var curves: ({})
     property real speed: 1
-    property bool enabled: true
+    property bool animated: true
     property string windowStyle: "preset"
     property string workspaceStyle: "preset"
     property var borderColors: []
@@ -40,7 +40,7 @@ Item {
         let v = m[name];
         if (v === undefined && fallback) v = m[fallback];
         if (v === undefined) v = m.global;
-        if (!enabled || v === false) return { on: false, ms: 0, curve: "linear", style: "" };
+        if (!animated || v === false) return { on: false, ms: 0, curve: "linear", style: "" };
         if (!v || typeof v.length !== "number") return { on: true, ms: Math.round(400 / speed), curve: "default", style: override !== "preset" ? override : "" };
         return { on: true, ms: Math.max(30, Math.round(Number(v[0]) * 100 / Math.max(0.1, speed))), curve: String(v[1] || "default"),
                  style: override && override !== "preset" ? override : String(v[2] || "") };

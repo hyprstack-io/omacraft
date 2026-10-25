@@ -116,6 +116,27 @@ private slots:
         noOverlay.overlays = {{dir.path() + "/nope", "/"}};
         QVERIFY(Profile::validate(noOverlay, dir.path() + "/configs").contains("doesn't exist"));
 
+        // A folder holding the work folder would be copied into itself.
+        QDir().mkpath(dir.path() + "/home/.cache/hyprbuildz");
+        BuildConfig wholeHome = config;
+        wholeHome.overlays = {{dir.path() + "/home", "/home/me"}};
+        QVERIFY(Profile::validate(wholeHome, dir.path() + "/configs", dir.path() + "/home/.cache/hyprbuildz")
+                    .contains("into itself"));
+        QCOMPARE(Profile::validate(wholeHome, dir.path() + "/configs", dir.path() + "/elsewhere"), QString());
+
+        BuildConfig systemEtc = config;
+        systemEtc.overlays = {{"/etc", "/etc"}};
+        QVERIFY(Profile::validate(systemEtc, dir.path() + "/configs").contains("pacman won't install over it"));
+
+        BuildConfig intoBoot = config;
+        intoBoot.overlays = {{dir.path() + "/out", "/boot"}};
+        QVERIFY(Profile::validate(intoBoot, dir.path() + "/configs").contains("/boot"));
+
+        // This desktop ignores the folders, so they can't stop its build.
+        BuildConfig replica = systemEtc;
+        replica.profile = "replica";
+        QCOMPARE(Profile::validate(replica, dir.path() + "/configs"), QString());
+
         BuildConfig noOutput = config;
         noOutput.outputDir = dir.path() + "/nope";
         QVERIFY(!Profile::validate(noOutput, dir.path() + "/configs").isEmpty());
@@ -592,7 +613,7 @@ private slots:
                  QString("/usr/lib/systemd/system/systemd-networkd.socket"));
 
         QCOMPARE(sourceProfiledef(profile, "echo $kernel_params_x86_64"), QString("copytoram nomodeset"));
-        QCOMPARE(sourceProfiledef(profile, "echo ${airootfs_image_tool_options[1]}"), QString("zstd"));
+        QCOMPARE(sourceProfiledef(profile, "echo ${airootfs_image_tool_options[1]}"), QString("lz4"));
     }
 
     void validatesNewOptions()

@@ -9,15 +9,15 @@
 #include <QVariantList>
 #include <functional>
 
-// omabar16, the bar, edited entirely from OMAcraft. The bar draws whatever
-// shell.json's "bar" section says and follows that file live, so OMAcraft
+// omabar16, the bar, edited entirely from OmaCraft. The bar draws whatever
+// shell.json's "bar" section says and follows that file live, so OmaCraft
 // keeps its own copy of the section, changes it, and writes it back in place
 // (as the folder trays do), with an undo history of its own. Nothing goes
 // through a customizer overlay.
 //
 // The preset themes and layouts are read from Studio's bar data when it is
 // there (it adds the HANCORE set), otherwise from omabar16's own
-// data/Presets.js, so OMAcraft lists exactly what the plugins ship.
+// data/Presets.js, so OmaCraft lists exactly what the plugins ship.
 class Bar : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool available READ available NOTIFY presetsChanged)
@@ -28,6 +28,9 @@ class Bar : public QObject {
     Q_PROPERTY(QString centerAnchor READ centerAnchor NOTIFY changed)
     Q_PROPERTY(QVariantMap style READ style NOTIFY changed)
     Q_PROPERTY(QVariantMap layout READ layout NOTIFY changed)
+    // Widgets taken off the bar but kept, plugin and settings and all:
+    // [{lane, index, entry, anchor}]. omabar16 doesn't read it.
+    Q_PROPERTY(QVariantList hidden READ hidden NOTIFY changed)
     // position, transparent, centerAnchor, layout and style together, for previews.
     Q_PROPERTY(QVariantMap config READ config NOTIFY changed)
     Q_PROPERTY(QString currentTheme READ currentTheme NOTIFY changed)
@@ -58,6 +61,7 @@ public:
     QString centerAnchor() const { return m_cfg.value("centerAnchor").toString(); }
     QVariantMap style() const { return m_cfg.value("style").toObject().toVariantMap(); }
     QVariantMap layout() const { return m_cfg.value("layout").toObject().toVariantMap(); }
+    QVariantList hidden() const { return m_cfg.value("hidden").toArray().toVariantList(); }
     QVariantMap config() const { return m_cfg.toVariantMap(); }
     QString currentTheme() const;
     QString currentLayout() const;
@@ -124,13 +128,17 @@ public:
     Q_INVOKABLE void addWidget(const QString &id, const QString &lane, int index = -1);
     Q_INVOKABLE void removeWidget(const QString &lane, int index);
     Q_INVOKABLE void moveWidget(const QString &fromLane, int fromIndex, const QString &toLane, int toIndex);
+    // Off the bar but not removed: its plugin stays on and its settings stay.
+    Q_INVOKABLE void hideWidget(const QString &lane, int index);
+    // Back where it was, or into lane at index (-1: the lane's end).
+    Q_INVOKABLE void showWidget(int hiddenIndex, const QString &lane = {}, int index = -1);
     // A setting on one layout entry (icon, color, format…); "" removes it.
     Q_INVOKABLE void setEntry(const QString &lane, int index, const QString &key, const QVariant &value);
 
     // --- history ---
     Q_INVOKABLE void undo();
     Q_INVOKABLE void redo();
-    // Back to the bar as it was when OMAcraft opened.
+    // Back to the bar as it was when OmaCraft opened.
     Q_INVOKABLE void revert();
 
 signals:
@@ -162,7 +170,7 @@ private:
     bool m_runCommands;
     QString m_presetsStamp;
     QJsonObject m_shell;
-    // The bar section OMAcraft edits: position, transparent, centerAnchor, layout, style.
+    // The bar section OmaCraft edits: position, transparent, centerAnchor, layout, style, hidden.
     QJsonObject m_cfg;
     QJsonObject m_snapshot;
     QList<QJsonObject> m_undo;

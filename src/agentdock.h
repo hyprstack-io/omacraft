@@ -7,10 +7,10 @@
 #include <QVariantList>
 #include <functional>
 
-// The HyprDOCKN's settings, dock items and agents. The dock keeps its state
+// The Side Dock's settings, dock items and agents. The dock keeps its state
 // in ~/.local/state/skll-agentdock/state.json and only reads it when it
 // loads, so while the dock runs every change goes through its `set` IPC call;
-// otherwise OMAcraft writes the file itself. Agents live in
+// otherwise OmaCraft writes the file itself. Agents live in
 // ~/.config/omarchy/agentdock.json, which the dock watches.
 class AgentDock : public QObject {
     Q_OBJECT

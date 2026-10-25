@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QElapsedTimer>
+#include <QFile>
 #include <QList>
 #include <QObject>
 #include <QProcess>
@@ -123,6 +124,8 @@ public:
     QVariantList homeItems() const;
     QString homeSize() const;
     qint64 includedHomeBytes() const;
+    // The biggest home folders the build includes, as "Downloads (5.9 GB), …".
+    QString biggestHomeItems(int count) const;
 
     QString state() const { return m_state; }
     bool busy() const { return m_state != "idle"; }
@@ -233,6 +236,8 @@ private:
     void setError(const QString &message);
     void setNotice(const QString &message);
     void appendOutput(const QByteArray &bytes);
+    void clearLog();
+    static QString logPath();
     void startPrivileged(const QString &state, const QString &scriptResource, const QStringList &arguments);
     void checkPackagesThenBuild();
     void runBuild();
@@ -263,6 +268,7 @@ private:
 
     QProcess m_process;
     QByteArray m_pendingOutput;
+    QFile m_log;
     QString m_run;
     QString m_finalIso;
     QElapsedTimer m_clock;

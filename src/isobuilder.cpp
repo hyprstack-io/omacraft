@@ -11,6 +11,7 @@
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QStorageInfo>
+#include <algorithm>
 #include <unistd.h>
 
 #include "filepicker.h"
@@ -800,13 +801,32 @@ void IsoBuilder::appendOutput(const QByteArray &bytes) {
                 continue;
         }
         emit logAppended(line);
+        if (m_log.isOpen()) {
+            m_log.write(line.toUtf8() + "\n");
+            m_log.flush();
+        }
     }
     m_pendingOutput.remove(0, start);
 }
 
+// The window's log goes when the next job starts or the app closes, so a copy
+// stays on disk for after a failure.
+QString IsoBuilder::logPath() {
+    return QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + "/hyprbuildz/last.log";
+}
+
+void IsoBuilder::clearLog() {
+    emit logCleared();
+    m_log.close();
+    QDir().mkpath(QFileInfo(logPath()).absolutePath());
+    m_log.setFileName(logPath());
+    if (!m_log.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+        qWarning("hyprbuildz: couldn't save the log to %s", qPrintable(logPath()));
+}
+
 void IsoBuilder::startPrivileged(const QString &state, const QString &scriptResource, const QStringList &arguments) {
     m_pendingOutput.clear();
-    emit logCleared();
+    clearLog();
     setState(state);
     QStringList pkexecArguments;
     if (scriptResource.isEmpty())
@@ -849,7 +869,8 @@ void IsoBuilder::build() {
         setError(m_missing);
         return;
     }
-    if (const QString problem = Profile::validate(m_config, m_configsDir); !problem.isEmpty()) {
+    if (const QString problem = Profile::validate(m_config, m_configsDir, QFileInfo(runDirectory()).absolutePath());
+        !problem.isEmpty()) {
         setError(problem);
         return;
     }
@@ -864,7 +885,7 @@ void IsoBuilder::build() {
             return;
         }
         if (sizing()) {
-            emit logCleared();
+            clearLog();
             setState("measuring");
             setStage("Measuring your home folder", 0);
             return;
@@ -887,31 +908,67 @@ void IsoBuilder::checkPackagesThenBuild() {
     // Catch typos and AUR names now, not twenty minutes into pacstrap.
     m_pendingOutput.clear();
     m_process.setProperty("output", QByteArray());
-    emit logCleared();
+    clearLog();
     setState("checking");
     setStage("Checking packages", 0);
     m_process.start("pacman", QStringList{"-Sp", "--print-format", "%n", "--"} + packages);
 }
 
+QString IsoBuilder::biggestHomeItems(int count) const {
+    QList<QPair<qint64, QString>> sizes;
+    for (const Replica::HomeItem &item : m_homeItems) {
+        const qint64 bytes = m_homeBytes.value(item.path, 0);
+        if (Replica::included(item, m_config.homeChoices) && bytes >= gigabyte / 2)
+            sizes.append({bytes, item.path});
+    }
+    std::sort(sizes.begin(), sizes.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
+    QStringList out;
+    for (int i = 0; i < qMin(count, int(sizes.size())); ++i)
+        out << QString("%1 (%2)").arg(sizes[i].second, Drives::formatSize(sizes[i].first));
+    return out.join(", ");
+}
+
 void IsoBuilder::runBuild() {
     const bool replica = m_config.profile == "replica";
-    // A copy of a desktop installs every package the machine has and carries
-    // the home folder through three copies: archive, airootfs, image.
+    // A copy of a desktop installs every package the machine has (about 15 GB
+    // here, plus what pacman downloads) and carries the home folder along.
+    // The home is staged compressed and the staged copy freed once mkarchiso
+    // has taken it, so the peak is at the end: the unpacked live system, its
+    // compressed image, and the ISO holding that image, side by side.
     const qint64 home = replica ? includedHomeBytes() : 0;
-    const qint64 workNeeded = replica ? 30 * gigabyte + 3 * home : workSpaceNeeded;
-    const qint64 isoNeeded = replica ? 8 * gigabyte + home : isoSpaceNeeded;
+    const double ratio = m_config.compression == "fast" ? 0.75 : 0.6;
+    const qint64 system = replica ? 20 * gigabyte + home : 0;
+    const qint64 image = qint64(system * ratio);
+    const qint64 workNeeded = replica ? system + 2 * image + 5 * gigabyte : workSpaceNeeded;
+    const qint64 isoNeeded = replica ? image + 2 * gigabyte : isoSpaceNeeded;
+    const QString trim = replica && !biggestHomeItems(1).isEmpty()
+                             ? QString(" Leaving out the biggest folders you included saves the most: %1.").arg(biggestHomeItems(4))
+                             : QString();
     const QStorageInfo work("/var/tmp");
     if (work.bytesAvailable() < workNeeded) {
         setState("idle");
-        setError(QString("Building needs about %1 free in /var/tmp, and there's %2.")
-                     .arg(Drives::formatSize(workNeeded), Drives::formatSize(work.bytesAvailable())));
+        setError(QString("Building needs about %1 free in /var/tmp, and there's %2.%3")
+                     .arg(Drives::formatSize(workNeeded), Drives::formatSize(work.bytesAvailable()), trim));
         return;
     }
     const QStorageInfo output(m_config.outputDir);
     if (output.bytesAvailable() < isoNeeded) {
         setState("idle");
-        setError(QString("%1 has %2 free; the ISO needs about %3.")
-                     .arg(m_config.outputDir, Drives::formatSize(output.bytesAvailable()), Drives::formatSize(isoNeeded)));
+        setError(QString("%1 has %2 free; the ISO needs about %3.%4")
+                     .arg(m_config.outputDir, Drives::formatSize(output.bytesAvailable()), Drives::formatSize(isoNeeded), trim));
+        return;
+    }
+    // copytoram reads the whole image into memory at boot, into a space
+    // archiso makes 75% of it; an image bigger than that stops the live
+    // system before it starts. Judged on a typical image (half the size)
+    // rather than the cautious one above, so a build that fits isn't refused.
+    const qint64 memory = qint64(sysconf(_SC_PHYS_PAGES)) * sysconf(_SC_PAGE_SIZE);
+    const qint64 typicalImage = system / 2;
+    if (replica && m_config.kernelParams.split(' ').contains("copytoram") && memory > 0 && typicalImage > memory * 3 / 4) {
+        setState("idle");
+        setError(QString("The ISO's live system would be about %1, and copytoram loads it all into memory at boot; "
+                         "this machine has %2. Take copytoram out of the boot options, or include less.%3")
+                     .arg(Drives::formatSize(typicalImage), Drives::formatSize(memory), trim));
         return;
     }
 
@@ -952,7 +1009,7 @@ void IsoBuilder::finishBuild(int exitCode) {
         setStage({}, 0);
         setError(message);
     } else {
-        setError(QString("The build failed (exit status %1). The log shows where.").arg(exitCode));
+        setError(QString("The build failed (exit status %1). The log shows where; a copy is in %2.").arg(exitCode).arg(logPath()));
     }
 }
 

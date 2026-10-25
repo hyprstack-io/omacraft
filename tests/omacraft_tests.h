@@ -8,14 +8,18 @@ class OmacraftTests : public QObject {
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void themeFallsBack();
     void themeReadsAccent();
     void themeFollowsLightAndDark();
     void savesAtomically();
     void expandsHomeAndQuotes();
     void readsBarSections();
+    void switchesPluginsWithoutBarIcons();
+    void switchingAPluginEditsShellJsonInPlace();
     void installsByLinkingTheSource();
     void flagsAFolderThatReusesAPluginId();
+    void installsFromThePackageWithoutTheProjects();
     void removingALinkKeepsTheCode();
     void removingAFolderSetsItAsideAndInstallBringsItBack();
     void installReplacesABrokenLinkButNotAFolder();
@@ -34,6 +38,10 @@ private slots:
     void barReadsStudioPresetsWithImports();
     void barEditsShellJsonInPlaceWithUndo();
     void barLayoutsKeepWidgetSettings();
+    void barHidesWidgetsAndBringsThemBack();
+    void barAddsOmarchyAndBase16Themes();
+    void edgeTabFollowsThePointerRoundTheEdge();
+    void introReelDrawsTheTitleItsOwnWay();
     void barThemesSaveImportAndSanitize();
     void omasciiChecksBeforeApplying();
     void omasciiReadsEveryFontList();
@@ -43,6 +51,8 @@ private slots:
     void launcherReadsItsStyles();
     void launcherWritesInPlaceAndKeepsOtherKeys();
     void burnReadsItsEffects();
+    void wallPickerNormalizesKeys();
+    void wallPickerBindsThroughHyprlandLua();
     void burnWritesInPlaceAndKeepsOtherKeys();
     void foldersReadTheirBarEntries();
     void foldersScanInstalledApps();
@@ -56,4 +66,15 @@ private slots:
     void asciiViewPaintsBackgroundSpans();
     void omasciiPresetIsOneUndoStep();
     void bootSplashReadsTheThemeAndWhereToGoBack();
+    void screensaverNeverTouchesTheBootScreen();
+    void screensaverKeepsItsArtPlain();
+    void screensaverKnowsWhoseHookItIs();
+    void screensaverSetsTheIdleTimeInPlace();
+    void screensaverScriptsParse();
+    void rofiomaWritesEveryPopup();
+    void rofiomaScriptsParse();
+    void rofiomaKeepsMenusTidy();
+    void rofiomaBindsKeysThroughHyprlandLua();
+    void rofiomaHandsNotificationsToSwaync();
+    void rofiomaFindsSymbols();
 };

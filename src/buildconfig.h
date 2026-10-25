@@ -81,8 +81,13 @@ QStringList parseServices(const QString &text);
 QString wantedBy(const QString &unit, const QString &unitDir = "/usr/lib/systemd/system");
 
 // What's wrong with the config, in a sentence for the window; empty when it
-// can be built. configsDir is archiso's /usr/share/archiso/configs.
-QString validate(const BuildConfig &config, const QString &configsDir);
+// can be built. configsDir is archiso's /usr/share/archiso/configs, workDir
+// where the profile is put together (no folder to include may hold it).
+QString validate(const BuildConfig &config, const QString &configsDir, const QString &workDir = {});
+
+// Why a folder to include can never build: it holds workDir, is a system
+// folder the ISO's packages install, or goes into /boot. Empty when it's fine.
+QString overlayProblem(const Overlay &overlay, const QString &workDir);
 
 // The archiso profile a build starts from: "This desktop" builds on releng.
 QString baseProfile(const BuildConfig &config);

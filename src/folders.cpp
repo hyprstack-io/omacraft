@@ -125,8 +125,11 @@ QVariantList Folders::scanApplications(const QStringList &dirs) {
 
 QVariantList Folders::apps() {
     // Scanning every .desktop file takes a moment; only when first asked.
-    if (!m_appsLoaded)
-        reloadApps();
+    // No appsChanged here: the binding asking is the one that would rerun.
+    if (!m_appsLoaded) {
+        m_apps = scanApplications(m_applicationDirs);
+        m_appsLoaded = true;
+    }
     return m_apps;
 }
 

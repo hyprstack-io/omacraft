@@ -53,6 +53,14 @@ ColumnLayout {
             Label { Layout.fillWidth: true; text: insp.entry.id; color: theme.textFaint; font.pixelSize: 10; font.family: "monospace"; elide: Text.ElideMiddle }
         }
         ToolButton {
+            text: "\u{f0209}"
+            font.pixelSize: 15
+            focusPolicy: Qt.NoFocus
+            onClicked: insp.page.hide(insp.lane, insp.index)
+            ToolTip.visible: hovered
+            ToolTip.text: "Hide from the bar (H). Its plugin stays on; show it again from Hidden."
+        }
+        ToolButton {
             text: "\u{f0a7a}"
             font.pixelSize: 15
             focusPolicy: Qt.NoFocus

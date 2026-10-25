@@ -14,18 +14,18 @@ class Omascii;
 class Wallpaper;
 class Lights;
 
-// The wallpaper's colours reaching every part OMAcraft sets. hyprskin builds
+// The wallpaper's colours reaching every part OmaCraft sets. hyprskin builds
 // the Omarchy theme from the wallpaper, which recolours whatever reads the
 // theme; the parts below keep colours of their own unless told to follow it:
 // omabar16's style (hyprskin's colorizeBar), the window border (a gradient
-// OMAcraft builds from the theme), HyprDOCKN and Window FX ("theme"),
-// HyprLAUNCH (its "omarchy" scheme) and omascii (the theme's colour names).
+// OmaCraft builds from the theme), Side Dock and Burn My Windows ("theme"),
+// Launcher (its "omarchy" scheme) and omascii (the theme's colour names).
 // Turning a part on keeps what it had in ~/.config/omacraft/theme-sync.json,
 // so turning it off puts that back.
 //
 // A theme-set hook runs `omacraft --sync-colors` after every theme switch, so
 // the border gradient follows each new wallpaper, and an underlined bar's text
-// stays readable, while OMAcraft is closed.
+// stays readable, while OmaCraft is closed.
 class ThemeSync : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantList parts READ parts NOTIFY changed)
@@ -35,7 +35,7 @@ public:
     ThemeSync(AgentDock *dock, Animations *animations, Burn *burn, Launcher *launcher, Omascii *omascii,
               Wallpaper *wallpaper, const QString &home = {}, bool runCommands = true, QObject *parent = nullptr);
 
-    // The border colour run OMAcraft writes and keeps up to date.
+    // The border colour run OmaCraft writes and keeps up to date.
     static constexpr const char *borderRun = "wallpaper";
 
     QVariantList parts() const;

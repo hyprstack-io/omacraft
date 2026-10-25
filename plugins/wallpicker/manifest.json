@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "omacraft.wallpicker",
+  "name": "Wallpaper picker",
+  "version": "1.0.0",
+  "author": "skll",
+  "license": "MIT",
+  "description": "Omarchy's background switcher with OmaCraft's wallpapers: the theme's backgrounds, a Wallhaven search, the downloaded library and your favourites, each a tab of slanted previews. Picking one sets it through the Studio plugin's hyprskin, colours and all, without opening OmaCraft. OmaCraft's Wallpapers page sets its key.",
+  "kinds": [
+    "overlay"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "WallPicker.qml"
+  }
+}

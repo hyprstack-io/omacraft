@@ -13,7 +13,7 @@
 // The keyboard lights as the window edits them, exposed to QML as `lights`.
 // Every change is saved to the scene file straight away (with undo), and the
 // lighting service picks it up from there; this class never writes the
-// hardware itself. OMAcraft's HyprKEYZ page uses this same class.
+// hardware itself. OmaCraft's Alienflare page uses this same class.
 class Lights : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantList keys READ keys CONSTANT)
@@ -164,7 +164,7 @@ private:
     bool m_stroke = false;
     QString m_brush = "@0";
     QVariantList m_frame;
-    // Off until a view shows it, so OMAcraft renders nothing for an unopened page.
+    // Off until a view shows it, so OmaCraft renders nothing for an unopened page.
     bool m_previewing = false;
     QTimer m_tick;
     QElapsedTimer m_clock;

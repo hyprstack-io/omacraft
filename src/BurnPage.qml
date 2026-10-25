@@ -60,7 +60,7 @@ Item {
         spacing: 14
 
         PageHeader {
-            title: "Window effects"
+            title: "Burn My Windows"
             subtitle: "Burn My Windows for Omarchy, saved to ~/.config/omarchy/burn-my-windows.json"
             glyph: "\u{f0238}"
             Switch {
@@ -228,7 +228,7 @@ Item {
                                     ToolTip.visible: hover.hovered
                                     ToolTip.delay: 900
                                     ToolTip.text: tile.modelData.description + (tile.modelData.source === "omacraft"
-                                                  ? " (OMAcraft's own)" : " (from Burn My Windows)")
+                                                  ? " (OmaCraft's own)" : " (from Burn My Windows)")
                                 }
                             }
                         }
@@ -370,7 +370,7 @@ Item {
                     wrapMode: Text.WordWrap
                     color: theme.textFaint
                     font.pixelSize: 11
-                    text: "27 effects after Burn My Windows by Simon Schneegans, plus ASCII and Warp Speed of OMAcraft's own. "
+                    text: "27 effects after Burn My Windows by Simon Schneegans, plus ASCII and Warp Speed of OmaCraft's own. "
                           + "From a terminal: omarchy-burn list | preview EFFECT | close effects ID... | open speed N."
                 }
             }

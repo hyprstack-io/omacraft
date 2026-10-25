@@ -112,14 +112,20 @@ collect_replica() {
 
   echo "hyprbuildz: Collecting your home"
   sed 's/^/    \//' "$data/home-paths"
-  tar -cpf "$stage/home.tar" -C / --exclude-from="$data/home-excludes" --ignore-failed-read \
-    --warning=no-file-changed --warning=no-file-ignored --warning=no-file-removed -T "$data/home-paths"
+  # Compressed (quickly) on the way: the archive is copied once more by
+  # mkarchiso, and a home is tens of gigabytes.
+  {
+    tar -cpf - -C / --exclude-from="$data/home-excludes" --ignore-failed-read \
+      --warning=no-file-changed --warning=no-file-ignored --warning=no-file-removed -T "$data/home-paths"
+    echo $? > "$root/home-tar-status"
+  } | zstd -q -T0 -3 -o "$stage/home.tar.zst"
+  packed=$?
   # 1 means a file changed while it was read, which a running desktop does.
-  [ $? -le 1 ] || {
+  [ "$(cat "$root/home-tar-status")" -le 1 ] && [ "$packed" = 0 ] || {
     echo "hyprbuildz: Couldn't collect your home."
     return 1
   }
-  echo "hyprbuildz: $(du -sh "$stage/home.tar" | cut -f1) from your home"
+  echo "hyprbuildz: $(du -sh "$stage/home.tar.zst" | cut -f1) from your home, compressed"
 
   if [ "$(cat "$data/secrets")" = 1 ]; then
     user=$(sed -n "s/^user='\(.*\)'$/\1/p" "$data/user.env")
@@ -172,7 +178,25 @@ if [ -d "$root/profile/hyprbuildz" ]; then
   step collect_replica || exit 1
 fi
 
-step mkarchiso -v -w "$root/work" -o "$root/out" "$root/profile" || exit $?
+# Once mkarchiso has copied the profile into its work folder, the staged home
+# in the profile is a second copy taking up space; it isn't read again.
+drop_stage() {
+  while [ ! -e "$root/work/base._make_custom_airootfs" ]; do
+    sleep 2
+  done
+  rm -rf --one-file-system -- "$root/profile/airootfs/root/hyprbuildz"
+  echo "hyprbuildz: Freed the staged copy of your home."
+}
+dropper=
+if [ -d "$root/profile/airootfs/root/hyprbuildz" ]; then
+  drop_stage &
+  dropper=$!
+fi
+
+step mkarchiso -v -w "$root/work" -o "$root/out" "$root/profile"
+status=$?
+[ -n "$dropper" ] && kill "$dropper" 2>/dev/null
+[ "$status" = 0 ] || exit "$status"
 
 remove "$root/work" || exit 1
 iso=$(find "$root/out" -maxdepth 1 -name '*.iso' -print -quit)

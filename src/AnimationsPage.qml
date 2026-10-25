@@ -161,7 +161,7 @@ Item {
         spacing: 12
 
         PageHeader {
-            title: "Animations"
+            title: "Window Transitions"
             subtitle: "Hyprland's animations, played on the stage and written to ~/.config/hypr/animation_preset.lua"
             glyph: "\u{f0d6d}"
             BusyIndicator { running: animations.busy; visible: animations.busy; implicitWidth: 28; implicitHeight: 28 }
@@ -202,7 +202,7 @@ Item {
                 anchors.margins: 14
                 anchors.rightMargin: speedBox.width + 28
                 motion: page.stagePreset.animations || ({})
-                enabled: page.stagePreset.enabled !== false && page.stagePreset.id !== "off"
+                animated: page.stagePreset.enabled !== false && page.stagePreset.id !== "off"
                 curves: animations.curves
                 speed: animations.speed
                 windowStyle: page.previewWindowStyle !== "" ? page.previewWindowStyle : animations.windowStyle
@@ -337,7 +337,7 @@ Item {
                                 compact: true
                                 workspaces: false
                                 motion: cell.m
-                                enabled: cell.modelData.enabled !== false && cell.modelData.id !== "off"
+                                animated: cell.modelData.enabled !== false && cell.modelData.id !== "off"
                                 curves: animations.curves
                                 speed: animations.speed
                                 borderColors: page.borderColors(animations.border)

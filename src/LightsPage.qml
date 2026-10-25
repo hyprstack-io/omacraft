@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
 
-// HyprKEYZ: AlienFlare inside OMAcraft. The same view and scene file as
+// Alienflare: AlienFlare inside OmaCraft. The same view and scene file as
 // the AlienFlare app (~/.config/alienflare/state.json), so a change in one
 // shows in the other, and the alienflare service puts it on the keys.
 Item {
@@ -25,7 +25,7 @@ Item {
         spacing: 14
 
         PageHeader {
-            title: "HyprKEYZ"
+            title: "Alienflare"
             subtitle: "Per-key lighting for the Alienware x15, shared with AlienFlare in ~/.config/alienflare/state.json"
             glyph: "\u{f030c}"
             Button { text: "Undo"; flat: true; enabled: lights.canUndo; focusPolicy: Qt.NoFocus; onClicked: lights.undo() }

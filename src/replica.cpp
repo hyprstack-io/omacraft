@@ -252,7 +252,7 @@ QString prepare(const QString &relengDir, const QString &dest, const BuildConfig
     // releng's boot loaders and profiledef; its live-installer extras
     // (networkd, iwd, mirror picking, the speech and memtest entries) don't
     // belong in a copy of a desktop.
-    for (const QString &part : {"profiledef.sh", "syslinux", "efiboot", "grub", "bootstrap_packages"}) {
+    for (const QString part : {"profiledef.sh", "syslinux", "efiboot", "grub", "bootstrap_packages"}) {
         if (QFileInfo::exists(relengDir + "/" + part) && !copyPath(relengDir + "/" + part, dest + "/" + part))
             return QString("Couldn't copy %1 from archiso's profile.").arg(part);
     }
@@ -262,7 +262,7 @@ QString prepare(const QString &relengDir, const QString &dest, const BuildConfig
     }
 
     const QString airootfs = dest + "/airootfs";
-    for (const QString &keep : {"etc/mkinitcpio.conf.d/archiso.conf", "etc/systemd/journald.conf.d/volatile-storage.conf",
+    for (const QString keep : {"etc/mkinitcpio.conf.d/archiso.conf", "etc/systemd/journald.conf.d/volatile-storage.conf",
                                 "etc/systemd/system/pacman-init.service", "etc/systemd/system/etc-pacman.d-gnupg.mount",
                                 "etc/systemd/system/multi-user.target.wants/pacman-init.service"}) {
         const QString from = relengDir + "/airootfs/" + keep;
@@ -275,7 +275,7 @@ QString prepare(const QString &relengDir, const QString &dest, const BuildConfig
         return "Couldn't write the replica's setup script.";
 
     // Boot entries point at this system's kernel.
-    for (const QString &folder : {"efiboot", "syslinux", "grub"}) {
+    for (const QString folder : {"efiboot", "syslinux", "grub"}) {
         QDirIterator it(dest + "/" + folder, {"*.conf", "*.cfg"}, QDir::Files, QDirIterator::Subdirectories);
         while (it.hasNext()) {
             const QString path = it.next();
@@ -382,7 +382,7 @@ fi
 install -d -o "$uid" -g "$gid" -m 0700 "/home/$user"
 
 echo "hyprbuildz: Unpacking $user's home"
-tar -xpf "$stage/home.tar" -C /
+tar --zstd -xpf "$stage/home.tar.zst" -C /
 # Folders tar made on the way to a chosen one (.config, .local/share) are
 # root's; everything in the home belongs to the user.
 chown -hR "$uid:$gid" "/home/$user"

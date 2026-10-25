@@ -8,7 +8,7 @@
 #include "scene.h"
 
 // The scene on disk, ~/.config/alienflare/state.json, shared by the window,
-// OMAcraft's HyprKEYZ page and the lighting service. Writes are atomic
+// OmaCraft's Alienflare page and the lighting service. Writes are atomic
 // (beside the file, then renamed), so a reader never sees half a file, and
 // the file is watched so a change from any of them reaches the others.
 class Store : public QObject {

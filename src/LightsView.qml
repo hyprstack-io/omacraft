@@ -6,7 +6,7 @@ import QtQuick.Layouts
 // Everything for the keyboard lights: the live keyboard, the designs,
 // animations and paint canvas, the colours (or the theme's), and the
 // lighting service that puts it on the keys. AlienFlare's window and
-// OMAcraft's HyprKEYZ page both show this, so they work the same way.
+// OmaCraft's Alienflare page both show this, so they work the same way.
 Item {
     id: view
 
@@ -20,7 +20,7 @@ Item {
         { keys: "Space", action: "Turn the lights on or off" },
         { keys: "D / A / P", action: "Designs, animations, or paint key by key" },
         { keys: "← / →", action: "Previous / next design or animation" },
-        { keys: "T", action: "Follow the Omarchy theme's colours" },
+        { keys: "T", action: "Light the keys in the wallpaper's colours" },
         { keys: "[ / ]", action: "Slower / faster animation" },
         { keys: "- / =", action: "Dimmer / brighter" },
         { keys: "F / C", action: "Paint: fill every key / clear the canvas" },
@@ -221,7 +221,7 @@ Item {
                         wrapMode: Text.WordWrap
                         color: theme.textDim
                         font.pixelSize: 12
-                        text: "Click or drag over keys to paint them; right-click to erase. The four colour slots follow the theme when it's chosen, so keys painted with them change with the wallpaper. A colour of its own stays put."
+                        text: "Click or drag over keys to paint them; right-click to erase. The four colour slots follow the wallpaper when theme colours are chosen, so keys painted with them change with the wallpaper. A colour of its own stays put."
                     }
                     Flow {
                         Layout.fillWidth: true
@@ -334,7 +334,7 @@ Item {
                             Layout.fillWidth: true
                             SwitchRow {
                                 label: "Theme colours"
-                                hint: "Take the colours from the Omarchy theme, so the keys change with every theme and wallpaper switch"
+                                hint: "Light the keys only in colours found in the active wallpaper, so they change with every wallpaper switch"
                                 checked: lights.followTheme
                                 onToggled: on => lights.setFollowTheme(on)
                             }
@@ -378,7 +378,7 @@ Item {
                             visible: lights.slotNames.every(n => n === "—")
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
-                            text: lights.followTheme ? "Travels round the theme's colours." : "Travels round the whole colour wheel. Choose theme colours to travel round those instead."
+                            text: lights.followTheme ? "Travels round the wallpaper's colours." : "Travels round the whole colour wheel. Choose theme colours to travel round the wallpaper's instead."
                             color: theme.textDim
                             font.pixelSize: 11
                         }
@@ -386,7 +386,7 @@ Item {
                             Layout.fillWidth: true
                             Label {
                                 Layout.fillWidth: true
-                                text: lights.followTheme ? "From the theme. Pick a colour to set your own." : "Your own colours."
+                                text: lights.followTheme ? "From the wallpaper. Pick a colour to set your own." : "Your own colours."
                                 color: theme.textDim
                                 font.pixelSize: 11
                                 wrapMode: Text.WordWrap
@@ -401,7 +401,7 @@ Item {
                         }
 
                         ColumnLayout {
-                            visible: lights.mode === "pattern" && lights.pattern === "word"
+                            visible: (lights.mode === "pattern" && lights.pattern === "word") || (lights.mode === "animation" && lights.animation === "typist")
                             Layout.fillWidth: true
                             spacing: 4
                             SectionLabel { text: "Word" }

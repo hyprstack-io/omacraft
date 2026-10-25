@@ -100,15 +100,15 @@ void HyprCraft::downloaded(const QString &path, bool ok, const QString &reason) 
         emit bundleChanged();
     }
     if (ok)
-        Proc::detach("notify-send", {"-a", "OMAcraft", "HyprFIGZ export saved", path});
+        Proc::detach("notify-send", {"-a", "OmaCraft", "Dotfile Generator export saved", path});
     else
-        Proc::detach("notify-send", {"-a", "OMAcraft", "-u", "critical", "HyprFIGZ export failed", reason});
+        Proc::detach("notify-send", {"-a", "OmaCraft", "-u", "critical", "Dotfile Generator export failed", reason});
 }
 
 void HyprCraft::installBundle() {
     if (m_bundle.isEmpty())
         return;
-    // Unpacked beside OMAcraft's other HyprCraft data, one folder per bundle;
+    // Unpacked beside OmaCraft's other HyprCraft data, one folder per bundle;
     // python's zipfile refuses paths that leave the folder.
     const QString dest = storagePath() + "/bundles/" + QFileInfo(m_bundle).completeBaseName();
     const QString script = QString(

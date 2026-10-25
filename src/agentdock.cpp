@@ -362,7 +362,7 @@ void AgentDock::refreshMonitors() {
 
 void AgentDock::toggleDock() {
     if (!running()) {
-        setError("HyprDOCKN isn't enabled. Enable it on the Plugins page.");
+        setError("Side Dock isn't enabled. Enable it on the Plugin Suite page.");
         return;
     }
     Proc::run(this, "omarchy-shell", {"agentdock", "toggle"});
@@ -370,7 +370,7 @@ void AgentDock::toggleDock() {
 
 void AgentDock::openDockSettings() {
     if (!running()) {
-        setError("HyprDOCKN isn't enabled. Enable it on the Plugins page.");
+        setError("Side Dock isn't enabled. Enable it on the Plugin Suite page.");
         return;
     }
     Proc::run(this, "omarchy-shell", {"agentdock", "expand"}, [this](const Proc::Result &) {

@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
 
-// HyprBUILDZ: hyprbuildz, the ISO builder. The stage is the build itself,
+// OmaBuilds: hyprbuildz, the ISO builder. The stage is the build itself,
 // step by step from the profile to the USB drive, with the Build button and
 // its progress; each step opens the tab that sets it. Its keys work while
 // the page is showing; the window asks before quitting mid-build.
@@ -130,7 +130,7 @@ Item {
         spacing: 12
 
         PageHeader {
-            title: "HyprBUILDZ"
+            title: "OmaBuilds"
             subtitle: "hyprbuildz: custom Arch Linux ISOs, built with archiso and written to USB"
             glyph: "\u{f0a4f}"
             Button { text: "Undo"; flat: true; focusPolicy: Qt.NoFocus; enabled: iso.canUndo; onClicked: iso.undo() }

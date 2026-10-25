@@ -6,7 +6,7 @@
 #include <QObject>
 #include <QTimer>
 
-// The Omarchy theme, as OMAcraft paints itself with it. Reads the current
+// The Omarchy theme, as OmaCraft paints itself with it. Reads the current
 // theme's colors.toml (and follows it when the theme changes) and derives
 // every surface, border and text colour the window uses from its background,
 // foreground and accent, so a light theme gives a light window and a dark

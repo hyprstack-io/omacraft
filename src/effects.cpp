@@ -416,6 +416,192 @@ QColor animationColor(const Scene &scene, const Layout &layout, int index, const
         return fromBottom < 3 ? slot[0] : fromBottom < 5 ? slot[2] : slot[1];
     }
 
+    if (id == "comet") {
+        // Three comets on slanted paths, each a new path every pass.
+        QColor out = bg;
+        for (int k = 0; k < 3; ++k) {
+            const double clock = t / (2.4 + k * 0.7) + hash(k * 7.0);
+            const double lap = std::floor(clock), f = clock - lap;
+            const double row = 0.5 + hash(lap * 3.0 + k) * 5.0;
+            const double slope = (hash(lap * 5.0 + k * 2.0) - 0.5) * 0.5;
+            const double head = -3.0 + f * (Layout::width + 12.0);
+            const double off = y - (row + slope * (x - 7.5));
+            const double along = head - x;
+            const double tail = along >= 0 ? std::exp(-along * 0.42) : std::exp(along * 4.0);
+            const double level = std::exp(-off * off * 2.2) * tail;
+            out = mix(out, along < 0.7 ? slot[1] : slot[k == 1 ? 2 : 0], level);
+        }
+        return out;
+    }
+
+    if (id == "fireflies") {
+        QColor out = bg;
+        for (int k = 0; k < 7; ++k) {
+            const double fx = 7.5 + 6.8 * std::sin(t * (0.21 + hash(k) * 0.2) + k * 2.1);
+            const double fy = 3.0 + 2.6 * std::sin(t * (0.33 + hash(k + 9.0) * 0.25) + k * 1.3);
+            const double dx = x - fx, dy = y - fy;
+            const double blink = std::pow(0.5 + 0.5 * std::sin(t * (1.1 + hash(k + 3.0)) + k), 3);
+            out = mix(out, slot[k % 3], std::exp(-(dx * dx + dy * dy) * 0.9) * blink);
+        }
+        return out;
+    }
+
+    if (id == "lava") {
+        // Metaballs: wax glows where the blobs' fields add up past one.
+        double field = 0;
+        for (int k = 0; k < 4; ++k) {
+            const double bx = 2.0 + k * 3.6 + 1.4 * std::sin(t * 0.31 + k * 2.0);
+            const double by = 3.0 + 3.4 * std::sin(t * (0.22 + 0.06 * k) + k * 1.7);
+            const double dx = x - bx, dy = (y - by) * 1.2;
+            field += 2.4 / (dx * dx + dy * dy + 0.3);
+        }
+        if (field >= 1.0)
+            return mix(slot[0], slot[1], std::min(1.0, (field - 1.0) / 2.0));
+        return mix(bg, slot[2], smooth((field - 0.45) / 0.55) * 0.7);
+    }
+
+    if (id == "plasma") {
+        const double v = std::sin(x * 0.55 + t) + std::sin(y * 0.9 + t * 0.7) + std::sin((x + y) * 0.4 + t * 0.5)
+                       + std::sin(std::hypot(x - 7.5, y - 3.0) * 0.9 - t * 1.3);
+        return loop(cycle, v / 8.0 + t * 0.05);
+    }
+
+    if (id == "raindrops") {
+        QColor out = bg;
+        for (int k = 0; k < 5; ++k) {
+            const double clock = t * 0.55 + k / 5.0;
+            const double n = std::floor(clock), f = clock - n;
+            const double cx = 1.0 + hash(n * 11.0 + k) * 13.0, cy = 0.5 + hash(n * 13.0 + k * 3.0) * 5.0;
+            const double d = std::hypot((x - cx) / 1.2, y - cy);
+            const double ring = std::exp(-std::pow(d - f * 5.5, 2) * 2.5) * (1.0 - f);
+            const double splash = f < 0.15 ? std::exp(-d * d * 2.0) * (1.0 - f / 0.15) : 0.0;
+            out = mix(out, slot[k % 3], std::min(1.0, ring + splash));
+        }
+        return out;
+    }
+
+    if (id == "pong") {
+        auto tri = [](double s) { return std::abs(2 * (s - std::floor(s + 0.5))); };
+        const double bx = 1.4 + tri(t * 0.3) * (Layout::width - 2.8);
+        const double by = 0.5 + tri(t * 0.47 + 0.2) * (Layout::height - 1.0);
+        if (std::hypot(x - bx, (y - by) * 1.2) < 0.75)
+            return slot[1];
+        // Each paddle follows the ball, the far one a little late.
+        const double left = 0.5 + tri(t * 0.47 + 0.2 - (bx / Layout::width) * 0.12) * (Layout::height - 1.0);
+        const double right = 0.5 + tri(t * 0.47 + 0.2 - (1.0 - bx / Layout::width) * 0.12) * (Layout::height - 1.0);
+        if ((x < 1.3 && std::abs(y - left) < 1.2) || (x > Layout::width - 1.3 && std::abs(y - right) < 1.2))
+            return slot[0];
+        if (std::abs(x - 7.5) < 0.6 && key.row % 2 == 0)
+            return slot[2];
+        return bg;
+    }
+
+    if (id == "helix") {
+        const double phase = x * 0.7 - t * 2.0;
+        const double a = 3.0 + 2.3 * std::sin(phase), b = 3.0 - 2.3 * std::sin(phase);
+        const double front = std::cos(phase);
+        const double la = std::exp(-std::pow(y - a, 2) * 2.5) * (front > 0 ? 1.0 : 0.45);
+        const double lb = std::exp(-std::pow(y - b, 2) * 2.5) * (front > 0 ? 0.45 : 1.0);
+        QColor out = bg;
+        // Rungs join the strands on every other column.
+        if (column(key) % 2 == 0 && y > std::min(a, b) && y < std::max(a, b))
+            out = mix(bg, slot[2], 0.6);
+        out = mix(out, slot[1], lb);
+        return mix(out, slot[0], la);
+    }
+
+    if (id == "ocean") {
+        const double surface = 2.6 + 0.9 * std::sin(x * 0.55 - t * 1.4) + 0.45 * std::sin(x * 1.3 + t * 0.9);
+        const double depth = y - surface;
+        if (depth < -0.45)
+            return bg;
+        if (depth < 0.45)
+            return mix(slot[1], slot[2], 1.0 - std::abs(depth) / 0.45);
+        return mix(slot[1], slot[0], std::min(1.0, depth / 3.0));
+    }
+
+    if (id == "typist") {
+        // The word typed four letters a second, a beat on Enter, then again.
+        const QString word = scene.word.isEmpty() ? QString("OMARCHY") : scene.word;
+        const int n = word.size();
+        const double clock = t * 4.0;
+        const double typed = std::fmod(clock, n + 6.0);
+        double level = 0;
+        bool first = false;
+        for (int i = 0; i < n && i <= typed; ++i) {
+            if (keyFor(word[i]) != key.id)
+                continue;
+            const double age = (typed - i) / 4.0;
+            const double glow = typed > n + 3.0 ? 0.35 * (n + 6.0 - typed) / 3.0 : 0.35;
+            const double l = glow + (1.0 - glow) * std::exp(-age * 4.0);
+            if (l > level) {
+                level = l;
+                first = i == 0;
+            }
+        }
+        if (key.id == "enter" && typed >= n + 0.5)
+            return mix(bg, slot[2], std::exp(-(typed - n - 0.5) * 1.5));
+        return mix(bg, first ? slot[1] : slot[0], level);
+    }
+
+    if (id == "bounce") {
+        // A block drifting like an old DVD logo, a new colour off every wall.
+        const double sx = t * 0.38, sy = t * 0.53;
+        auto tri = [](double s) { return std::abs(2 * (s - std::floor(s + 0.5))); };
+        const double bx = 1.5 + tri(sx) * (Layout::width - 3.0);
+        const double by = 1.0 + tri(sy) * (Layout::height - 2.0);
+        const int hits = int(std::floor(sx * 2 + 0.5)) + int(std::floor(sy * 2 + 0.5));
+        const double dx = std::max(0.0, std::abs(x - bx) - 1.5), dy = std::max(0.0, std::abs(y - by) - 1.0);
+        return mix(bg, slot[((hits % 3) + 3) % 3], std::exp(-(dx * dx + dy * dy) * 6.0));
+    }
+
+    if (id == "kaleidoscope") {
+        const double dx = std::abs(x - 7.5) / 1.3, dy = std::abs(y - 3.0);
+        double a = std::atan2(dy, dx) + t * 0.25;
+        const double wedge = tau / 8.0;
+        a = std::fmod(a, wedge);
+        if (a > wedge / 2)
+            a = wedge - a;
+        const double r = std::hypot(dx, dy);
+        const double v = noise2(r * std::cos(a) * 0.9 + t * 0.4, r * std::sin(a) * 2.2 - t * 0.3)
+                       + 0.35 * std::sin(r * 1.3 - t * 1.6);
+        return loop(cycle, v + t * 0.03);
+    }
+
+    if (id == "hyperspace") {
+        // Stars stream out of the middle, stretching into streaks as they speed up.
+        QColor out = bg;
+        const double px = (x - 7.5) / 1.3, py = y - 3.0;
+        for (int k = 0; k < 10; ++k) {
+            const double clock = t * (0.45 + hash(k * 5.0) * 0.35) + hash(k);
+            const double lap = std::floor(clock), f = clock - lap;
+            const double angle = hash(lap * 7.0 + k * 13.0) * tau;
+            const double r = f * f * 7.5;
+            const double length = 0.3 + f * 2.2;
+            const double along = px * std::cos(angle) + py * std::sin(angle);
+            const double across = -px * std::sin(angle) + py * std::cos(angle);
+            if (along > r || along < r - length)
+                continue;
+            const double level = std::exp(-across * across * 5.0) * (0.3 + 0.7 * (along - r + length) / length);
+            out = mix(out, along > r - 0.5 ? slot[1] : slot[0], level * std::min(1.0, f * 3.0));
+        }
+        return out;
+    }
+
+    if (id == "siren") {
+        // Left flashes twice, then right, with a white strobe between.
+        const double phase = std::fmod(t * 1.2, 2.0);
+        const bool leftTurn = phase < 1.0;
+        const double f = phase - std::floor(phase);
+        const bool flash = std::fmod(f * 4.0, 2.0) < 1.0 && f < 0.5;
+        const bool left = x < 7.5;
+        if (flash && left == leftTurn)
+            return mix(left ? slot[0] : slot[1], slot[2], std::exp(-std::abs(x - 7.5) * 0.6) * 0.3);
+        if (f > 0.55 && f < 0.62 && std::abs(x - 7.5) < 2.0)
+            return slot[2];
+        return mix(bg, left ? slot[0] : slot[1], 0.08);
+    }
+
     return bg;
 }
 
@@ -505,6 +691,32 @@ const QList<Preset> &animations() {
          c("#ff0000", "#00ff00", "#0000ff", "#000000"), {"—", "—", "—", "—"}},
         {"equalizer", "Equalizer", "Columns bounce like a music visualiser",
          c("#38ff6a", "#ff1e1e", "#ffd60a", "#000000"), {"Low", "Peak", "Mid", "Background"}},
+        {"comet", "Comets", "Comets streak across with glowing tails",
+         c("#00b4ff", "#ffffff", "#ff2bd6", "#00010a"), {"Tail", "Head", "Tail", "Space"}},
+        {"fireflies", "Fireflies", "Glowing bugs wander over the keys and blink",
+         c("#c8ff3a", "#ffe14d", "#7affc1", "#010600"), {"Firefly", "Firefly", "Firefly", "Night"}},
+        {"lava", "Lava lamp", "Blobs of wax rise, merge and sink",
+         c("#ff3d00", "#ffb300", "#ff0080", "#0a0005"), {"Wax", "Hot core", "Glow", "Lamp"}},
+        {"plasma", "Plasma", "A demoscene plasma swirling through the colours",
+         c("#ff0000", "#00ff00", "#0000ff", "#000000"), {"—", "—", "—", "—"}},
+        {"raindrops", "Raindrops", "Drops land on the keys and ripple out",
+         c("#4fc3ff", "#a0e8ff", "#6a7bff", "#00030a"), {"Ripple", "Ripple", "Ripple", "Pond"}},
+        {"pong", "Pong", "A ball rallies between two paddles",
+         c("#ffffff", "#38ff6a", "#3a3a3a", "#000000"), {"Paddles", "Ball", "Net", "Court"}},
+        {"helix", "Double helix", "Two strands of DNA twist across the board",
+         c("#00e5ff", "#ff2bd6", "#7a00ff", "#00020a"), {"Strand", "Strand", "Rungs", "Background"}},
+        {"ocean", "Ocean", "Waves roll in with foam on the crests",
+         c("#002a7a", "#00a0ff", "#e6f7ff", "#000614"), {"Deep", "Shallows", "Foam", "Sky"}},
+        {"typist", "Ghost typist", "An invisible hand types your word, then hits Enter",
+         c("#ffffff", "#00e5ff", "#ff2bd6", "#04040a"), {"Letters", "First letter", "Enter", "Everything else"}},
+        {"bounce", "Bouncing logo", "A block drifts round, changing colour at every wall",
+         c("#ff2bd6", "#00e5ff", "#ffd60a", "#000000"), {"Colour", "Colour", "Colour", "Background"}},
+        {"kaleidoscope", "Kaleidoscope", "Mirrored colour turning about the middle",
+         c("#ff0000", "#00ff00", "#0000ff", "#000000"), {"—", "—", "—", "—"}},
+        {"hyperspace", "Hyperspace", "Stars stream out of the middle at warp speed",
+         c("#5aa0ff", "#ffffff", "#000000", "#000006"), {"Streak", "Star", "—", "Space"}},
+        {"siren", "Siren", "Red and blue lights flash side to side",
+         c("#ff1010", "#1030ff", "#ffffff", "#000000"), {"Left", "Right", "Strobe", "Background"}},
     };
     return list;
 }

@@ -51,7 +51,7 @@ Wallpaper::Wallpaper(std::function<QString()> pluginDir, FilePicker *picker, boo
         });
 
     // The auto-change timer and the Studio hub change the wallpaper behind
-    // OMAcraft's back; a light poll keeps the page honest.
+    // OmaCraft's back; a light poll keeps the page honest.
     m_poll.setInterval(5000);
     connect(&m_poll, &QTimer::timeout, this, &Wallpaper::refresh);
     if (m_runCommands)
@@ -464,7 +464,7 @@ void Wallpaper::installTool(const QString &scheme) {
     for (const auto &tool : kTools) {
         if (scheme != tool.scheme)
             continue;
-        const QString command = QString("omarchy pkg %1add %2 && echo && echo 'Done. Back in OMAcraft, rebuild the colours.' && read -r -p 'Press Enter to close' _")
+        const QString command = QString("omarchy pkg %1add %2 && echo && echo 'Done. Back in OmaCraft, rebuild the colours.' && read -r -p 'Press Enter to close' _")
                                     .arg(tool.aur ? "aur " : "", tool.package);
         if (!Proc::inTerminal(command))
             setError(QString("Couldn't open a terminal. Install %1 with: omarchy pkg %2add %1").arg(tool.package, tool.aur ? "aur " : ""));

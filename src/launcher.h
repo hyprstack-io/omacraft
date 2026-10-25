@@ -7,11 +7,11 @@
 #include <QVariantList>
 #include <functional>
 
-// HyprLAUNCH, the Omarchy launcher that lives in the Studio plugin. Its layouts,
+// Launcher, the Omarchy launcher that lives in the Studio plugin. Its layouts,
 // colour schemes and transitions come from the plugin's own
-// LauncherStyles.js, so OMAcraft lists exactly what the launcher draws. The
+// LauncherStyles.js, so OmaCraft lists exactly what the launcher draws. The
 // choice lives in ~/.config/omarchy/launcher-style.json, which the launcher
-// watches: OMAcraft rewrites it in place (a rename would detach the shell's
+// watches: OmaCraft rewrites it in place (a rename would detach the shell's
 // watcher) and keeps any keys it doesn't know.
 class Launcher : public QObject {
     Q_OBJECT

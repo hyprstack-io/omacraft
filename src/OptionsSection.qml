@@ -157,8 +157,8 @@ ColumnLayout {
             Repeater {
                 model: [
                     { id: "default", name: "Profile's", detail: section.replica ? "zstd: balanced." : "As archiso ships it." },
-                    { id: "fast", name: "Faster build", detail: "A bigger ISO, minutes sooner." },
-                    { id: "small", name: "Smallest ISO", detail: "xz: slowest to build." }
+                    { id: "fast", name: "Faster build", detail: "LZ4: a bigger ISO, much sooner." },
+                    { id: "small", name: "Smallest ISO", detail: "xz (LZMA): about a tenth smaller than zstd, slowest to build." }
                 ]
                 delegate: Rectangle {
                     required property var modelData

@@ -160,7 +160,7 @@ Item {
         spacing: 14
 
         PageHeader {
-            title: "Wallpaper"
+            title: "Wallpapers"
             subtitle: "Wallhaven, your library and folders, favourites, and the colours the wallpaper gives Omarchy"
             glyph: "\u{f08b9}"
             Button {
@@ -268,6 +268,158 @@ Item {
                         }
                     }
                 }
+            }
+        }
+
+        // ---- The picker key: these wallpapers over the desktop, without this window
+        Card {
+            id: pickerCard
+            Layout.fillWidth: true
+            visible: wallpaper.available
+            implicitHeight: pickerColumn.implicitHeight + 24
+
+            readonly property var plugin: { plugins.plugins; return plugins.plugin("omacraft.wallpicker"); }
+            readonly property bool installed: plugin.installed === true
+            readonly property bool enabled: plugin.enabled === true
+
+            ColumnLayout {
+            id: pickerColumn
+            anchors.fill: parent
+            anchors.margins: 12
+            spacing: 10
+
+            RowLayout {
+                id: pickerRow
+                Layout.fillWidth: true
+                spacing: 10
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    Label {
+                        text: "Picker key"
+                        color: theme.text
+                        font.weight: Font.DemiBold
+                    }
+                    Label {
+                        Layout.fillWidth: true
+                        text: wallPicker.error !== "" ? wallPicker.error
+                            : !pickerCard.installed ? "Omarchy's background switcher with these wallpapers in it: the theme's backgrounds, Wallhaven, the library and favourites. Install it to give it a key."
+                            : !pickerCard.enabled ? "Installed. Enable it so the shell can open it."
+                            : wallPicker.bound ? wallPicker.key + " opens it over the desktop; picking a wallpaper sets it and its colours. OmaCraft stays closed."
+                            : "No key yet. " + wallPicker.defaultKey + " is free in Omarchy's defaults."
+                        color: wallPicker.error !== "" ? theme.danger : theme.textMuted
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                    }
+                }
+
+                Button {
+                    visible: !pickerCard.installed || !pickerCard.enabled
+                    text: !pickerCard.installed ? "Install" : "Enable"
+                    enabled: !plugins.busy
+                    focusPolicy: Qt.NoFocus
+                    onClicked: pickerCard.installed ? plugins.setEnabled("omacraft.wallpicker", true) : plugins.install("omacraft.wallpicker")
+                }
+                TextField {
+                    id: pickerKey
+                    visible: pickerCard.installed && pickerCard.enabled
+                    Layout.preferredWidth: 190
+                    placeholderText: wallPicker.defaultKey
+                    text: wallPicker.key
+                    onAccepted: wallPicker.bind(text.trim() === "" ? wallPicker.defaultKey : text)
+                }
+                Button {
+                    visible: pickerKey.visible
+                    text: wallPicker.bound && pickerKey.text === wallPicker.key ? "Bound" : "Set key"
+                    enabled: !(wallPicker.bound && pickerKey.text === wallPicker.key)
+                    focusPolicy: Qt.NoFocus
+                    onClicked: pickerKey.accepted()
+                }
+                Button {
+                    visible: pickerKey.visible && wallPicker.bound
+                    text: "Remove key"
+                    flat: true
+                    focusPolicy: Qt.NoFocus
+                    onClicked: wallPicker.unbind()
+                }
+                Button {
+                    visible: pickerKey.visible
+                    text: "Open picker"
+                    flat: true
+                    focusPolicy: Qt.NoFocus
+                    onClicked: wallPicker.open(page.tab === "library" || page.tab === "favorites" || page.tab === "wallhaven" ? page.tab : "")
+                }
+            }
+
+            // The card in front of the carousel: each tile plays its effect
+            // with the picker's own CardBorder.qml.
+            RowLayout {
+                Layout.fillWidth: true
+                visible: wallPicker.cardBorderUrl !== ""
+                spacing: 8
+                Label {
+                    Layout.preferredWidth: 78
+                    text: "Front card"
+                    color: theme.textSoft
+                    font.pixelSize: 12
+                }
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Repeater {
+                        model: wallPicker.cardEffects
+                        Rectangle {
+                            id: fxTile
+                            required property var modelData
+                            readonly property bool chosen: wallPicker.cardEffect === modelData.id
+                            width: 96; height: 58
+                            radius: 6
+                            color: fxHover.hovered ? theme.hover : theme.inset
+                            border.color: chosen ? theme.accent : theme.border
+                            border.width: chosen ? 2 : 1
+                            ToolTip.visible: fxHover.hovered
+                            ToolTip.delay: 400
+                            ToolTip.text: modelData.description
+
+                            Loader {
+                                id: fxPreview
+                                x: 10; y: 8
+                                width: parent.width - 20; height: 26
+                                source: wallPicker.cardBorderUrl
+                            }
+                            Binding { target: fxPreview.item; property: "effect"; value: fxTile.modelData.id; when: fxPreview.item !== null }
+                            Binding { target: fxPreview.item; property: "topLeft"; value: 5; when: fxPreview.item !== null }
+                            Binding { target: fxPreview.item; property: "bottomRight"; value: fxPreview.width - 5; when: fxPreview.item !== null }
+                            Binding { target: fxPreview.item; property: "lineWidth"; value: 2; when: fxPreview.item !== null }
+                            Binding { target: fxPreview.item; property: "color1"; value: theme.accent; when: fxPreview.item !== null }
+                            Binding { target: fxPreview.item; property: "color2"; value: page.colors.cyan || theme.textSoft; when: fxPreview.item !== null }
+                            Binding { target: fxPreview.item; property: "speed"; value: wallPicker.cardSpeed; when: fxPreview.item !== null }
+                            // Only the chosen one and the one under the pointer move.
+                            Binding { target: fxPreview.item; property: "running"; value: fxTile.chosen || fxHover.hovered; when: fxPreview.item !== null }
+
+                            Label {
+                                anchors.bottom: parent.bottom
+                                anchors.bottomMargin: 4
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: fxTile.modelData.name
+                                color: fxTile.chosen ? theme.text : theme.textMuted
+                                font.pixelSize: 10
+                            }
+                            HoverHandler { id: fxHover; cursorShape: Qt.PointingHandCursor }
+                            TapHandler { onTapped: wallPicker.setCardEffect(fxTile.modelData.id) }
+                        }
+                    }
+                }
+            }
+            SliderRow {
+                visible: wallPicker.cardBorderUrl !== "" && wallPicker.cardEffect !== "plain"
+                label: "Front card speed"
+                from: 0.25; to: 3; stepSize: 0.05
+                suffix: "×"
+                value: wallPicker.cardSpeed
+                onMoved: v => wallPicker.setCardSpeed(v)
+            }
             }
         }
 
@@ -647,7 +799,7 @@ Item {
                     }
                 }
 
-                // OMAcraft's own parts: each keeps colours of its own unless
+                // OmaCraft's own parts: each keeps colours of its own unless
                 // it follows the theme the wallpaper builds.
                 Card {
                     Layout.fillWidth: true
@@ -659,7 +811,7 @@ Item {
                         spacing: 8
                         RowLayout {
                             Layout.fillWidth: true
-                            SectionLabel { text: "OMAcraft's parts that follow too" }
+                            SectionLabel { text: "OmaCraft's parts that follow too" }
                             Item { Layout.fillWidth: true }
                             Button {
                                 text: themeSync.allFollow ? "All follow" : "Make them all follow"
@@ -684,124 +836,7 @@ Item {
                 }
 
                 // Schemes: the five ways of reading colours from an image.
-                Card {
-                    Layout.fillWidth: true
-                    implicitHeight: schemeColumn.implicitHeight + 32
-                    ColumnLayout {
-                        id: schemeColumn
-                        anchors.fill: parent
-                        anchors.margins: 16
-                        spacing: 12
-                        RowLayout {
-                            Layout.fillWidth: true
-                            SectionLabel { text: "Colour scheme" }
-                            Label {
-                                Layout.fillWidth: true
-                                text: page.colors.engineNote || ""
-                                color: theme.warning
-                                font.pixelSize: 11
-                                elide: Text.ElideRight
-                            }
-                        }
-                        GridLayout {
-                            Layout.fillWidth: true
-                            columns: Math.max(2, Math.floor(width / 230))
-                            rowSpacing: 8
-                            columnSpacing: 8
-                            Repeater {
-                                model: [
-                                    { id: "material", name: "Material", tool: "", text: "Material You roles from tonal palettes of the wallpaper's key colour. Calm, even, always readable." },
-                                    { id: "matugen", name: "Matugen", tool: "matugen", text: "matugen's tonal-spot scheme: Material 3 surfaces, containers and on-colours straight from matugen." },
-                                    { id: "wallbash", name: "Wallbash", tool: "", text: "HyDE's wallbash: the image's own main colours carry into surfaces and accents, with its dcol_* sets for templates." },
-                                    { id: "pywal", name: "Pywal", tool: "wal", text: "Terminal colours taken almost straight from the image, as pywal does; runs wal itself when it is installed." },
-                                    { id: "flavours", name: "Flavours", tool: "flavours", text: "A base16 scheme generated from the image by flavours, mapped onto every Omarchy colour." },
-                                    { id: "classic", name: "Classic", tool: "", text: "The original Studio palette: neutral surfaces, a single accent." }
-                                ]
-                                delegate: Rectangle {
-                                    id: scheme
-                                    required property var modelData
-                                    readonly property bool chosen: (page.paletteCfg.scheme || "material") === modelData.id
-                                    readonly property bool hasTool: modelData.tool !== ""
-                                    readonly property bool installed: hasTool && (page.tools[modelData.id] || "") !== ""
-                                    readonly property color tone: Qt.color(theme.accent)
-                                    Layout.fillWidth: true
-                                    implicitHeight: schemeText.implicitHeight + 24
-                                    radius: 9
-                                    color: chosen ? Qt.rgba(tone.r, tone.g, tone.b, 0.14) : shover.hovered ? theme.hover : theme.inset
-                                    border.color: chosen ? theme.accent : theme.border
-                                    border.width: chosen ? 2 : 1
-                                    ColumnLayout {
-                                        id: schemeText
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        anchors.top: parent.top
-                                        anchors.margins: 12
-                                        spacing: 4
-                                        RowLayout {
-                                            Layout.fillWidth: true
-                                            Label { text: scheme.modelData.name; color: scheme.chosen ? theme.accent : theme.text; font.weight: Font.DemiBold }
-                                            Item { Layout.fillWidth: true }
-                                            Label {
-                                                visible: scheme.hasTool
-                                                text: scheme.installed ? (page.paletteCfg.engine === "builtin" ? "built-in" : "uses " + scheme.modelData.tool) : "built-in"
-                                                color: scheme.installed ? theme.accent : theme.textDim
-                                                font.pixelSize: 10
-                                            }
-                                        }
-                                        Label {
-                                            Layout.fillWidth: true
-                                            text: scheme.modelData.text
-                                            color: theme.textMuted
-                                            font.pixelSize: 11
-                                            wrapMode: Text.WordWrap
-                                        }
-                                        Label {
-                                            visible: scheme.hasTool && !scheme.installed
-                                            text: "<a href='#'>Install " + scheme.modelData.tool + "</a> to use the real thing"
-                                            color: theme.textMuted
-                                            linkColor: theme.accent
-                                            font.pixelSize: 11
-                                            onLinkActivated: wallpaper.installTool(scheme.modelData.id)
-                                            HoverHandler { cursorShape: Qt.PointingHandCursor }
-                                        }
-                                    }
-                                    HoverHandler { id: shover; cursorShape: Qt.PointingHandCursor }
-                                    TapHandler { onTapped: wallpaper.setOption("palette.scheme", scheme.modelData.id, true) }
-                                }
-                            }
-                        }
-                        SwitchRow {
-                            label: "Use pywal, matugen and flavours themselves when installed"
-                            hint: "Off: OMAcraft's built-in versions of those schemes, even when the programs are there. Either way the colours are held to the contrast below."
-                            checked: page.paletteCfg.engine !== "builtin"
-                            onToggled: on => wallpaper.setOption("palette.engine", on ? "auto" : "builtin", true)
-                        }
-                        ChipRow {
-                            label: "Mode"
-                            value: page.paletteCfg.mode || "auto"
-                            choices: [{ value: "dark", label: "Dark" }, { value: "light", label: "Light" }, { value: "auto", label: "Auto: bright wallpapers go light" }]
-                            onPicked: v => wallpaper.setOption("palette.mode", v, true)
-                        }
-                        ChipRow {
-                            label: "Style"
-                            value: page.paletteCfg.style || "balanced"
-                            choices: [{ value: "balanced", label: "Balanced" }, { value: "vibrant", label: "Vibrant" }, { value: "pastel", label: "Pastel" }, { value: "muted", label: "Muted" }, { value: "mono", label: "Mono" }]
-                            onPicked: v => wallpaper.setOption("palette.style", v, true)
-                        }
-                        ChipRow {
-                            label: "Contrast"
-                            value: page.paletteCfg.contrast || "normal"
-                            choices: [{ value: "soft", label: "Soft 3:1" }, { value: "normal", label: "Normal 4.5:1" }, { value: "high", label: "High 7:1" }]
-                            onPicked: v => wallpaper.setOption("palette.contrast", v, true)
-                        }
-                        ChipRow {
-                            label: "Accent"
-                            value: page.paletteCfg.accent || "auto"
-                            choices: [{ value: "auto", label: "From the image" }].concat((wallpaper.targetInfo.accentRoles || []).map(r => ({ value: r, label: r })))
-                            onPicked: v => wallpaper.setOption("palette.accent", v, true)
-                        }
-                    }
-                }
+                PaletteCard { Layout.fillWidth: true }
 
                 // Which parts follow.
                 Card {

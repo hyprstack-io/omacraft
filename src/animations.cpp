@@ -85,7 +85,7 @@ void Animations::refresh() {
 void Animations::run(const QStringList &arguments, bool record) {
     const QString path = script();
     if (path.isEmpty()) {
-        setError("The Animations plugin isn't installed. Install it on the Plugins page.");
+        setError("The Window Transitions plugin isn't installed. Install it on the Plugin Suite page.");
         return;
     }
     if (record) {

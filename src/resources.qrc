@@ -2,11 +2,20 @@
     <qresource prefix="/">
         <file alias="Main.qml">Main.qml</file>
         <file alias="PluginsPage.qml">PluginsPage.qml</file>
+        <file alias="ModuleTile.qml">ModuleTile.qml</file>
+        <file alias="AsciiTitle.qml">AsciiTitle.qml</file>
+        <file alias="IntroTitle.qml">IntroTitle.qml</file>
+        <file alias="OmaCraftArt.js">OmaCraftArt.js</file>
         <file alias="AnimationsPage.qml">AnimationsPage.qml</file>
         <file alias="DockPage.qml">DockPage.qml</file>
         <file alias="BarPage.qml">BarPage.qml</file>
         <file alias="Stage.qml">Stage.qml</file>
         <file alias="Segmented.qml">Segmented.qml</file>
+        <file alias="SearchBox.qml">SearchBox.qml</file>
+        <file alias="data/bar-extras.json">data/bar-extras.json</file>
+        <file alias="data/emoji.tsv">data/emoji.tsv</file>
+        <file alias="data/glyphs.tsv">data/glyphs.tsv</file>
+        <file alias="EdgeTab.qml">EdgeTab.qml</file>
         <file alias="EdgePicker.qml">EdgePicker.qml</file>
         <file alias="AnimStage.qml">AnimStage.qml</file>
         <file alias="CurveGraph.qml">CurveGraph.qml</file>
@@ -22,11 +31,15 @@
         <file alias="BarColorRow.qml">BarColorRow.qml</file>
         <file alias="FontField.qml">FontField.qml</file>
         <file alias="LauncherPage.qml">LauncherPage.qml</file>
+        <file alias="RofiomaPage.qml">RofiomaPage.qml</file>
+        <file alias="RofiPreview.qml">RofiPreview.qml</file>
         <file alias="WallpaperPage.qml">WallpaperPage.qml</file>
+        <file alias="PaletteCard.qml">PaletteCard.qml</file>
         <file alias="WallpaperTile.qml">WallpaperTile.qml</file>
         <file alias="FoldersPanel.qml">FoldersPanel.qml</file>
         <file alias="BurnPage.qml">BurnPage.qml</file>
         <file alias="AsciiPage.qml">AsciiPage.qml</file>
+        <file alias="ScreensaverPage.qml">ScreensaverPage.qml</file>
         <file alias="HyprCraftPage.qml">HyprCraftPage.qml</file>
         <file alias="IsoPage.qml">IsoPage.qml</file>
         <file alias="AccentButton.qml">AccentButton.qml</file>
@@ -54,5 +67,8 @@
         <file alias="PresetTile.qml">PresetTile.qml</file>
         <file alias="build.sh">build.sh</file>
         <file alias="flash.sh">flash.sh</file>
+        <file alias="omasavr-screensaver.sh">omasavr-screensaver.sh</file>
+        <file alias="omasavr-native.py">omasavr-native.py</file>
+        <file alias="omasavr-hook.sh">omasavr-hook.sh</file>
     </qresource>
 </RCC>
