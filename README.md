@@ -14,28 +14,64 @@ hyprbuildz ISO builder.
 | Side Dock | A live stage with the dock drawn on its edge, magnifying under the pointer, and a peek at the agents panel. **Looks**: whole looks to hover and apply, every shape choice drawn, colours as swatches, magnify; **Items**: apps, commands, spacers and dividers, dragged into order, with the picked one's details; **Agents**: a card per agent with its tab switch, edited beside them; **Placement**: edge, monitor, gap, icon size, opacity, panel width, reserved space, start folder | `omacraft.agentdock` |
 | Main Bar | All of omabar16, edited in the app, with no customizer overlay. A live stage shows the bar on its screen edge; hovering any tile previews it there, and its widgets can be dragged along it. **Themes**: complete themes (originals, JaKooLit, HANCORE, base16, yours) in their own colours or in the active Omarchy theme's (following every theme change), or a *look* (shape, fill, spacing) and a *colour scheme* picked separately and mixed, or shuffled; save, import, export. **Widgets**: the edge, transparency, float and padding in one strip, the three lanes with widgets dragged between them, onto the stage or in from the shelf, widgets hidden from the bar without touching their plugins (and shown again where they were, or dragged back), each widget's own icon, colours, fonts, opacity, clock format or spacer width, and preset layouts drawn as the bar they make. **Style**: every style key, shapes drawn, the palette colour by colour. **Folders**: folder trays on any bar, each opening into a row of the apps (or commands) you pick, on click or hover | `omabar16`, `omacraft.folders` |
 | Launcher | The launcher's layouts (live sketches in the current colours), colour schemes, how it opens (14 transitions, each with a playing demo), its speed, and gliding between layouts and colours | `omacraft.studio` (its `LauncherStyles.js`) |
-| ROFIoma | A studio for rofi-styled popups and swaync's notifications, each drawn live as rofi or swaync will draw it. **Power**: lock, logout, suspend, hibernate, reboot and shutdown after hyprdots' wlogout style 1 (or as a grid, list or pill), with each button's icon, name, command, letter and yes/no question; **Menus**: popups of your own, as lists, grids or rows of commands; **Emoji & Glyphs**: hyprdots-style pickers (search, recent first, Enter copies or types it) and an in-app mapper of every emoji and Nerd Font glyph; **Keybinds**: a cheatsheet read live from Hyprland; **Notifications**: swaync's position, sizes, timeouts and control-centre widgets, and handing notifications from the Omarchy shell to swaync and back; **Look**: the theme's colours or your own, font, corners, border and opacity. Each popup can have a key | `~/.config/omacraft/rofioma.json`, generating `~/.config/omacraft/rofioma/` (`.rasi` and `.sh` per popup), `~/.config/swaync/`, and `~/.config/hypr/omacraft_rofioma.lua`; needs `rofi`, `jq`, `wl-clipboard`, `wtype` and `swaync` |
+| Plugin Marketplace | Browses every community plugin on plugins.omarchy.org by search, category, verification and stars, and installs, enables, updates and removes them with `omarchy plugin` | `~/.cache/omacraft/market/`; needs `omarchy` |
+| Theme Marketplace | Browses the community themes on omarchy.org/themes, and installs, applies, updates and removes them with Omarchy's theme tools. Installing applies the theme, and a folder that belongs to another theme is never replaced | `~/.cache/omacraft/market/`, `~/.config/omarchy/themes/`; needs `omarchy`, `git` |
+| ROFIoma | A studio for rofi-styled popups and swaync's notifications, each drawn live as rofi or swaync will draw it. **Power**: lock, logout, suspend, hibernate, reboot and shutdown after hyprdots' wlogout style 1 (or as a grid, list or pill), with each button's icon, name, command, letter and yes/no question, plus ten entrances, seven hovers and four backdrops; **Menus**: popups of your own, as lists, grids or rows of commands, each with its own effects; **Emoji & Glyphs**: hyprdots-style pickers (search, recent first, Enter copies or types it) and an in-app mapper of every emoji and Nerd Font glyph; **Keybinds**: a cheatsheet read live from Hyprland; **Notifications**: swaync's position, sizes, timeouts, entrance, hover and critical alarm effects, a drag-and-drop control-centre builder with installable widgets (from the store, from a pack file or made on the page), and handing notifications from the Omarchy shell to swaync and back; **Look**: the theme's colours or any colour from the wheel, font, corners, border and opacity. Each popup can have a key | `~/.config/omacraft/rofioma.json`, generating `~/.config/omacraft/rofioma/` (`.rasi` and `.sh` per popup), `~/.config/swaync/`, and `~/.config/hypr/omacraft_rofioma.lua`; needs `rofi`, `jq`, `wl-clipboard`, `wtype` and `swaync` |
 | Boot Splash | omascii's designer: FIGlet, TheDraw, system fonts and images; layout, image, colour, palette and style options; intro effects grouped as core, more ttfx, the screensaver's own and presets of them, and omascii's originals, with a live player; your library; apply to boot | `omacraft.omascii` (its `omascii` command) |
 | Screensaver | The Omarchy screensaver: its word or art (designed with omascii's FIGlet, TheDraw, system fonts or an image, Omarchy's logo, or the text as it is), Omarchy's own random effects or ones you pick from the same sets as the boot intros (ttfx, the screensaver presets, omascii's originals) with order, frame rate and rest, a live preview, on/off and the idle time. It never touches the boot screen | `~/.config/omarchy/branding/screensaver.txt`, `idle` in `shell.json`, and Screensaver's runner through a hook at `/usr/local/bin/omarchy-screensaver` (only for picked effects) |
+| Lock & Logon | The screens between you and the desktop, on Lock, Idle and Login tabs. A live stage plays the real scene: drag the block around it, watch it type, fail and unlock. Layout, backing panels, the password field, clock, date, greeting, avatar and a note; colours and opacity; wallpaper, a picture, a random pick from a folder, solid or gradient with blur, brightness, contrast and saturation; transitions in and out; six ready-made looks. Idle sets when the screensaver, lock and display-off happen, on a timeline. Login draws the same design as an SDDM theme | `omacraft.lock` (`~/.config/omarchy/omacraft-lock.json`), `idle` in `shell.json`, and for the login screen `/usr/share/sddm/themes/omacraft` and `/etc/sddm.conf.d/zz-omacraft-*.conf` through a pkexec helper |
 | Dotfile Generator | The full Dotfile Generator configurator, generating for Omarchy (its Lua config, an Omarchy theme, the shell's bar, launcher and notifications) or for plain Hyprland; an Omarchy bundle downloaded here can be installed from the page | Dotfile Generator's built web app |
 | OmaBuilds | Everything hyprbuildz does, with the build as a stage: profile → packages → files → options → ISO → USB, each step opening the tab that sets it, the Build button and its progress. **Profile** (live installer, minimal or "this desktop", and what comes along), **Contents** (name, hostname, packages, folders, edited files), **Options** (including compression: zstd, LZ4 for a faster build, or xz for the smallest ISO), **Build log**; USB writing. A copy of this desktop checks the space it needs first and names the biggest home folders to leave out | built in |
 | Alienflare | The Alienware x15's per-key lighting: designs drawn with the keys, 29 animations (comets, fireflies, lava lamp, plasma, pong, a ghost typist and more), painting key by key, colours of their own or, with *Theme colours* on, only colours found in the active wallpaper (following every wallpaper), brightness, vividness, speed, and the lid logo and ring | AlienFlare (`alienflare` and its `alienflare.service`) |
 
 ## Install
 
-On Omarchy (or any Arch system with the Omarchy shell):
+OmaCraft is made for **Omarchy 4**: Arch Linux, Hyprland 0.53 or newer with Lua
+config, and the Quickshell-based Omarchy shell. x86_64 is the tested platform;
+aarch64 (Omarchy on Apple Silicon) is allowed to build from source but hasn't
+been tried yet.
+
+From the AUR:
 
 ```sh
-git clone https://github.com/SK33M/omacraft.git
+yay -S omacraft
+```
+
+Or build a release yourself:
+
+```sh
+sudo pacman -S --needed base-devel git
+git clone --branch v0.3.0 https://github.com/SK33M/omacraft.git
 cd omacraft
 bin/install
 ```
 
-`bin/install` builds OmaCraft and installs it as the `omacraft` package with
-`makepkg -si`, so pacman downloads everything it needs to run: Qt 6 and its
-web view, Python with Pillow, Node.js, archiso and squashfs-tools, and the
-smaller tools the pages call. It then shows up in the app launcher as
-OmaCraft.
+Either way pacman brings in everything it needs to run: Qt 6 and its web view,
+Quickshell, Hyprland, Python with Pillow, Node.js and the smaller tools the
+pages call. OmaCraft then shows up in the app launcher. Each
+[release](https://github.com/SK33M/omacraft/releases) also has a built package
+for x86_64, for `sudo pacman -U omacraft-*.pkg.tar.zst`.
+
+Then check the machine. This changes nothing, and its output is what a bug
+report needs:
+
+```sh
+omacraft-doctor
+```
+
+| You have | What works |
+| --- | --- |
+| Omarchy 4 | Everything |
+| Omarchy 3 or older | Not supported: it has no Quickshell shell, so update first |
+| Arch with Hyprland and Quickshell, no Omarchy | The package installs and the window opens, and the doctor says what's missing, but plugins won't load: they run inside `omarchy-shell` |
+
+The Alienflare page appears only on Alienware machines. Boot Splash works with
+Limine or any boot loader that uses `mkinitcpio`, and OmaBuilds needs `archiso`
+and `squashfs-tools`.
+
+To remove it, take plugins out from the Plugin Suite page first so the shell
+stops loading them, then `sudo pacman -R omacraft`. pacman prints what's left
+behind and how to clear it.
 
 The package carries every plugin OmaCraft manages, in
 `/usr/share/omacraft/plugins`: omabar16, Studio (the Launcher and hyprskin,
@@ -51,11 +87,13 @@ install them or say what's missing:
 
 | For | Package |
 | --- | --- |
+| Building ISOs in OmaBuilds | `archiso`, `squashfs-tools` |
 | The animated boot splash intros | `ttfx` (Omarchy repo) |
 | The boot screen | `plymouth` |
 | The matugen, pywal and flavours wallpaper schemes | `matugen`; `python-pywal16` and `flavours` (AUR) |
 | Alienware keyboard lights | AlienFlare (`alienflare` and its service) |
-| ROFIoma | `rofi`, `jq`, `wl-clipboard`, `wtype`, `swaync` |
+| Dotfile Generator popped out into its own window | `python-pyqt6-webengine` |
+| ROFIoma | `rofi`, `wl-clipboard`, `wtype`, `swaync` |
 
 ## How it works
 
@@ -97,6 +135,18 @@ routes the plugins and Omarchy already offer:
   compiled shaders. "Play on this window" asks the shell (`omarchy-shell burn
   preview`) to run the effect on OmaCraft's window; the close keys are switched
   with the plugin's `omarchy-burn keys on|off`.
+- **Marketplaces** read `plugins.omarchy.org/catalog.json` and the links on
+  `omarchy.org/themes` (no catalogue file sits behind that page), keep a copy in
+  `~/.cache/omacraft/market` and refresh it after six hours or on `R`. Only https
+  GitHub repositories and pictures on Omarchy's own hosts are accepted, listing
+  text is drawn as plain text, and Omarchy's own tools do the cloning, checking
+  and placing. Plugins run unsandboxed in the shell, and installing fetches the
+  repository's latest code, so a verified badge isn't a guarantee.
+- **Control-centre widgets** are swaync instances (`label#x`, `buttons-grid#x`,
+  `slider#x`, `menubar#x`) kept in `notify.customWidgets` in `rofioma.json`. A
+  pack is a `.json` of `{"widgets": [{id, name, glyph, description, config}]}`
+  where `config` is swaync's `widget-config` for it; the commands it would run
+  are shown before it installs.
 - **Wallpaper** runs the Studio plugin's `hyprskin` for everything (search,
   library, favourites, colours, settings), so OmaCraft and the Studio hub
   always agree; the shell's Studio service draws the wallpaper.
@@ -136,6 +186,16 @@ IPC call loads (*Restart shell* in the sidebar).
 Every page follows the Omarchy theme's accent and updates when the plugins'
 files change.
 
+### The lock and login screens
+
+The lock stays a draft until you press **Use this lock**, which swaps out whatever lock is in use (Lock Screen Explorer, say) and asks the shell to confirm. If it doesn't answer, the old lock goes straight back. Turning it off puts back what it replaced, and the shell is never left without a lock.
+
+`plugins/lock` is Omarchy's own lock service: PAM, the session lock and the fingerprint reader are unchanged. Its settings file holds looks only, and every value is range-checked wherever it's read, so a damaged file can't hide the password field or stop it taking keys. Unlock transitions run on a timer capped at 0.8 seconds, which releases the session whatever the effect does.
+
+The login screen is applied, not live, since SDDM's files take your password. `/usr/lib/omacraft/omacraft-login` is the only thing that runs as root. It allows a fixed list of settings, checks every value, and reads pictures as you, so it can't be pointed at a file you couldn't open. Theme colours are fixed when you apply, because the greeter runs before any theme exists. Going back to Omarchy's login deletes OmaCraft's override files; Omarchy's own are never edited.
+
+With automatic login on, which is Omarchy's default on an encrypted disk, the login screen only shows after you log out. The Login tab says so, and turning it off means a second password at boot.
+
 ## Shortcuts
 
 | Key | Action |
@@ -143,9 +203,15 @@ files change.
 | `1` … `9`, `Ctrl 1` … `Ctrl 9` | Switch to the first nine pages |
 | `Ctrl PgUp` / `Ctrl PgDn` | Previous / next page |
 | `Ctrl R` | Restart the Omarchy shell |
+| `F1` | About Us: version, credits and licences |
 | `Esc` | Close, dismiss, or leave a field |
 | `Q`, `Ctrl Q` | Quit (asks first while an ISO builds) |
 | `?` | Show the shortcuts, with the page's own |
+| **Lock & Logon** | |
+| `L` / `I` / `G` | Lock, Idle and Login tabs |
+| `P` | Play the transitions on the stage |
+| `Ctrl Z` | Undo the last change |
+| `Ctrl Enter` | Apply the login design |
 | **Plugins** | |
 | Arrows | Choose a plugin |
 | `Space` | Switch it on or off |
@@ -180,6 +246,10 @@ files change.
 | `R` | Shuffle: a random look in random colours |
 | `Delete` | Take the picked widget off the bar |
 | `Ctrl Z` / `Ctrl Shift Z` | Undo / redo |
+| **Marketplaces** | |
+| `/` | Search |
+| `[` / `]` | Previous / next page |
+| `R` | Fetch the catalogue again |
 | **Launcher** | |
 | `L` / `Shift L` | Next / previous layout |
 | `C` / `Shift C` | Next / previous colour scheme |
@@ -199,7 +269,7 @@ files change.
 
 `omacraft pick [tab]` opens the wallpaper picker (below) without the window.
 `omacraft <page> [tab]` opens on a page: `plugins`, `wallpaper`, `animations`,
-`effects`, `dock`, `bar`, `launcher`, `rofioma`, `ascii`, `hyprcraft` or `iso`; e.g.
+`effects`, `dock`, `bar`, `launcher`, `rofioma`, `ascii`, `hyprcraft`, `iso`, `market` or `themes`; e.g.
 `omacraft wallpaper colors` or `omacraft bar folders` (the bar also takes
 `looks`, `colours`, `widgets`, `hidden`, `presets` and `style`; Window Transitions `motion`,
 `borders` and `lua`; ROFIoma `power`, `menus`, `symbols`, `keybinds`, `notify` and `look`; the dock `items`, `agents` and `placement`; OmaBuilds
@@ -250,7 +320,14 @@ bin/test      # Qt Test, offscreen
 bin/install   # makepkg -fsi, so it shows up in the launcher
 bin/sync-plugins          # copy each plugin's project into plugins/ for the package
 bin/sync-plugins --check  # say which copies are behind their projects
+bin/release check         # everything that must hold before tagging
+bin/release aur           # pin the tagged tarball's checksum for the AUR
 ```
+
+To release: set the version in `VERSION` and `packaging/aur/PKGBUILD`, commit,
+run `bin/release check`, then tag and push. CI builds and installs the package
+on a clean Arch container, and on a tag drafts a GitHub release with it.
+`bin/release aur` then prepares `packaging/aur` for pushing to the AUR repo.
 
 Each plugin is worked on in its own project (Burn in `~/Work/omacraft-burn`,
 Studio in `~/Work/skll-studio`, omascii in `~/Projects/omascii`, and so on;
@@ -259,13 +336,15 @@ or packaging, so `plugins/` holds what the package ships.
 
 `OMACRAFT_SCREENSHOT=out.png build/omacraft bar` saves the window after it
 settles (or after `OMACRAFT_SCREENSHOT_DELAY` ms) and quits. With
-`QT_QPA_PLATFORM=offscreen` it works without a display. The Dotfile Generator web
+`QT_QPA_PLATFORM=offscreen` it works without a display. `OMACRAFT_SHOW_LIGHTS=1`
+lists the Alienflare page on any machine, and `omacraft lights` opens it
+without that. The Dotfile Generator web
 view only draws on a real one.
 
 ## License and credits
 
 OmaCraft and its plugins are © 2026 skll, under the MIT license in
-[`LICENSE`](LICENSE). The theme watcher and portal file picker are adapted from
+[`LICENSE`](LICENSE); Dotfile Generator's manifest states Apache-2.0. The theme watcher and portal file picker are adapted from
 [Omacut](https://github.com/omacom/omacut) (MIT, David Heinemeier Hansson), and
 the whole app follows how [Omarchy](https://github.com/omacom/omarchy)'s own
 apps are built. omascii bundles [figlet.js](https://github.com/patorjk/figlet.js)

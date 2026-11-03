@@ -7,6 +7,9 @@ import QtQuick.Controls
 Window {
     id: tabWindow
 
+    // Shown from the Plugin Suite page beside the window, only to be looked
+    // at: a click ends the preview, and the quit button stays away.
+    property bool previewing: false
     signal restoreWanted()
     signal quitWanted()
 
@@ -52,16 +55,9 @@ Window {
             horizontalItemAlignment: Grid.AlignHCenter
             verticalItemAlignment: Grid.AlignVCenter
 
-            Rectangle {
+            AppLogo {
                 visible: edgeTab.showIcon
-                width: 26; height: 26; radius: 8
-                color: theme.accent
-                Label {
-                    anchors.centerIn: parent
-                    text: "◆"
-                    color: theme.accentForeground
-                    font.pixelSize: 13
-                }
+                size: 26
             }
             // Turned to read up the side edges.
             Item {
@@ -83,7 +79,7 @@ Window {
             }
             Rectangle {
                 width: 22; height: 22; radius: 11
-                opacity: hover.hovered && !dragger.active ? 1 : 0
+                opacity: hover.hovered && !dragger.active && !tabWindow.previewing ? 1 : 0
                 color: quitHover.hovered ? theme.hover : "transparent"
                 Behavior on opacity { NumberAnimation { duration: 120 } }
                 Label {
@@ -102,7 +98,7 @@ Window {
     HoverHandler { id: hover; cursorShape: dragger.active ? Qt.ClosedHandCursor : Qt.PointingHandCursor }
     TapHandler {
         gesturePolicy: TapHandler.DragThreshold
-        onTapped: (point, button) => { if (!quitHover.hovered) tabWindow.restoreWanted(); }
+        onTapped: (point, button) => { if (tabWindow.previewing || !quitHover.hovered) tabWindow.restoreWanted(); }
     }
     DragHandler {
         id: dragger

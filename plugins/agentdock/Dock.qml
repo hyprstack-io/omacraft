@@ -45,7 +45,15 @@ Item {
   property string monitorName: ""
 
   // ---- settings (persisted in state.json) -------------------------------
-  readonly property bool onRight: saved.position !== "left"
+  readonly property string edge: saved.position === "left" || saved.position === "bottom" ? saved.position : "right"
+  readonly property bool onRight: edge === "right"
+  readonly property bool onBottom: edge === "bottom"
+  // The dock runs along its edge: down a side, or across the bottom.
+  // "Along" is that direction; "depth" is out from the screen edge.
+  readonly property bool horizontal: onBottom
+  // +1 when a larger x (or y, at the bottom) is further from the screen edge.
+  readonly property int outward: edge === "left" ? 1 : -1
+  function along(p) { return horizontal ? p.x : p.y }
   readonly property int gap: Math.max(0, Math.min(48, saved.gap))
   readonly property int iconSize: Math.max(18, Math.min(56, saved.iconSize))
   readonly property real bgOpacity: Math.max(0.3, Math.min(1, saved.opacity))
@@ -70,37 +78,38 @@ Item {
   readonly property color tint: pickColor(saved.dockColor, dockColors, Commons.Color.background)
   readonly property bool lightTint: (0.2126 * tint.r + 0.7152 * tint.g + 0.0722 * tint.b) > 0.55
   readonly property real magMax: Math.max(1.1, Math.min(2.4, Number(saved.magnifyScale) || 1.7))
-  readonly property bool magnifyOn: saved.magnify && dragIndex < 0 && !incoming && menuIndex < 0
-  property real magPointer: -100000   // pointer y in itemsColumn coordinates
+  readonly property bool magnifyOn: saved.magnify && dragIndex < 0 && !incoming && menuIndex < 0 && !autoHidden
+  property real magPointer: -100000   // pointer along the dock, in itemsColumn coordinates
   property real magStrength: 0        // eases to 1 while the pointer is on the dock
   Behavior on magStrength { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
 
-  // How much an icon centred at y grows: a cosine falloff over
-  // magnifyRange icons either side of the pointer, like the macOS dock.
-  function magScale(y) {
+  // How much an icon centred at `pos` along the dock grows: a cosine falloff
+  // over magnifyRange icons either side of the pointer, like the macOS dock.
+  function magScale(pos) {
     if (!magnifyOn || magStrength <= 0) return 1
     var reach = Math.max(1, Math.min(4, saved.magnifyRange)) * slot
-    var d = Math.abs(y - magPointer)
+    var d = Math.abs(pos - magPointer)
     if (d >= reach) return 1
     var f = Math.cos(d / reach * Math.PI / 2)
     return 1 + (magMax - 1) * f * f * magStrength
   }
 
-  // Scale and vertical shift of every dock entry, from the unmagnified
+  // Scale and shift along the dock of every entry, from the unmagnified
   // layout, so the icons never feed back into where the pointer is. Grown
-  // icons push their neighbours apart and the dock grows evenly both ways.
+  // icons push their neighbours apart, so the dock lengthens evenly both
+  // ways; it never gets deeper, the icons grow out past its open side.
   readonly property var magLayout: {
-    var list = dockList, scales = [], extras = [], y = 0, total = 0, widest = 1
+    var list = dockList, scales = [], extras = [], pos = 0, total = 0, widest = 1
     for (var i = 0; i < list.length; i++) {
-      var h = itemHeight(list[i])
+      var h = itemLength(list[i])
       var it = list[i] && list[i].placeholder ? list[i].item : list[i]
       var icon = !!it && it.type !== "spacer" && it.type !== "divider"
-      var sc = icon ? magScale(y + h / 2) : 1
+      var sc = icon ? magScale(pos + h / 2) : 1
       scales.push(sc)
       extras.push(h * (sc - 1))
       total += h * (sc - 1)
       widest = Math.max(widest, sc)
-      y += h
+      pos += h
     }
     var shifts = [], acc = 0
     for (var j = 0; j < extras.length; j++) {
@@ -120,19 +129,48 @@ Item {
   readonly property int settingsWidth: 300
   readonly property int menuWidth: 190
   readonly property int tipWidth: 180
-  readonly property int minPanel: 320
-  readonly property int maxPanel: Math.max(minPanel, Math.round((panel.screen ? panel.screen.width : 1600) * 0.75))
+  readonly property int minPanel: horizontal ? 220 : 320
+  readonly property int maxPanel: Math.max(minPanel, Math.round((panel.screen ? (horizontal ? panel.screen.height : panel.screen.width)
+                                                                                : (horizontal ? 900 : 1600)) * 0.75))
+  // How far the agents panel reaches out from the dock: its width beside a
+  // side dock, its height above a bottom dock.
   property int panelWidth: 520
 
-  // The surface keeps one size while collapsed, wide enough for the settings
+  // How far a magnified icon pokes out past the dock's open side. Icons
+  // scale from their screen-edge side, so the dock body itself never moves.
+  readonly property real magGrow: Math.max(0, magLayout.widest * (iconSize + 10) - iconSize - 16)
+
+  // The surface keeps one size while collapsed, deep enough for the settings
   // card, menus and labels, so hovering or opening a card never resizes it
   // (a resize is what made the pill flicker). It is transparent and
-  // click-through outside what is drawn. Only expanding widens it, and that
+  // click-through outside what is drawn. Only expanding grows it, and that
   // happens before the panel animates in and after it has animated out.
-  readonly property int overlayWidth: Math.max(settingsWidth, menuWidth, tipWidth)
-  readonly property int surfaceWidth: gap + dockWidth + gap + Math.max(expandedSurface ? panelWidth : 0, overlayWidth) + gap
-  // The pill is exactly as tall as what it holds.
-  readonly property int pillHeight: 6 + slot + 9 + listHeight(dockList) + 9 + slot + 6
+  // Above a bottom dock the settings card stacks upward, so it needs height.
+  readonly property int overlayDepth: horizontal ? Math.round((panel.screen ? panel.screen.height : 900) * 0.8)
+                                                 : Math.max(settingsWidth, menuWidth, tipWidth)
+  readonly property int surfaceDepth: gap + dockWidth + gap + Math.max(expandedSurface ? panelWidth : 0, overlayDepth) + gap
+  // The pill is exactly as long as what it holds.
+  readonly property int pillLength: 6 + slot + 9 + listLength(dockList) + 9 + slot + 6
+
+  // ---- auto-hide ------------------------------------------------------
+  // The dock tucks behind its screen edge when nothing needs it and comes
+  // back when the pointer touches that edge where the dock lives.
+  property bool autoHidden: false
+  readonly property bool dockHovered: dockHover.hovered
+  readonly property bool keepShown: !saved.autoHide || opened || settingsOpen || menuIndex >= 0
+                                    || dragIndex >= 0 || incoming !== null || dockHovered
+  property real hideProgress: autoHidden ? 1 : 0     // 0 shown … 1 tucked away
+  Behavior on hideProgress { NumberAnimation { duration: 240; easing.type: Easing.InOutCubic } }
+  readonly property int revealDepth: 3               // edge strip that brings it back
+
+  onKeepShownChanged: {
+    if (keepShown) { hideTimer.stop(); if (autoHidden) revealTimer.restart() }
+    else { revealTimer.stop(); hideTimer.restart() }
+  }
+  // A short pause each way: brushing past the edge doesn't pop the dock
+  // out, and moving between icons and cards doesn't flick it away.
+  Timer { id: revealTimer; interval: 110; onTriggered: if (root.keepShown) root.autoHidden = false }
+  Timer { id: hideTimer; interval: 700; onTriggered: if (!root.keepShown) root.autoHidden = true }
 
   // ---- expand / collapse transition ----------------------------------
   property bool expandedSurface: false   // surface sized for the panel
@@ -182,17 +220,17 @@ Item {
     else if (!root.opened && root.cardProgress === 0) root.expandedSurface = false
   }
 
-  // Heights of dock entries: icons, spacers and dividers.
-  function itemHeight(it) {
+  // Lengths along the dock of its entries: icons, spacers and dividers.
+  function itemLength(it) {
     if (it && it.placeholder) it = it.item
     if (!it) return slot
     if (it.type === "spacer") return Math.round(slot / 2)
     if (it.type === "divider") return 13
     return slot
   }
-  function listHeight(list) {
+  function listLength(list) {
     var h = 0
-    for (var i = 0; i < list.length; i++) h += itemHeight(list[i])
+    for (var i = 0; i < list.length; i++) h += itemLength(list[i])
     return h
   }
 
@@ -210,17 +248,17 @@ Item {
   readonly property color accent: panel.accent
   readonly property color line: panel.line
   readonly property Item pillItem: pillBox
-  property real hoverY: 0
+  property real hoverPos: 0
 
   // ---- dock items and drag state --------------------------------------
   readonly property var dockItems: saved.dock
   property int dragIndex: -1        // internal drag: index in dockItems
   property int dropIndex: -1        // insertion point while dragging
   property bool dragRemove: false   // internal drag left the dock
-  property real dragY: 0            // pointer y in pill coordinates
+  property real dragPos: 0          // pointer along the dock, in pill coordinates
   property var incoming: null       // external drag from the launcher
   property int menuIndex: -1        // context menu target
-  property real menuY: 0
+  property real menuPos: 0
 
   // What the pill shows: the stored items with the drag applied.
   readonly property var dockList: {
@@ -240,15 +278,15 @@ Item {
     var d = dragIndex, list = dockItems
     if (d < 0 || d >= list.length) return 0
     var t = dragRemove ? list.length - 1 : Math.max(0, Math.min(list.length - 1, dropIndex))
-    var h = itemHeight(list[d])
+    var h = itemLength(list[d])
     if (i !== d) {
       var r = i < d ? i : i - 1
       return (i > d ? -h : 0) + (r >= t ? h : 0)
     }
     var to = 0, from = 0
     for (var k = 0, r2 = 0; k < list.length; k++) {
-      if (k < d) from += itemHeight(list[k])
-      if (k !== d) { if (r2 < t) to += itemHeight(list[k]); r2++ }
+      if (k < d) from += itemLength(list[k])
+      if (k !== d) { if (r2 < t) to += itemLength(list[k]); r2++ }
     }
     return to - from
   }
@@ -353,7 +391,7 @@ Item {
     syncWindows(false)
   }
   onGapChanged: placeDebounce.restart()
-  onOnRightChanged: placeDebounce.restart()
+  onEdgeChanged: placeDebounce.restart()
 
   // ---- talking to Hyprland -------------------------------------------
   function run(args) { Quickshell.execDetached([root.helper].concat(args)) }
@@ -458,18 +496,22 @@ Item {
 
   function cursorOverPill() {
     var px = cursorX - pillBox.x, py = cursorY - pillBox.y
-    return px >= -32 && px <= pillBox.width + 32 && py >= -slot && py <= pillBox.height + slot
+    var a = horizontal ? px : py, c = horizontal ? py : px
+    var len = horizontal ? pillBox.width : pillBox.height, depth = horizontal ? pillBox.height : pillBox.width
+    return c >= -32 && c <= depth + 32 && a >= -slot && a <= len + slot
   }
-  // Insertion index for a pointer at pill-y `y`, measured against the items
-  // that stay put (the one being dragged is taken out first).
-  function indexAtPillY(y) {
+  // Where the dock items start along the pill.
+  function itemsStart() { return horizontal ? pillColumn.x + itemsColumn.x : pillColumn.y + itemsColumn.y }
+  // Insertion index for a pointer at `pos` along the pill, measured against
+  // the items that stay put (the one being dragged is taken out first).
+  function indexAt(pos) {
     var list = dockItems.slice()
     if (dragIndex >= 0 && dragIndex < list.length) list.splice(dragIndex, 1)
-    var top = pillColumn.y + itemsColumn.y
+    var start = itemsStart()
     for (var i = 0; i < list.length; i++) {
-      var h = itemHeight(list[i])
-      if (y < top + h / 2) return i
-      top += h
+      var h = itemLength(list[i])
+      if (pos < start + h / 2) return i
+      start += h
     }
     return list.length
   }
@@ -488,7 +530,7 @@ Item {
         var p = String(text).trim().split(" ")
         if (p.length >= 2) { root.cursorX = Number(p[0]); root.cursorY = Number(p[1]) }
         if (!root.incoming) return
-        root.dropIndex = root.cursorOverPill() ? root.indexAtPillY(root.cursorY - pillBox.y) : -1
+        root.dropIndex = root.cursorOverPill() ? root.indexAt(root.horizontal ? root.cursorX - pillBox.x : root.cursorY - pillBox.y) : -1
         if (root.finishPending) root.finishIncoming()
       }
     }
@@ -546,6 +588,7 @@ Item {
       property real opacity: 0.94
       property bool reserveCollapsed: false
       property bool reserveExpanded: true
+      property bool autoHide: false
       property var hiddenAgents: []
       property string cwd: ""
       // Look: magnification (the macOS effect), shapes and colours
@@ -564,6 +607,7 @@ Item {
   function stateReady() {
     if (stateLoaded) return
     stateLoaded = true
+    if (!keepShown) hideTimer.restart()
     if (!saved.dockSeeded) { saved.dock = defaultDock; saved.dockSeeded = true }
     panelWidth = clampWidth(saved.width)
     if (agentById(saved.activeTab)) activeTab = saved.activeTab
@@ -616,7 +660,7 @@ Item {
     // OMAcraft changes saved settings through this while the dock runs, since
     // the dock only reads state.json when it loads. value is JSON.
     function set(key: string, value: string): string {
-      var keys = ["position", "gap", "iconSize", "opacity", "reserveCollapsed", "reserveExpanded",
+      var keys = ["position", "gap", "iconSize", "opacity", "reserveCollapsed", "reserveExpanded", "autoHide",
                   "hiddenAgents", "cwd", "dock", "width", "magnify", "magnifyScale", "magnifyRange",
                   "dockShape", "iconShape", "iconPlate", "dockColor", "accentColor", "dockBorder"]
       if (keys.indexOf(key) < 0) return "unknown"
@@ -650,18 +694,20 @@ Item {
       return s.length ? s[0] : null
     }
 
-    // Full height on one edge, always: the pill is centred inside, so its
-    // screen position never depends on the surface size.
+    // The full length of its edge, always: the pill is centred inside, so
+    // its screen position never depends on the surface size.
     anchors {
-      left: !root.onRight
-      right: root.onRight
-      top: true
+      left: root.edge !== "right"
+      right: root.edge !== "left"
+      top: !root.onBottom
       bottom: true
     }
-    implicitWidth: root.surfaceWidth
+    implicitWidth: root.horizontal ? 0 : root.surfaceDepth
+    implicitHeight: root.horizontal ? root.surfaceDepth : 0
+    // An auto-hiding dock never holds space: windows use the edge it hides in.
     exclusiveZone: root.expandedSurface
       ? (saved.reserveExpanded ? root.gap + root.dockWidth + root.gap + root.panelWidth : 0)
-      : (saved.reserveCollapsed ? root.gap + root.dockWidth : 0)
+      : (saved.reserveCollapsed && !saved.autoHide ? root.gap + root.dockWidth : 0)
     color: "transparent"
     visible: !root.fullscreen
     // Overlay layer: Hyprland reserves edge space layer by layer, bottom to
@@ -676,21 +722,32 @@ Item {
     readonly property color line: Util.alpha(fg, 0.12)
     readonly property bool terminalShown: root.cardSettled && !root.busy && root.running[root.activeTab] === true
 
-    // x for a box `o` px from the screen edge, `w` wide.
-    function edgeX(o, w) { return root.onRight ? width - o - w : o }
+    // Position on the depth axis (x at a side, y at the bottom) of a box `o`
+    // px from the screen edge and `w` deep.
+    function depthPos(o, w) { return root.outward > 0 ? o : (root.horizontal ? height : width) - o - w }
+    // Position along the edge that centres a box `w` long on `c`, kept on screen.
+    function alongPos(c, w, margin) {
+      var len = root.horizontal ? width : height
+      return Math.max(margin, Math.min(len - w - margin, c - w / 2))
+    }
 
     onWidthChanged: placeDebounce.restart()
     onHeightChanged: placeDebounce.restart()
 
     // Input only where something is drawn; the rest passes through.
     mask: Region {
-      Region { x: pillBox.x + pillBg.x; y: pillBox.y + pillBg.y; width: pillBg.width; height: pillBg.height }
+      Region { x: pillBox.x + pillBg.x; y: pillBox.y + pillBg.y; width: root.autoHidden ? 0 : pillBg.width; height: pillBg.height }
+      Region { x: dockZone.x; y: dockZone.y; width: dockZone.width; height: dockZone.height }
       Region {
         x: card.x; y: card.y
         width: root.cardProgress > 0.5 ? card.width : 0
         height: panel.terminalShown ? root.headerHeight : card.height
       }
-      Region { x: card.x + handle.x - 3; y: card.y; width: root.cardSettled ? handle.width + 6 : 0; height: card.height }
+      Region {
+        x: card.x + handle.x - (root.horizontal ? 0 : 3); y: card.y + handle.y - (root.horizontal ? 3 : 0)
+        width: root.cardSettled ? handle.width + (root.horizontal ? 0 : 6) : 0
+        height: handle.height + (root.horizontal ? 6 : 0)
+      }
       Region { x: settingsCard.x; y: settingsCard.y; width: root.settingsOpen ? settingsCard.width : 0; height: settingsCard.height }
       Region { x: itemMenu.x; y: itemMenu.y; width: root.menuIndex >= 0 ? itemMenu.width : 0; height: itemMenu.height }
     }
@@ -699,20 +756,25 @@ Item {
     Item {
       id: card
       visible: root.cardProgress > 0
-      x: panel.edgeX(root.gap + root.dockWidth + root.gap, root.panelWidth)
-      y: root.gap
-      width: root.panelWidth
-      height: panel.height - 2 * root.gap
+      // Beside a side dock it runs the screen's height; above a bottom dock,
+      // its width.
+      x: root.horizontal ? root.gap : panel.depthPos(root.gap + root.dockWidth + root.gap, root.panelWidth)
+      y: root.horizontal ? panel.depthPos(root.gap + root.dockWidth + root.gap, root.panelWidth) : root.gap
+      width: root.horizontal ? panel.width - 2 * root.gap : root.panelWidth
+      height: root.horizontal ? root.panelWidth : panel.height - 2 * root.gap
 
       // Slides out from behind the dock, unfolding from the dock side.
       opacity: Math.min(1, root.cardProgress * 1.4)
+      readonly property real slide: (1 - root.cardProgress) * 36 * -root.outward
+      readonly property real unfold: 0.94 + 0.06 * root.cardProgress
+      readonly property real settle: 0.985 + 0.015 * root.cardProgress
       transform: [
-        Translate { x: (1 - root.cardProgress) * 36 * (root.onRight ? 1 : -1) },
+        Translate { x: root.horizontal ? 0 : card.slide; y: root.horizontal ? card.slide : 0 },
         Scale {
-          origin.x: root.onRight ? card.width : 0
-          origin.y: card.height / 2
-          xScale: 0.94 + 0.06 * root.cardProgress
-          yScale: 0.985 + 0.015 * root.cardProgress
+          origin.x: root.horizontal ? card.width / 2 : (root.outward < 0 ? card.width : 0)
+          origin.y: root.horizontal ? card.height : card.height / 2
+          xScale: root.horizontal ? card.settle : card.unfold
+          yScale: root.horizontal ? card.unfold : card.settle
         }
       ]
 
@@ -874,13 +936,14 @@ Item {
       // Resize edge: the side away from the dock.
       Item {
         id: handle
-        x: root.onRight ? 0 : parent.width - width
-        anchors { top: parent.top; bottom: parent.bottom; topMargin: root.radius; bottomMargin: root.radius }
-        width: root.handleWidth
+        x: root.horizontal ? root.radius : (root.onRight ? 0 : parent.width - width)
+        y: root.horizontal ? 0 : root.radius
+        width: root.horizontal ? parent.width - 2 * root.radius : root.handleWidth
+        height: root.horizontal ? root.handleWidth : parent.height - 2 * root.radius
 
         Rectangle {
           anchors.centerIn: parent
-          width: 3; height: 40; radius: 1.5
+          width: root.horizontal ? 40 : 3; height: root.horizontal ? 3 : 40; radius: 1.5
           color: root.dragging || handleMouse.containsMouse ? panel.accent : panel.fg
           opacity: root.dragging || handleMouse.containsMouse ? 0.9 : 0.3
         }
@@ -888,28 +951,31 @@ Item {
         MouseArea {
           id: handleMouse
           anchors.fill: parent
-          anchors.leftMargin: -3
-          anchors.rightMargin: -3
+          anchors.leftMargin: root.horizontal ? 0 : -3
+          anchors.rightMargin: root.horizontal ? 0 : -3
+          anchors.topMargin: root.horizontal ? -3 : 0
+          anchors.bottomMargin: root.horizontal ? -3 : 0
           hoverEnabled: true
           preventStealing: true
-          cursorShape: Qt.SizeHorCursor
-          property real startScreenX: 0
+          cursorShape: root.horizontal ? Qt.SizeVerCursor : Qt.SizeHorCursor
+          property real startScreen: 0
           property int startWidth: 0
-          // The surface's far edge moves as it grows; work in screen x so the
-          // edge tracks the pointer.
-          function screenX(mx) {
-            var local = handle.mapToItem(panel.contentItem, mx, 0).x
-            return root.onRight ? (panel.screen ? panel.screen.width : 0) - panel.width + local : local
+          // The surface's far edge moves as it grows; work in screen
+          // coordinates (on the depth axis) so the edge tracks the pointer.
+          function screenPos(mx, my) {
+            var local = handle.mapToItem(panel.contentItem, mx, my)
+            if (root.horizontal) return (panel.screen ? panel.screen.height : 0) - panel.height + local.y
+            return root.onRight ? (panel.screen ? panel.screen.width : 0) - panel.width + local.x : local.x
           }
           onPressed: function(mouse) {
-            startScreenX = screenX(mouse.x)
+            startScreen = screenPos(mouse.x, mouse.y)
             startWidth = root.panelWidth
             root.dragging = true
           }
           onPositionChanged: function(mouse) {
             if (!pressed) return
-            var d = screenX(mouse.x) - startScreenX
-            root.panelWidth = root.clampWidth(startWidth + (root.onRight ? -d : d))
+            var d = screenPos(mouse.x, mouse.y) - startScreen
+            root.panelWidth = root.clampWidth(startWidth + d * root.outward)
             placeDebounce.restart()
           }
           onReleased: {
@@ -925,81 +991,88 @@ Item {
     // ================= the dock pill =================
     Rectangle {
       id: pillBox
-      x: panel.edgeX(root.gap, root.dockWidth)
-      y: Math.round((panel.height - height) / 2)
-      width: root.dockWidth
-      height: root.pillHeight
-      Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+      x: root.horizontal ? Math.round((panel.width - width) / 2) : panel.depthPos(root.gap, root.dockWidth)
+      y: root.horizontal ? panel.depthPos(root.gap, root.dockWidth) : Math.round((panel.height - height) / 2)
+      width: root.horizontal ? root.pillLength : root.dockWidth
+      height: root.horizontal ? root.dockWidth : root.pillLength
+      Behavior on width { enabled: root.horizontal; NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+      Behavior on height { enabled: !root.horizontal; NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
       color: "transparent"
 
-      // Tracks the pointer for magnification. Passive, so the icons still get
-      // their own hover and clicks.
-      HoverHandler {
-        id: pillHover
-        onHoveredChanged: root.magStrength = hovered && saved.magnify ? 1 : 0
-        onPointChanged: root.magPointer = point.position.y - pillColumn.y - itemsColumn.y
-      }
+      // Auto-hide slides it out past the screen edge.
+      readonly property real tuck: root.hideProgress * (root.gap + root.dockWidth + 6) * -root.outward
+      opacity: 1 - root.hideProgress * 0.6
+      visible: root.hideProgress < 1
+      transform: Translate { x: root.horizontal ? 0 : pillBox.tuck; y: root.horizontal ? pillBox.tuck : 0 }
 
-      // The dock's body. It grows with the magnified icons: taller by what
-      // they add, and wider on the side away from the screen edge.
+      // The dock's body. It lengthens to make room for the magnified icons,
+      // but never deepens: they grow out past its open side instead.
       Rectangle {
         id: pillBg
-        readonly property real grow: (root.magLayout.widest - 1) * root.iconSize
-        readonly property real r: saved.dockShape === "pill" ? width / 2
+        readonly property real thick: Math.min(parent.width, parent.height)
+        readonly property real r: saved.dockShape === "pill" ? thick / 2
           : saved.dockShape === "soft" ? 8
           : saved.dockShape === "square" ? 0
-          : Math.min(root.radius + 4, width / 2)
+          : Math.min(root.radius + 4, thick / 2)
         readonly property bool edge: saved.dockShape === "edge"
         z: -1
-        x: root.onRight ? -grow : 0
-        y: -root.magLayout.total / 2
-        width: parent.width + grow
-        height: parent.height + root.magLayout.total
+        x: root.horizontal ? -root.magLayout.total / 2 : 0
+        y: root.horizontal ? 0 : -root.magLayout.total / 2
+        width: parent.width + (root.horizontal ? root.magLayout.total : 0)
+        height: parent.height + (root.horizontal ? 0 : root.magLayout.total)
         radius: edge ? 0 : r
         // "edge" rounds only the side facing the desktop, so the dock reads
         // as attached to the screen edge (best with no floating gap).
-        topLeftRadius: edge ? (root.onRight ? 16 : 0) : r
+        topLeftRadius: edge ? (root.edge !== "left" ? 16 : 0) : r
         bottomLeftRadius: edge ? (root.onRight ? 16 : 0) : r
-        topRightRadius: edge ? (root.onRight ? 0 : 16) : r
-        bottomRightRadius: edge ? (root.onRight ? 0 : 16) : r
+        topRightRadius: edge ? (root.edge !== "right" ? 16 : 0) : r
+        bottomRightRadius: edge ? (root.edge === "left" ? 16 : 0) : r
         color: panel.bg
         border.width: saved.dockBorder === "none" ? 0 : 1
         border.color: root.incoming && root.dropIndex >= 0 ? panel.accent
           : saved.dockBorder === "accent" ? Util.alpha(panel.accent, 0.75) : panel.line
       }
 
-      Column {
+      // One column down a side dock, one row across a bottom dock.
+      Grid {
         id: pillColumn
-        anchors { top: parent.top; topMargin: 6; horizontalCenter: parent.horizontalCenter }
+        x: root.horizontal ? 6 : Math.round((parent.width - width) / 2)
+        y: root.horizontal ? Math.round((parent.height - height) / 2) : 6
+        columns: root.horizontal ? 1000 : 1
+        horizontalItemAlignment: Grid.AlignHCenter
+        verticalItemAlignment: Grid.AlignVCenter
         spacing: 0
+        // The ends move out by half of what magnification adds.
+        readonly property real endShift: root.magLayout.total / 2
 
         DockButton { host: root;
-          transform: Translate { y: -root.magLayout.total / 2 }
-          glyph: root.onRight ? "\u{f0141}" : "\u{f0142}"
+          transform: Translate { x: root.horizontal ? -pillColumn.endShift : 0; y: root.horizontal ? 0 : -pillColumn.endShift }
+          glyph: root.onBottom ? "\u{f0143}" : root.onRight ? "\u{f0141}" : "\u{f0142}"
           glyphRotation: root.cardProgress * 180
           hint: root.opened ? "Collapse agents  (Super+Alt+A)" : "Agents  (Super+Alt+A)"
           highlighted: root.opened
           onActivated: root.toggle()
         }
-        Item { width: 1; height: 4 }
-        Rectangle { width: root.iconSize; height: 1; color: panel.line; anchors.horizontalCenter: parent.horizontalCenter
-                    transform: Translate { y: -root.magLayout.total / 2 } }
-        Item { width: 1; height: 4 }
+        Item { width: 4; height: 4 }
+        Rectangle { width: root.horizontal ? 1 : root.iconSize; height: root.horizontal ? root.iconSize : 1; color: panel.line
+                    transform: Translate { x: root.horizontal ? -pillColumn.endShift : 0; y: root.horizontal ? 0 : -pillColumn.endShift } }
+        Item { width: 4; height: 4 }
 
-        Column {
+        Grid {
           id: itemsColumn
+          columns: root.horizontal ? 1000 : 1
           Repeater {
             model: root.dockList
             delegate: DockItem { host: root; }
           }
         }
 
-        Item { width: 1; height: 4 }
-        Rectangle { width: root.iconSize; height: 1; color: panel.line; anchors.horizontalCenter: parent.horizontalCenter
-                    transform: Translate { y: root.magLayout.total / 2 } }
-        Item { width: 1; height: 4 }
+        Item { width: 4; height: 4 }
+        Rectangle { width: root.horizontal ? 1 : root.iconSize; height: root.horizontal ? root.iconSize : 1; color: panel.line
+                    transform: Translate { x: root.horizontal ? pillColumn.endShift : 0; y: root.horizontal ? 0 : pillColumn.endShift } }
+        Item { width: 4; height: 4 }
         DockButton { host: root;
-          transform: Translate { y: root.magLayout.total / 2 }
+          transform: Translate { x: root.horizontal ? pillColumn.endShift : 0; y: root.horizontal ? 0 : pillColumn.endShift }
           glyph: "\u{f0493}"
           hint: "Dock settings"
           highlighted: root.settingsOpen
@@ -1015,28 +1088,71 @@ Item {
           for (var i = 0; i < drop.urls.length; i++) {
             var u = String(drop.urls[i])
             if (u.slice(-8) !== ".desktop") continue
-            root.addApp(u.split("/").pop(), root.indexAtPillY(drop.y))
+            root.addApp(u.split("/").pop(), root.indexAt(root.horizontal ? drop.x : drop.y))
           }
           drop.accept()
         }
       }
     }
 
+    // Where the pointer counts as on the dock: the dock, the magnified icons
+    // beyond it and, when it auto-hides, the strip out to the screen edge.
+    // While hidden it shrinks to a thin strip on the edge that brings the
+    // dock back. It sits above the dock but only watches: its HoverHandler
+    // doesn't block, so the icons still get their own hover and clicks.
+    Item {
+      id: dockZone
+      z: 30
+      readonly property real start: saved.autoHide ? 0 : root.gap
+      readonly property real reach: root.autoHidden ? root.revealDepth
+                                                    : root.gap + root.dockWidth + root.magGrow - start
+      readonly property real alongStart: root.horizontal ? pillBox.x + pillBg.x : pillBox.y + pillBg.y
+      readonly property real alongLen: root.horizontal ? pillBg.width : pillBg.height
+      readonly property real depth: panel.depthPos(start, reach)
+      x: root.horizontal ? alongStart : depth
+      y: root.horizontal ? depth : alongStart
+      width: root.horizontal ? alongLen : reach
+      height: root.horizontal ? reach : alongLen
+
+      HoverHandler {
+        id: dockHover
+        onHoveredChanged: root.magStrength = hovered && saved.magnify ? 1 : 0
+        onPointChanged: root.magPointer = root.along(dockZone.mapToItem(itemsColumn, point.position.x, point.position.y))
+      }
+    }
+
+    // A small nub on the screen edge marks where a hidden dock waits.
+    Rectangle {
+      readonly property real depth: panel.depthPos(1, root.horizontal ? height : width)
+      readonly property real alongAt: (root.horizontal ? pillBox.x + pillBox.width / 2 : pillBox.y + pillBox.height / 2) - 22
+      x: root.horizontal ? alongAt : depth
+      y: root.horizontal ? depth : alongAt
+      width: root.horizontal ? 44 : 3
+      height: root.horizontal ? 3 : 44
+      radius: 1.5
+      color: panel.accent
+      opacity: root.hideProgress * (dockHover.hovered ? 0.9 : 0.45)
+      visible: opacity > 0
+    }
+
     // Ghost of the icon being dragged inside the dock.
     ItemGlyph { host: root;
       visible: root.dragIndex >= 0 && !root.dragRemove
-      x: pillBox.x + (pillBox.width - root.iconSize) / 2
-      y: pillBox.y + root.dragY - root.iconSize / 2
+      x: pillBox.x + (root.horizontal ? root.dragPos - root.iconSize / 2 : (pillBox.width - root.iconSize) / 2)
+      y: pillBox.y + (root.horizontal ? (pillBox.height - root.iconSize) / 2 : root.dragPos - root.iconSize / 2)
       width: root.iconSize; height: root.iconSize
       z: 10
       item: root.dragIndex >= 0 ? root.dockItems[root.dragIndex] : null
     }
 
-    // Hover label beside the dock.
+    // Hover label beside the dock, clear of a magnified icon.
     Rectangle {
-      visible: root.hoverLabel !== "" && root.dragIndex < 0 && root.menuIndex < 0 && !root.settingsOpen
-      x: panel.edgeX(root.gap + root.dockWidth + 8 + pillBg.grow, width)
-      y: pillBox.y + root.hoverY - height / 2
+      visible: root.hoverLabel !== "" && root.dragIndex < 0 && root.menuIndex < 0 && !root.settingsOpen && !root.autoHidden
+      readonly property real depth: panel.depthPos(root.gap + root.dockWidth + 8 + root.magGrow, root.horizontal ? height : width)
+      readonly property real alongAt: panel.alongPos((root.horizontal ? pillBox.x : pillBox.y) + root.hoverPos,
+                                                     root.horizontal ? width : height, 4)
+      x: root.horizontal ? alongAt : depth
+      y: root.horizontal ? depth : alongAt
       width: Math.min(root.tipWidth - 8, tipText.implicitWidth + 16)
       height: tipText.implicitHeight + 10
       radius: 6
@@ -1060,8 +1176,11 @@ Item {
     Rectangle {
       id: itemMenu
       visible: root.menuIndex >= 0
-      x: panel.edgeX(root.gap + root.dockWidth + 8, width)
-      y: Math.max(4, Math.min(panel.height - height - 4, pillBox.y + root.menuY - height / 2))
+      readonly property real depth: panel.depthPos(root.gap + root.dockWidth + 8, root.horizontal ? height : width)
+      readonly property real alongAt: panel.alongPos((root.horizontal ? pillBox.x : pillBox.y) + root.menuPos,
+                                                     root.horizontal ? width : height, 4)
+      x: root.horizontal ? alongAt : depth
+      y: root.horizontal ? depth : alongAt
       width: root.menuWidth - 8
       height: menuCol.implicitHeight + 12
       radius: 10
@@ -1084,8 +1203,8 @@ Item {
           font.family: Style.font.family; font.pixelSize: Style.font.bodySmall
         }
         MenuRow { host: root; label: "Open"; onActivated: { root.launchItem(root.dockItems[root.menuIndex]); root.menuIndex = -1 } }
-        MenuRow { host: root; label: "Move up"; enabled: root.menuIndex > 0; onActivated: { root.moveItem(root.menuIndex, root.menuIndex - 1); root.menuIndex = -1 } }
-        MenuRow { host: root; label: "Move down"; enabled: root.menuIndex >= 0 && root.menuIndex < root.dockItems.length - 1; onActivated: { root.moveItem(root.menuIndex, root.menuIndex + 1); root.menuIndex = -1 } }
+        MenuRow { host: root; label: root.horizontal ? "Move left" : "Move up"; enabled: root.menuIndex > 0; onActivated: { root.moveItem(root.menuIndex, root.menuIndex - 1); root.menuIndex = -1 } }
+        MenuRow { host: root; label: root.horizontal ? "Move right" : "Move down"; enabled: root.menuIndex >= 0 && root.menuIndex < root.dockItems.length - 1; onActivated: { root.moveItem(root.menuIndex, root.menuIndex + 1); root.menuIndex = -1 } }
         MenuRow { host: root; label: "Remove from dock"; danger: true; onActivated: { root.removeItem(root.menuIndex); root.menuIndex = -1 } }
       }
     }
@@ -1096,12 +1215,16 @@ Item {
       visible: opacity > 0
       opacity: root.settingsOpen ? 1 : 0
       Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
-      transform: Translate {
-        x: (root.settingsOpen ? 0 : 14) * (root.onRight ? 1 : -1)
-        Behavior on x { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-      }
-      x: panel.edgeX(root.gap + root.dockWidth + root.gap, width)
-      y: Math.max(root.gap, Math.min(panel.height - height - root.gap, pillBox.y + pillBox.height - height))
+      property real slide: (root.settingsOpen ? 0 : 14) * -root.outward
+      Behavior on slide { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+      transform: Translate { x: root.horizontal ? 0 : settingsCard.slide; y: root.horizontal ? settingsCard.slide : 0 }
+      // Beside the dock, its far end lined up with the dock's settings end.
+      readonly property real depth: panel.depthPos(root.gap + root.dockWidth + root.gap, root.horizontal ? height : width)
+      readonly property real alongAt: root.horizontal
+        ? Math.max(root.gap, Math.min(panel.width - width - root.gap, pillBox.x + pillBox.width - width))
+        : Math.max(root.gap, Math.min(panel.height - height - root.gap, pillBox.y + pillBox.height - height))
+      x: root.horizontal ? alongAt : depth
+      y: root.horizontal ? depth : alongAt
       width: root.settingsWidth
       implicitHeight: settingsCol.implicitHeight + 28
       height: implicitHeight
@@ -1150,10 +1273,14 @@ Item {
           SettingRow { host: root;
             label: "Position"
             Segmented { host: root;
-              options: ["Left", "Right"]
-              current: root.onRight ? 1 : 0
-              onPicked: function(i) { saved.position = i === 0 ? "left" : "right" }
+              options: ["Left", "Bottom", "Right"]
+              current: ["left", "bottom", "right"].indexOf(root.edge)
+              onPicked: function(i) { saved.position = ["left", "bottom", "right"][i] }
             }
+          }
+          SettingRow { host: root;
+            label: "Auto-hide"
+            Switch { host: root; checked: saved.autoHide; onToggled: saved.autoHide = !saved.autoHide }
           }
           SettingRow { host: root;
             label: "Floating gap"
@@ -1183,7 +1310,7 @@ Item {
           Row {
             spacing: 8
             PillButton { host: root; label: "Reset icons"; onActivated: saved.dock = root.defaultDock }
-            PillButton { host: root; label: "Reset width"; onActivated: { root.panelWidth = 520; saved.width = 520; placeDebounce.restart() } }
+            PillButton { host: root; label: root.horizontal ? "Reset height" : "Reset width"; onActivated: { root.panelWidth = 520; saved.width = 520; placeDebounce.restart() } }
           }
         }
 
@@ -1403,28 +1530,33 @@ Item {
     readonly property bool isSpacer: !!item && item.type === "spacer"
     readonly property bool isDivider: !!item && item.type === "divider"
     readonly property bool isIcon: !isSpacer && !isDivider
-    width: host.dockWidth - 8
-    height: host.itemHeight(item)
+    width: host.horizontal ? host.itemLength(item) : host.dockWidth - 8
+    height: host.horizontal ? host.dockWidth - 8 : host.itemLength(item)
     readonly property real magScale: host.magLayout.scales[index] || 1
     readonly property bool hovered: diMouse.containsMouse && host.dragIndex < 0
+    // How far this icon pokes out past its cell while magnified.
+    readonly property real overhang: (magScale - 1) * (host.iconSize + 10)
+    readonly property real shift: (host.magLayout.shifts[index] || 0) + host.dragShift(index)
     z: magScale > 1.01 ? 1 + magScale : 0
 
-    // Everything drawn for the entry, scaled from the screen-edge side and
-    // shifted apart while the dock magnifies; clicks stay on the base cell.
+    // Everything drawn for the entry, scaled from the screen-edge side (so it
+    // grows out past the dock's open side, never into the screen edge) and
+    // shifted apart along the dock while it magnifies.
     Item {
       id: body
       anchors.fill: parent
       opacity: di.isDragged && host.dragRemove ? 0 : 1
       transform: [
         Scale {
-          origin.x: host.onRight ? body.width : 0
-          origin.y: body.height / 2
+          origin.x: host.horizontal ? body.width / 2 : (host.onRight ? body.width : 0)
+          origin.y: host.horizontal ? body.height : body.height / 2
           xScale: di.magScale
           yScale: di.magScale
         },
         Translate {
-          x: (di.magScale - 1) * 4 * (host.onRight ? 1 : -1)
-          y: (host.magLayout.shifts[di.index] || 0) + host.dragShift(di.index)
+          x: host.horizontal ? di.shift : 0
+          y: host.horizontal ? 0 : di.shift
+          Behavior on x { enabled: host.dragIndex >= 0; NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
           Behavior on y { enabled: host.dragIndex >= 0; NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
         }
       ]
@@ -1435,8 +1567,10 @@ Item {
         readonly property bool diamond: shape === "diamond"
         readonly property string mode: saved.iconPlate
         anchors.centerIn: parent
-        width: (host.iconSize + 8) * (diamond && di.isIcon ? 0.8 : 1)
-        height: di.isIcon ? width : di.height - 2
+        readonly property real side: (host.iconSize + 8) * (diamond && di.isIcon ? 0.8 : 1)
+        // A spacer or divider's tile fills its (short) cell along the dock.
+        width: di.isIcon || !host.horizontal ? side : di.width - 2
+        height: di.isIcon ? side : (host.horizontal ? side : di.height - 2)
         rotation: diamond && di.isIcon ? 45 : 0
         radius: !di.isIcon ? 4
           : shape === "circle" ? width / 2
@@ -1456,7 +1590,8 @@ Item {
       Rectangle {
         visible: di.isDivider
         anchors.centerIn: parent
-        width: host.iconSize; height: 1
+        width: host.horizontal ? 1 : host.iconSize
+        height: host.horizontal ? host.iconSize : 1
         color: host.line
         opacity: di.isPlaceholder ? 0.5 : 1
       }
@@ -1474,6 +1609,11 @@ Item {
     MouseArea {
       id: diMouse
       anchors.fill: parent
+      // The click area follows a magnified icon out past the dock (only
+      // outward; along the dock it stays on the cell, so it never jumps).
+      anchors.leftMargin: host.edge === "right" ? -di.overhang : 0
+      anchors.rightMargin: host.edge === "left" ? -di.overhang : 0
+      anchors.topMargin: host.onBottom ? -di.overhang : 0
       // Not isPlaceholder: the dragged item's own area holds the grab.
       enabled: !di.isIncoming
       hoverEnabled: true
@@ -1486,7 +1626,7 @@ Item {
       onContainsMouseChanged: {
         if (containsMouse && host.dragIndex < 0 && di.isIcon) {
           host.hoverLabel = host.itemLabel(di.item)
-          host.hoverY = di.mapToItem(host.pillItem, 0, di.height / 2).y
+          host.hoverPos = host.along(di.mapToItem(host.pillItem, di.width / 2, di.height / 2))
         } else if (!containsMouse && host.hoverLabel === host.itemLabel(di.item)) {
           host.hoverLabel = ""
         }
@@ -1506,9 +1646,12 @@ Item {
           host.dropIndex = di.index
           host.dragIndex = di.index
         }
-        host.dragY = p.y
-        host.dragRemove = p.x < -host.dockWidth * 0.6 || p.x > host.pillItem.width + host.dockWidth * 0.6
-        host.dropIndex = host.indexAtPillY(p.y)
+        // Off the dock across its depth removes; along it reorders.
+        var across = host.horizontal ? p.y : p.x
+        var depth = host.horizontal ? host.pillItem.height : host.pillItem.width
+        host.dragPos = host.along(p)
+        host.dragRemove = across < -host.dockWidth * 0.6 || across > depth + host.dockWidth * 0.6
+        host.dropIndex = host.indexAt(host.dragPos)
       }
       onReleased: function(mouse) {
         if (!moved) return
@@ -1523,7 +1666,7 @@ Item {
         if (moved) return
         if (mouse.button === Qt.RightButton) {
           host.settingsOpen = false
-          host.menuY = di.mapToItem(host.pillItem, 0, di.height / 2).y
+          host.menuPos = host.along(di.mapToItem(host.pillItem, di.width / 2, di.height / 2))
           host.menuIndex = host.menuIndex === di.index ? -1 : di.index
         } else {
           host.menuIndex = -1
@@ -1567,8 +1710,8 @@ Item {
     property bool highlighted: false
     property real glyphRotation: 0
     signal activated()
-    width: host.dockWidth - 8
-    height: host.slot
+    width: host.horizontal ? host.slot : host.dockWidth - 8
+    height: host.horizontal ? host.dockWidth - 8 : host.slot
 
     Rectangle {
       anchors.centerIn: parent
@@ -1591,7 +1734,7 @@ Item {
       cursorShape: Qt.PointingHandCursor
       onClicked: btn.activated()
       onContainsMouseChanged: {
-        if (containsMouse) { host.hoverLabel = btn.hint; host.hoverY = btn.mapToItem(host.pillItem, 0, btn.height / 2).y }
+        if (containsMouse) { host.hoverLabel = btn.hint; host.hoverPos = host.along(btn.mapToItem(host.pillItem, btn.width / 2, btn.height / 2)) }
         else if (host.hoverLabel === btn.hint) host.hoverLabel = ""
       }
     }

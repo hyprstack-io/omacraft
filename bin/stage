@@ -1,0 +1,47 @@
+#!/bin/sh
+# Lays out everything the package installs. Both PKGBUILDs call this.
+#   bin/stage <built omacraft binary> <destination root>
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+binary=$1
+dest=$2
+cd "$ROOT"
+
+install -Dm755 "$binary" "$dest/usr/bin/omacraft"
+install -Dm755 bin/omacraft-doctor "$dest/usr/bin/omacraft-doctor"
+install -Dm644 LICENSE "$dest/usr/share/licenses/omacraft/LICENSE"
+install -Dm644 THIRD-PARTY-NOTICES.md "$dest/usr/share/licenses/omacraft/THIRD-PARTY-NOTICES.md"
+install -Dm644 README.md "$dest/usr/share/doc/omacraft/README.md"
+for size in 16 22 24 32 48 64 128 256 512; do
+  install -Dm644 "pkgbuild/icons/omacraft-$size.png" "$dest/usr/share/icons/hicolor/${size}x$size/apps/omacraft.png"
+done
+install -Dm644 pkgbuild/omacraft.desktop "$dest/usr/share/applications/omacraft.desktop"
+
+# Every plugin OmaCraft manages, under its id. Installing one from the app
+# links ~/.config/omarchy/plugins/<id> here, so the plugins update with the
+# package. Their own licences go along.
+for dir in plugins/*/; do
+  id=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["id"])' "$dir/manifest.json")
+  install -dm755 "$dest/usr/share/omacraft/plugins/$id"
+  rsync -r --links --perms --chmod=u+rwX,go+rX,go-w \
+    --exclude='.claude' --exclude='__pycache__' --exclude='node_modules' --exclude='*.bak*' \
+    "$dir" "$dest/usr/share/omacraft/plugins/$id/"
+done
+
+# The login theme, drawn by the lock plugin's own scene, and its one root helper.
+login="$dest/usr/share/sddm/themes/omacraft"
+install -Dm644 packaging/login/Main.qml "$login/Main.qml"
+install -Dm644 packaging/login/metadata.desktop "$login/metadata.desktop"
+install -Dm644 packaging/login/theme.conf "$login/theme.conf"
+install -Dm644 plugins/lock/LockScene.qml "$login/LockScene.qml"
+install -Dm644 plugins/lock/LockDefaults.js "$login/LockDefaults.js"
+install -Dm755 packaging/login/omacraft-login "$dest/usr/lib/omacraft/omacraft-login"
+install -Dm644 packaging/login/io.github.sk33m.omacraft.login.policy \
+  "$dest/usr/share/polkit-1/actions/io.github.sk33m.omacraft.login.policy"
+
+# The HyprStack boot animation, which Boot Splash can make the boot screen.
+splash="$dest/usr/share/plymouth/themes/hyprstack-boot"
+install -dm755 "$splash/frames"
+install -m644 plymouth/hyprstack-boot/*.plymouth plymouth/hyprstack-boot/*.script plymouth/hyprstack-boot/*.png "$splash/"
+install -m644 plymouth/hyprstack-boot/frames/*.png "$splash/frames/"

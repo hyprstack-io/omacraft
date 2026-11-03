@@ -25,11 +25,14 @@ class Plugins : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantList plugins READ plugins NOTIFY changed)
     Q_PROPERTY(bool shellRunning READ shellRunning NOTIFY changed)
+    Q_PROPERTY(bool shellInstalled READ shellInstalled CONSTANT)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
     Q_PROPERTY(QString error READ error NOTIFY messageChanged)
     Q_PROPERTY(QString notice READ notice NOTIFY messageChanged)
 
 public:
+    static inline const QString kLockId = "omacraft.lock";
+
     struct Definition {
         QString id;
         QString name;
@@ -48,6 +51,7 @@ public:
 
     QVariantList plugins() const { return m_plugins; }
     bool shellRunning() const { return m_shellRunning; }
+    bool shellInstalled() const;
     bool busy() const { return m_busy; }
     QString error() const { return m_error; }
     QString notice() const { return m_notice; }
@@ -121,6 +125,11 @@ private:
     };
     // Runs steps one after another, stopping at the first that fails.
     void runSteps(QList<Step> steps, const QString &doneNotice);
+    // Swaps OmaCraft's lock in or back out, never leaving the shell without one.
+    QStringList lockServices(const QJsonObject &shell) const;
+    void swapLockIn(QJsonObject &shell, const QString &id, bool on);
+    void switchLock(bool on, bool checkAfter);
+    void checkLock(bool on);
     void setBusy(bool busy);
     void setError(const QString &message);
     void setNotice(const QString &message);

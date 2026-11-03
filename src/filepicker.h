@@ -15,6 +15,10 @@ public:
     // purpose comes back with the answer, so one picker serves several fields.
     virtual void chooseFolder(const QString &purpose, const QString &title, const QString &startFolder) = 0;
     virtual void chooseIso(const QString &startFolder) = 0;
+    // A picture: answers through folderSelected, under the purpose it was given.
+    virtual void chooseImage(const QString &, const QString &, const QString &) {}
+    // An archive (.tar.*, .zip, .7z): answers through folderSelected too.
+    virtual void chooseArchive(const QString &, const QString &, const QString &) {}
 
 signals:
     void folderSelected(const QString &purpose, const QUrl &url);

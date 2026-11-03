@@ -150,7 +150,7 @@ Item {
                     Label {
                         id: tagline
                         Layout.alignment: Qt.AlignHCenter
-                        readonly property string full: "one home for every skll omarchy plugin"
+                        readonly property string full: "Omarchy UI/UX Tweakz Suite"
                         property int shown: 0
                         property bool caret: true
                         text: "› " + full.substring(0, shown) + (caret ? "▌" : " ")
@@ -253,7 +253,9 @@ Item {
                     onDismissed: plugins.dismissMessages()
                 }
                 MessageBar {
-                    error: plugins.shellRunning ? "" : "The Omarchy shell isn't answering. Switches still save, and take hold when it starts (omarchy-restart-shell)."
+                    error: plugins.shellRunning ? ""
+                           : plugins.shellInstalled ? "The Omarchy shell isn't answering. Switches still save, and take hold when it starts (omarchy-restart-shell)."
+                           : "OmaCraft's plugins run in the Omarchy 4 shell, which isn't on this system, so they won't load. Run omacraft-doctor in a terminal to see what's missing."
                 }
 
                 // Plugins that still have an icon of their own on the bar.
@@ -312,7 +314,7 @@ Item {
                             }
                             Item { Layout.fillWidth: true }
                             Button { text: "Check again"; flat: true; focusPolicy: Qt.NoFocus; enabled: !plugins.busy; onClicked: plugins.refresh() }
-                            Button { text: "Restart shell"; flat: true; focusPolicy: Qt.NoFocus; enabled: !plugins.busy; onClicked: plugins.restartShell() }
+                            Button { text: "Restart shell"; visible: plugins.shellInstalled; flat: true; focusPolicy: Qt.NoFocus; enabled: !plugins.busy; onClicked: plugins.restartShell() }
                         }
 
                         GridLayout {
@@ -356,7 +358,7 @@ Item {
                                     { page: "iso", name: "OmaBuilds", glyph: "\u{f0a4f}", what: "Arch ISOs with archiso, written to USB" },
                                     { page: "saver", name: "Screensaver", glyph: "\u{f1104}", what: "The Omarchy screensaver's art and effects" },
                                     { page: "lights", name: "Alienflare", glyph: "\u{f030c}", what: "Per-key lighting for the Alienware x15" }
-                                ]
+                                ].filter(item => item.page !== "lights" || alienwareKeys)
                                 delegate: Rectangle {
                                     id: builtIn
                                     required property var modelData
@@ -625,6 +627,26 @@ Item {
                                 text: edgeTab.title
                                 placeholderText: "OmaCraft"
                                 onEditingFinished: if (text !== edgeTab.title) edgeTab.setOption("title", text)
+                            }
+                        }
+
+                        // Ten seconds of the real tab, to judge changes by.
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 4
+                            spacing: 10
+                            AccentButton {
+                                text: win.previewLeft > 0 ? "Hide the tab" : "Show the tab for " + win.previewSeconds + " seconds"
+                                enabled: edgeTab.supported
+                                onClicked: win.previewLeft > 0 ? win.endEdgePreview() : win.previewEdgeTab()
+                            }
+                            Label {
+                                Layout.fillWidth: true
+                                visible: win.previewLeft > 0
+                                text: "Hiding in " + win.previewLeft + "s. Changes above show on it as you make them."
+                                color: theme.textDim
+                                font.pixelSize: 12
+                                wrapMode: Text.WordWrap
                             }
                         }
                     }

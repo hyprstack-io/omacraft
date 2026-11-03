@@ -180,11 +180,12 @@ Item {
             visible: dock.available
             Layout.fillWidth: true
             // Tall enough that a long dock still reads.
-            Layout.preferredHeight: Math.min(440, Math.max(260, stageDock.naturalHeight * 0.55 + 24))
+            Layout.preferredHeight: stageDock.horizontal ? 260 : Math.min(440, Math.max(260, stageDock.naturalHeight * 0.55 + 24))
             previewing: page.previewName !== ""
             edge: page.stageSettings.position || "right"
-            edgeSize: stageDock.width + (page.stageSettings.gap || 10)
+            edgeSize: (stageDock.horizontal ? stageDock.height : stageDock.width) + (page.stageSettings.gap || 10)
             captionRight: edge === "right" ? stageDock.width + (page.stageSettings.gap || 10) + 12 : 10
+            captionBottom: edge === "bottom" ? stageDock.height + Math.min(30, page.stageSettings.gap || 10) + 8 : 8
             caption: page.previewName !== "" ? "Preview · " + page.previewName + " · click to apply"
                    : [page.currentLook ? page.currentLook.name + " look" : "Your look", (page.s.position || "right") + " edge",
                       dock.dock.length + " items", dock.agents.filter(a => a.shown).length + " agent tabs",
@@ -199,8 +200,11 @@ Item {
                 panelOpen: page.panelPeek
                 selectedIndex: page.tab === 1 ? page.selItem : -1
                 fitHeight: stage.height - 24
-                anchors.verticalCenter: parent.verticalCenter
-                x: (page.stageSettings.position || "right") === "right" ? stage.width - width - Math.min(30, page.stageSettings.gap || 10) : Math.min(30, page.stageSettings.gap || 10)
+                fitWidth: stage.width - 40
+                // Its edge of the stage, centred along it.
+                readonly property real inset: Math.min(30, page.stageSettings.gap || 10)
+                x: horizontal ? (stage.width - width) / 2 : (page.stageSettings.position || "right") === "right" ? stage.width - width - inset : inset
+                y: horizontal ? stage.height - height - inset : (stage.height - height) / 2
                 onItemClicked: index => { page.selItem = index; page.tab = 1; }
             }
 
@@ -209,7 +213,8 @@ Item {
                 anchors.right: (page.stageSettings.position || "right") === "right" ? undefined : parent.right
                 anchors.top: parent.top
                 anchors.margins: 8
-                text: page.panelPeek ? "\u{f0141}  Hide the agents panel" : "\u{f0142}  Peek at the agents panel"
+                text: (stageDock.horizontal ? (page.panelPeek ? "\u{f0140}" : "\u{f0143}") : (page.panelPeek ? "\u{f0141}" : "\u{f0142}"))
+                      + (page.panelPeek ? "  Hide the agents panel" : "  Peek at the agents panel")
                 flat: true
                 Material.foreground: "#eeeeee"
                 focusPolicy: Qt.NoFocus
@@ -955,7 +960,7 @@ Item {
                             RowLayout {
                                 spacing: 18
                                 EdgePicker {
-                                    edges: ["left", "right"]
+                                    edges: ["left", "bottom", "right"]
                                     current: page.s.position || "right"
                                     onPicked: edge => dock.set("position", edge)
                                 }
@@ -974,6 +979,12 @@ Item {
                                     }
                                 }
                             }
+                            SwitchRow {
+                                label: "Auto-hide"
+                                hint: "Slides behind its edge when you're not using it. Push the pointer against that edge to bring it back."
+                                checked: page.s.autoHide === true
+                                onToggled: on => dock.set("autoHide", on)
+                            }
                             SliderRow { label: "Floating gap"; from: 0; to: 48; stepSize: 1; decimals: 0; suffix: " px"; value: page.s.gap || 0; onMoved: v => dock.set("gap", Math.round(v)) }
                             SliderRow { label: "Icon size"; from: 18; to: 56; stepSize: 1; decimals: 0; suffix: " px"; value: page.s.iconSize || 28; onMoved: v => dock.set("iconSize", Math.round(v)) }
                             SliderRow { label: "Opacity"; from: 0.3; to: 1; stepSize: 0.01; value: page.s.opacity || 0.94; onMoved: v => dock.set("opacity", Math.round(v * 100) / 100) }
@@ -989,10 +1000,12 @@ Item {
                             anchors.margins: 14
                             spacing: 10
                             SectionLabel { text: "The agents panel" }
-                            SliderRow { label: "Panel width"; from: 320; to: 1600; stepSize: 10; decimals: 0; suffix: " px"; value: page.s.width || 520; onMoved: v => dock.set("width", Math.round(v)) }
+                            SliderRow { label: (page.s.position === "bottom") ? "Panel height" : "Panel width"; from: page.s.position === "bottom" ? 220 : 320; to: page.s.position === "bottom" ? 900 : 1600; stepSize: 10; decimals: 0; suffix: " px"; value: page.s.width || 520; onMoved: v => dock.set("width", Math.round(v)) }
                             SwitchRow {
                                 label: "Reserve space while collapsed"
-                                hint: "Windows tile beside the dock instead of under it."
+                                hint: page.s.autoHide === true ? "Off while the dock auto-hides: windows use the edge it hides in."
+                                                               : "Windows tile beside the dock instead of under it."
+                                enabled: page.s.autoHide !== true
                                 checked: page.s.reserveCollapsed === true
                                 onToggled: on => dock.set("reserveCollapsed", on)
                             }

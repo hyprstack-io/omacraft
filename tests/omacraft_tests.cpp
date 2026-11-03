@@ -7,23 +7,39 @@
 #include <QPainter>
 #include <QTemporaryDir>
 #include <QtTest>
+#include <QRegularExpression>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include "agentdock.h"
 #include "animations.h"
 #include "asciiview.h"
+#include <QStandardPaths>
+#include <QScopeGuard>
 #include "bar.h"
 #include "edgetab.h"
+#include "hardware.h"
 #include "introreel.h"
 #include "omascii.h"
 #include "bootsplash.h"
 #include "burn.h"
 #include "hyprcraft.h"
 #include "launcher.h"
+#include "locklogon.h"
 #include "omascii.h"
 #include "plugins.h"
 #include "proc.h"
+#include <QQmlApplicationEngine>
+#include <QQmlComponent>
+#include <QQmlContext>
+#include <QQuickItem>
+#include <QQuickWindow>
+#include <memory>
+#include "marketplace.h"
+#include "theme.h"
 #include "rofioma.h"
+#include <QProcess>
+#include <QImage>
 #include "screensaver.h"
 #include "theme.h"
 #include "themesync.h"
@@ -67,6 +83,33 @@ void OmacraftTests::initTestCase()
     qputenv("OMACRAFT_OMARCHY_THEMES", "/nonexistent");
     // Nor do they see the plugins an installed package carries.
     qputenv("OMACRAFT_PLUGINS_DIR", "/nonexistent");
+}
+
+void OmacraftTests::findsAlienwareKeys()
+{
+    qunsetenv("OMACRAFT_SHOW_LIGHTS");
+    const auto write = [](const QString &path, const QByteArray &text) {
+        QVERIFY(QDir().mkpath(QFileInfo(path).absolutePath()));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(text);
+    };
+
+    QTemporaryDir other;
+    write(other.path() + "/class/dmi/id/sys_vendor", "LENOVO\n");
+    write(other.path() + "/bus/usb/devices/1-1/idVendor", "046d\n");
+    QVERIFY(!Hardware::hasAlienwareKeys(other.path()));
+
+    QTemporaryDir dmi;
+    write(dmi.path() + "/class/dmi/id/sys_vendor", "Alienware\n");
+    QVERIFY(Hardware::hasAlienwareKeys(dmi.path()));
+
+    QTemporaryDir usb;
+    write(usb.path() + "/bus/usb/devices/1-4/idVendor", "187c\n");
+    QVERIFY(Hardware::hasAlienwareKeys(usb.path()));
+
+    QTemporaryDir nothing;
+    QVERIFY(!Hardware::hasAlienwareKeys(nothing.path()));
 }
 
 void OmacraftTests::themeFallsBack()
@@ -401,6 +444,19 @@ void OmacraftTests::dockSavesSettingsWhileStopped()
     QCOMPARE(saved.value("gap").toInt(), 6);
     QCOMPARE(saved.value("position").toString(), QString("left"));
     QCOMPARE(saved.value("activeTab").toString(), QString(""));
+}
+
+void OmacraftTests::dockTakesBottomEdgeAndAutoHide()
+{
+    QTemporaryDir home;
+    AgentDock dock({}, [] { return false; }, home.path());
+    QVERIFY(AgentDock::settingKeys().contains("autoHide"));
+    QCOMPARE(dock.settings().value("autoHide").toBool(), false);
+    dock.set("position", "bottom");
+    dock.set("autoHide", true);
+    AgentDock again({}, [] { return false; }, home.path());
+    QCOMPARE(again.settings().value("position").toString(), QString("bottom"));
+    QCOMPARE(again.settings().value("autoHide").toBool(), true);
 }
 
 void OmacraftTests::dockItemsMoveAndKeepOnlyTheirFields()
@@ -1696,6 +1752,115 @@ void OmacraftTests::rofiomaScriptsParse() {
     }
 }
 
+void OmacraftTests::rofiomaWritesWlogout() {
+    QTemporaryDir home;
+    Rofioma rofioma(home.path(), false);
+    rofioma.set("power.style", "wlogout");
+    rofioma.setPowerButton(3, "enabled", false); // hibernate
+    const QString dir = rofioma.outputDir() + "/wlogout";
+
+    // One layout entry per enabled button, each calling back into power.sh.
+    const QString layout = QString::fromUtf8(readBytes(dir + "/layout"));
+    QCOMPARE(layout.count("\"label\""), 5);
+    QVERIFY(layout.contains("power.sh' run 4"));
+    QVERIFY(!layout.contains("hibernate"));
+
+    // HyDE's hover: the overshooting curve, with the bar's ends rounded.
+    const QString css = QString::fromUtf8(readBytes(dir + "/style.css"));
+    QVERIFY(css.contains("cubic-bezier(.55, 0.0, .28, 1.682)"));
+    QVERIFY(css.contains("#lock {"));
+    QVERIFY(css.contains("margin: @MGN@px 0px @MGN@px @MGN@px;"));
+    QVERIFY(css.contains("margin: @HVR@px @MGN@px @HVR@px 0px;"));
+
+    for (const char *icon : {"lock.png", "lock-hover.png", "shutdown.png"}) {
+        QImage image(dir + "/" + icon);
+        QVERIFY2(!image.isNull(), icon);
+        QCOMPARE(image.width(), 256);
+    }
+    const QString script = QString::fromUtf8(readBytes(rofioma.outputDir() + "/power.sh"));
+    QVERIFY(script.contains("exec wlogout -b 5"));
+    QVERIFY(script.contains("command -v wlogout"));
+}
+
+void OmacraftTests::rofiomaHandsPopupsToTheOverlay() {
+    QTemporaryDir home;
+    Rofioma rofioma(home.path(), false);
+    const QString id = rofioma.addMenu("Apps");
+    rofioma.setPowerButton(3, "enabled", false);
+    const QString dir = rofioma.outputDir();
+
+    // What's drawn goes to the overlay; the commands stay in the scripts.
+    const QJsonObject popups = readJson(dir + "/popups.json");
+    QCOMPARE(popups.value("power").toObject().value("buttons").toArray().size(), 5);
+    QVERIFY(!popups.value("power").toObject().value("buttons").toArray().first().toObject().contains("command"));
+    QCOMPARE(popups.value("menus").toArray().first().toObject().value("id").toString(), id);
+    QVERIFY(!QString::fromUtf8(readBytes(dir + "/popups.json")).contains("omarchy-system"));
+
+    // Each script asks the shell first, and the overlay runs `exec <n>`.
+    const QString power = QString::fromUtf8(readBytes(dir + "/power.sh"));
+    QVERIFY(power.contains(R"(omarchy-shell shell summon omacraft.rofioma '{"popup":"power","toggle":true}')"));
+    QVERIFY(power.contains("elif [ \"${1:-}\" = exec ]; then"));
+    QVERIFY(QString::fromUtf8(readBytes(dir + "/menu-" + id + ".sh")).contains("\"popup\":\"menu-" + id + "\""));
+    QVERIFY(QString::fromUtf8(readBytes(dir + "/keybinds.sh")).contains("\"popup\":\"keybinds\""));
+
+    // rofi only, when the look says so.
+    rofioma.set("look.engine", "rofi");
+    QVERIFY(!QString::fromUtf8(readBytes(dir + "/power.sh")).contains("omacraft.rofioma"));
+    for (const QString &name : QDir(dir).entryList({"*.sh"}, QDir::Files)) {
+        QProcess process;
+        process.start("sh", {"-n", dir + "/" + name});
+        QVERIFY(process.waitForFinished());
+        QCOMPARE(process.exitCode(), 0);
+    }
+}
+
+void OmacraftTests::rofiomaMovesBinds() {
+    QTemporaryDir home;
+    writeFile(home.path() + "/.config/hypr/hyprland.lua",
+              "-- mine\nrequire(\"default.hypr.omarchy\")\nrequire(\"hypr.bindings\")\n");
+    Rofioma rofioma(home.path(), false);
+
+    QVERIFY(!rofioma.moveBind("SUPER + RETURN", "SUPER + SHIFT + nonsense key").isEmpty());
+    QCOMPARE(rofioma.moveBind("super + return", "alt+super+t"), QString());
+    QCOMPARE(readJson(rofioma.configPath()).value("keymap").toObject().value("SUPER + RETURN").toString(),
+             QString("SUPER + ALT + T"));
+
+    // Its line goes above Omarchy's binds, once, with the file kept first.
+    const QString main = QString::fromUtf8(readBytes(home.path() + "/.config/hypr/hyprland.lua"));
+    QVERIFY(main.indexOf("hypr.omacraft_keymap") < main.indexOf("require(\"default.hypr.omarchy\")"));
+    QVERIFY(main.startsWith("-- mine\n"));
+    QCOMPARE(QDir(home.path() + "/.config/hypr").entryList({"hyprland.lua.before-keymap-*"}).size(), 1);
+    const QString lua = QString::fromUtf8(readBytes(rofioma.keymapPath()));
+    QVERIFY(lua.contains(R"(["SUPER + RETURN"] = "SUPER + ALT + T",)"));
+    QVERIFY(lua.contains("hl.define_submap(\"omacraft_capture\""));
+
+    // Moving it again goes from where it is now; the map keeps its own keys.
+    QCOMPARE(rofioma.moveBind("SUPER + ALT + T", "SUPER + F9"), QString());
+    QJsonObject keymap = readJson(rofioma.configPath()).value("keymap").toObject();
+    QCOMPARE(keymap.size(), 1);
+    QCOMPARE(keymap.value("SUPER + RETURN").toString(), QString("SUPER + F9"));
+
+    // No keys puts it back where it started.
+    QCOMPARE(rofioma.moveBind("SUPER + F9", ""), QString());
+    QVERIFY(readJson(rofioma.configPath()).value("keymap").toObject().isEmpty());
+    QCOMPARE(QString::fromUtf8(readBytes(home.path() + "/.config/hypr/hyprland.lua")).count("hypr.omacraft_keymap"), 1);
+}
+
+void OmacraftTests::rofiomaReadsBinds() {
+    const QByteArray json = R"([
+        {"modmask":65,"key":"q","keycode":0,"description":"Close","has_description":true,"submap":"","dispatcher":"__lua","arg":"3","mouse":false},
+        {"modmask":64,"key":"F9","keycode":0,"description":"Terminal","has_description":true,"submap":"","dispatcher":"__lua","arg":"5","mouse":false},
+        {"modmask":0,"key":"XF86AudioMute","keycode":0,"description":"","has_description":false,"submap":"","dispatcher":"exec","arg":"x","mouse":false},
+        {"modmask":64,"key":"mouse:272","keycode":0,"description":"Move","has_description":true,"submap":"","dispatcher":"movewindow","arg":"","mouse":true}
+    ])";
+    const QVariantList binds = Rofioma::bindsFrom(json, QJsonObject{{"SUPER + RETURN", "SUPER + F9"}}, true);
+    QCOMPARE(binds.size(), 2);
+    QCOMPARE(binds.at(0).toMap().value("keys").toString(), QString("SUPER + SHIFT + Q"));
+    QCOMPARE(binds.at(1).toMap().value("movedFrom").toString(), QString("SUPER + RETURN"));
+    QCOMPARE(Rofioma::bindsFrom(json, {}, false).size(), 3);
+    QCOMPARE(Rofioma::canonicalKeys("shift+win  q"), QString("SUPER + SHIFT + Q"));
+}
+
 void OmacraftTests::rofiomaKeepsMenusTidy() {
     QTemporaryDir home;
     Rofioma rofioma(home.path(), false);
@@ -1741,6 +1906,34 @@ void OmacraftTests::rofiomaBindsKeysThroughHyprlandLua() {
 
     QVERIFY(rofioma.bindKey("power", ""));
     QVERIFY(!QString::fromUtf8(readBytes(rofioma.keysPath())).contains("Power menu"));
+
+    // A popup ROFIoma doesn't have is refused rather than saved and never bound.
+    QVERIFY(!rofioma.bindKey("notifcations", "SUPER + ALT + N"));
+    QVERIFY(rofioma.error().contains("notifcations"));
+    QVERIFY(!rofioma.config().value("keys").toMap().contains("notifcations"));
+
+    // The control centre key: swaync's panel when swaync runs, else the shell's history.
+    QVERIFY(rofioma.bindKey("notifications", "super alt n"));
+    QVERIFY(QString::fromUtf8(readBytes(rofioma.keysPath()))
+                .contains("o.bind(\"SUPER + ALT + N\", \"Notification control centre\", \"sh '" + rofioma.outputDir() + "/notifications.sh'\")"));
+    QTemporaryDir bin;
+    const QString log = bin.filePath("ran");
+    for (const QString &tool : {"swaync-client", "omarchy-shell"})
+        writeFile(bin.filePath(tool), QString("#!/bin/sh\necho \"%1 $*\" >> '%2'\n").arg(tool, log).toUtf8());
+    for (bool running : {true, false}) {
+        writeFile(bin.filePath("pgrep"), running ? "#!/bin/sh\nexit 0\n" : "#!/bin/sh\nexit 1\n");
+        for (const QString &tool : {"swaync-client", "omarchy-shell", "pgrep"})
+            QFile::setPermissions(bin.filePath(tool), QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+        QFile::remove(log);
+        QProcess script;
+        QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+        env.insert("PATH", bin.path() + ":/usr/bin:/bin");
+        script.setProcessEnvironment(env);
+        script.start("sh", {rofioma.outputDir() + "/notifications.sh"});
+        QVERIFY(script.waitForFinished());
+        QCOMPARE(QString::fromUtf8(readBytes(log)).trimmed(),
+                 running ? QString("swaync-client --skip-wait --toggle-panel") : QString("omarchy-shell notifications showHistory"));
+    }
 }
 
 void OmacraftTests::rofiomaHandsNotificationsToSwaync() {
@@ -1777,4 +1970,845 @@ void OmacraftTests::rofiomaFindsSymbols() {
     QCOMPARE(rofioma.searchSymbols("emoji", "grinning face", {}, 1).size(), 1);
     QVERIFY(rofioma.symbolSets("emoji").contains("Smileys & Emotion"));
     QCOMPARE(Rofioma::slug("  Hello, World  "), QString("hello-world"));
+}
+
+// ---------------------------------------------------------------- control centre
+
+void OmacraftTests::rofiomaBuildsTheControlCentre() {
+    QTemporaryDir home;
+    Rofioma rofioma(home.path(), false);
+    const auto widgets = [&] { return rofioma.config().value("notify").toMap().value("widgets").toStringList(); };
+    QCOMPARE(widgets(), QStringList({"title", "dnd", "mpris", "notifications"}));
+
+    // Dropped at the end, a widget stays above the list.
+    rofioma.placeWidget("volume", -1);
+    QCOMPARE(widgets(), QStringList({"title", "dnd", "mpris", "volume", "notifications"}));
+    rofioma.placeWidget("backlight", 1);
+    QCOMPARE(widgets().indexOf("backlight"), 1);
+    // Already there, or unknown: nothing happens.
+    rofioma.placeWidget("backlight", 0);
+    rofioma.placeWidget("nonsense", 0);
+    QCOMPARE(widgets().size(), 6);
+
+    rofioma.moveWidget(0, 2);
+    QCOMPARE(widgets().indexOf("title"), 2);
+    rofioma.moveWidget(0, 99);
+    QCOMPARE(widgets().size(), 6);
+    rofioma.removeWidget("mpris");
+    QVERIFY(!widgets().contains("mpris"));
+}
+
+void OmacraftTests::rofiomaInstallsWidgets() {
+    QTemporaryDir home;
+    Rofioma rofioma(home.path(), false);
+    const QVariantList store = rofioma.widgetStore();
+    QVERIFY(store.size() >= 6);
+
+    const QString id = "buttons-grid#session";
+    rofioma.installWidget(id);
+    const auto stored = [&] { return rofioma.widgetStore(); };
+    QVERIFY(std::any_of(stored().cbegin(), stored().cend(), [&](const QVariant &w) {
+        return w.toMap().value("id") == id && w.toMap().value("installed").toBool();
+    }));
+    const QVariantList library = rofioma.widgetLibrary();
+    QVERIFY(std::any_of(library.cbegin(), library.cend(), [&](const QVariant &w) { return w.toMap().value("id") == id; }));
+
+    // Every widget in the store survives its own cleaning.
+    for (const auto &value : store)
+        QVERIFY(!Rofioma::cleanWidget(QJsonObject::fromVariantMap(value.toMap())).isEmpty());
+
+    // Only placed widgets reach swaync's config.
+    rofioma.set("notify.manage", true);
+    QJsonObject config = readJson(rofioma.swayncDir() + "/config.json");
+    QVERIFY(!config.value("widget-config").toObject().contains(id));
+    rofioma.placeWidget(id, 1);
+    config = readJson(rofioma.swayncDir() + "/config.json");
+    QVERIFY(config.value("widgets").toArray().contains(id));
+    QCOMPARE(config.value("widget-config").toObject().value(id).toObject().value("actions").toArray().size(), 4);
+
+    rofioma.uninstallWidget(id);
+    config = readJson(rofioma.swayncDir() + "/config.json");
+    QVERIFY(!config.value("widgets").toArray().contains(id));
+
+    const QString made = rofioma.createWidget("buttons", "My Tools", {{"text", "Files = nautilus\nnot a button\nTerm = foot"}});
+    QCOMPARE(made, QString("buttons-grid#my-tools"));
+    QCOMPARE(rofioma.config().value("notify").toMap().value("customWidgets").toMap().value(made).toMap()
+                 .value("config").toMap().value("actions").toList().size(), 2);
+    // The same name twice makes a second widget, not a replacement.
+    QCOMPARE(rofioma.createWidget("buttons", "My Tools", {{"text", "A = b"}}), QString("buttons-grid#my-tools-2"));
+    QVERIFY(rofioma.createWidget("buttons", "Empty", {{"text", "no equals here"}}).isEmpty());
+
+    // A pack says what it would run before it's installed.
+    const QString pack = home.filePath("pack.json");
+    writeFile(pack, R"({"widgets":[{"id":"label#a","name":"A","config":{"text":"hi"}},
+                                   {"id":"slider#b","name":"B","config":{"cmd_getter":"get","cmd_setter":"set $value"}}]})");
+    const QVariantMap read = rofioma.readWidgetPack(pack);
+    QVERIFY(!read.contains("error"));
+    QCOMPARE(read.value("commands").toStringList(), QStringList({"get", "set $value"}));
+    QVERIFY(rofioma.installWidgetPack(pack));
+    QVERIFY(rofioma.config().value("notify").toMap().value("customWidgets").toMap().contains("slider#b"));
+}
+
+void OmacraftTests::rofiomaRejectsBadWidgets() {
+    QString problem;
+    QVERIFY(Rofioma::cleanWidget({{"id", "dnd"}, {"name", "x"}, {"config", QJsonObject{{"text", "x"}}}}, &problem).isEmpty());
+    QVERIFY(!problem.isEmpty());
+    QVERIFY(Rofioma::cleanWidget({{"id", "label#../../x"}, {"name", "x"}, {"config", QJsonObject{{"text", "x"}}}}).isEmpty());
+    QVERIFY(Rofioma::cleanWidget({{"id", "label#ok"}, {"name", ""}, {"config", QJsonObject{{"text", "x"}}}}).isEmpty());
+    QVERIFY(Rofioma::cleanWidget({{"id", "label#ok"}, {"name", "x"}, {"config", QJsonObject{{"nope", 1}}}}).isEmpty());
+
+    // Anything swaync doesn't read is left behind.
+    const QJsonObject kept = Rofioma::cleanWidget({{"id", "buttons-grid#ok"}, {"name", "x"},
+        {"config", QJsonObject{{"extra", 1}, {"actions", QJsonArray{QJsonObject{{"label", "a"}, {"command", "b"}, {"evil", 1}},
+                                                                   QJsonObject{{"label", "no command"}}}}}}});
+    const QJsonObject config = kept.value("config").toObject();
+    QVERIFY(!config.contains("extra"));
+    QCOMPARE(config.value("actions").toArray().size(), 1);
+    QVERIFY(!config.value("actions").toArray().first().toObject().contains("evil"));
+
+    QTemporaryDir home;
+    Rofioma rofioma(home.path(), false);
+    QVERIFY(rofioma.readWidgetPack(home.filePath("missing.json")).contains("error"));
+    writeFile(home.filePath("bad.json"), "not json");
+    QVERIFY(rofioma.readWidgetPack(home.filePath("bad.json")).contains("error"));
+    QVERIFY(!rofioma.installWidgetPack(home.filePath("bad.json")));
+}
+
+void OmacraftTests::rofiomaWritesNotificationEffects() {
+    QJsonObject notify = Rofioma::defaults().value("notify").toObject();
+    notify.insert("enter", "pop");
+    notify.insert("critical", "shake");
+    notify.insert("hover", "glow");
+    notify.insert("center", "fade");
+    notify.insert("duration", 300);
+    const QString css = Rofioma::swayncEffects(notify);
+    QVERIFY(css.contains("@keyframes rf-enter"));
+    QVERIFY(css.contains("animation: rf-enter 600ms"));
+    QVERIFY(css.contains("notificationwindow .notification.critical"));
+    QVERIFY(css.contains("rf-center 380ms"));
+    QVERIFY(!css.contains("%1"));
+    QCOMPARE(QJsonDocument::fromJson(Rofioma::swayncConfig(notify)).object().value("transition-time").toInt(), 300);
+
+    // OMACRAFT_TEST_SHOTS=dir saves every style, for GTK's own CSS parser.
+    const QString dir = qEnvironmentVariable("OMACRAFT_TEST_SHOTS");
+    if (!dir.isEmpty()) {
+        int n = 0;
+        for (const char *enter : {"slide", "fade", "pop", "drop", "flip"})
+            for (const char *critical : {"pulse", "glow", "shake"})
+                for (const char *hover : {"lift", "glow"})
+                    for (const char *center : {"slide", "fade", "pop"}) {
+                        notify.insert("enter", enter);
+                        notify.insert("critical", critical);
+                        notify.insert("hover", hover);
+                        notify.insert("center", center);
+                        writeFile(QString("%1/swaync-%2.css").arg(dir).arg(n++),
+                                  Rofioma::swayncCss({{"bg", "#101010"}, {"alt", "#202020"}, {"fg", "#eeeeee"}, {"muted", "#999999"},
+                                                      {"accent", "#00ffaa"}, {"accentFg", "#111111"}, {"urgent", "#ff4444"}},
+                                                     notify, Rofioma::defaults().value("look").toObject()).toUtf8());
+                    }
+    }
+
+    notify.insert("enter", "none");
+    notify.insert("critical", "none");
+    notify.insert("hover", "none");
+    notify.insert("center", "none");
+    QVERIFY(!Rofioma::swayncEffects(notify).contains("@keyframes"));
+}
+
+void OmacraftTests::rofiomaKeepsPowerEffects() {
+    QTemporaryDir home;
+    Rofioma rofioma(home.path(), false);
+    rofioma.set("power.enter", "burst");
+    rofioma.set("power.hover", "pulse");
+    rofioma.set("power.backdrop", "aurora");
+    const QString id = rofioma.addMenu("Tools");
+    rofioma.setMenu(id, "enter", "flip");
+    Rofioma again(home.path(), false);
+    const QJsonObject popups = readJson(again.outputDir() + "/popups.json");
+    QCOMPARE(popups.value("power").toObject().value("enter").toString(), QString("burst"));
+    QCOMPARE(popups.value("power").toObject().value("backdrop").toString(), QString("aurora"));
+    QCOMPARE(popups.value("menus").toArray().first().toObject().value("enter").toString(), QString("flip"));
+    // The page's lists and the overlay's styles are one set.
+    QVERIFY(Rofioma::powerEnters().size() >= 9);
+    QVERIFY(Rofioma::powerHovers().size() >= 6);
+}
+
+void OmacraftTests::rofiomaPicksOneCustomColor() {
+    QTemporaryDir home;
+    writeFile(home.filePath(".local/state/omarchy/current/theme/colors.toml"),
+              "background = \"#101010\"\nforeground = \"#eeeeee\"\naccent = \"#00ff00\"\ncolor1 = \"#ff0000\"\n");
+    Rofioma rofioma(home.path(), false);
+    const QVariantMap before = rofioma.palette();
+    rofioma.setCustomColor("accent", "#123ABC");
+    const QVariantMap look = rofioma.config().value("look").toMap();
+    QCOMPARE(look.value("colors").toString(), QString("custom"));
+    QCOMPARE(rofioma.palette().value("accent").toString(), QString("#123abc"));
+    // The other colours stay as the theme had them.
+    QCOMPARE(rofioma.palette().value("bg"), before.value("bg"));
+    QCOMPARE(rofioma.palette().value("fg"), before.value("fg"));
+    rofioma.setCustomColor("accent", "not a colour");
+    rofioma.setCustomColor("sky", "#000000");
+    QCOMPARE(rofioma.palette().value("accent").toString(), QString("#123abc"));
+}
+
+// ---------------------------------------------------------------- marketplace
+
+void OmacraftTests::marketReadsPlugins() {
+    const auto list = Marketplace::parsePlugins(R"({"plugins":[
+        {"id":"a.b","name":"Good","description":"Does things","author":"me","category":"Widgets","tags":["bar"],
+         "repo":"https://github.com/me/good","installAvailable":true,"verificationStatus":"verified","stars":3,
+         "previewThumbnail":"assets/img/plugins/1-good-card.webp","previewImage":"https://evil.example/x.webp"},
+        {"id":"c.d","name":"Bad repo","repo":"http://github.com/me/bad"},
+        {"id":"e.f","name":"Built in","repo":"https://github.com/me/x","sourceType":"builtin"},
+        {"id":"","name":"No id","repo":"https://github.com/me/y"}]})");
+    QCOMPARE(list.size(), 1);
+    const QVariantMap good = list.first().data;
+    QCOMPARE(good.value("id").toString(), QString("a.b"));
+    QVERIFY(good.value("verified").toBool());
+    QCOMPARE(good.value("thumbnail").toString(), QString("https://plugins.omarchy.org/assets/img/plugins/1-good-card.webp"));
+    // A picture anywhere else is dropped.
+    QVERIFY(good.value("image").toString().isEmpty());
+    QVERIFY(list.first().search.contains("bar"));
+    QVERIFY(Marketplace::parsePlugins("not json").isEmpty());
+}
+
+void OmacraftTests::marketReadsThemes() {
+    const auto list = Marketplace::parseThemes(R"(<li><a href="https://github.com/JJDizz1L/aetheria" class="x"><img src="/assets/themes/aetheria.webp" alt="Aetheria theme screenshot" width="1"/><span>Aetheria</span></a></li>
+        <li><a href="https://github.com/a/omarchy-all-hallows-theme/" class="x"><img src="/assets/themes/all-hallow-s-eve.webp" alt="All Hallow&#x27;s Eve theme screenshot"/></a></li>
+        <li><a href="https://github.com/a/omarchy-all-hallows-theme" class="x"><img src="/assets/themes/dupe.webp" alt="Dupe theme screenshot"/></a></li>
+        <li><a href="https://github.com/omacom/omarchy" class="x"><img src="/assets/logo.webp" alt="Logo"/></a></li>)");
+    QCOMPARE(list.size(), 2);
+    QCOMPARE(list.at(0).data.value("name").toString(), QString("Aetheria"));
+    QCOMPARE(list.at(0).data.value("image").toString(), QString("https://omarchy.org/assets/themes/aetheria.webp"));
+    QCOMPARE(list.at(0).data.value("author").toString(), QString("JJDizz1L"));
+    QCOMPARE(list.at(1).data.value("name").toString(), QString("All Hallow's Eve"));
+    QCOMPARE(list.at(1).data.value("folder").toString(), QString("all-hallows"));
+}
+
+void OmacraftTests::marketNamesThemesAsOmarchyDoes() {
+    QCOMPARE(Marketplace::themeNameFor("https://github.com/a/omarchy-Tokyo-Night-theme.git"), QString("tokyo-night"));
+    QCOMPARE(Marketplace::themeNameFor("https://github.com/a/aetheria"), QString("aetheria"));
+    QCOMPARE(Marketplace::themeNameFor("https://github.com/a/-dash"), QString());
+    QCOMPARE(Marketplace::themeNameFor("https://example.com/a/b"), QString());
+}
+
+void OmacraftTests::marketRefusesUnsafeRepositories() {
+    QCOMPARE(Marketplace::safeRepository("https://github.com/a/b.git"), QString("https://github.com/a/b"));
+    QCOMPARE(Marketplace::safeRepository("https://github.com/a/b/"), QString("https://github.com/a/b"));
+    for (const char *bad : {"http://github.com/a/b", "ext::sh -c id", "--upload-pack=x", "https://github.com/a/b/c",
+                            "https://github.com.evil.org/a/b", "git@github.com:a/b.git", "https://github.com/a/..",
+                            "https://github.com/a/b c"})
+        QVERIFY2(Marketplace::safeRepository(bad).isEmpty(), bad);
+}
+
+void OmacraftTests::marketKnowsThemeStates() {
+    const QString repo = "https://github.com/a/noir";
+    QHash<QString, QString> installed{{"noir", "https://github.com/a/noir.git"}, {"mine", ""}};
+    QCOMPARE(Marketplace::themeState("other", repo, installed, ""), QString("available"));
+    QCOMPARE(Marketplace::themeState("noir", repo, installed, ""), QString("installed"));
+    QCOMPARE(Marketplace::themeState("noir", repo, installed, "noir"), QString("current"));
+    // The folder is someone else's: installing would delete it.
+    QCOMPARE(Marketplace::themeState("mine", repo, installed, ""), QString("taken"));
+    QCOMPARE(Marketplace::themeState("noir", "https://github.com/b/noir", installed, ""), QString("taken"));
+}
+
+void OmacraftTests::marketBrowsesPages() {
+    QTemporaryDir home;
+    QJsonArray plugins;
+    for (int i = 0; i < 30; ++i)
+        plugins << QJsonObject{{"id", QString("p.%1").arg(i)}, {"name", QString("Plugin %1").arg(i, 2, 10, QChar('0'))},
+                               {"repo", QString("https://github.com/a/p%1").arg(i)}, {"category", i % 2 ? "Widgets" : "System"},
+                               {"stars", i}, {"installAvailable", i < 10}, {"verificationStatus", i < 5 ? "verified" : "unverified"}};
+    const QByteArray json = QJsonDocument(QJsonObject{{"plugins", plugins}}).toJson();
+    writeFile(home.filePath(".cache/omacraft/market/catalog.json"), json);
+    Marketplace market(home.path(), false);
+    market.load("plugins");
+    QTRY_VERIFY(market.loaded("plugins"));
+
+    QVariantMap page = market.browse("plugins", "", "", "stars", "all", 1);
+    QCOMPARE(page.value("total").toInt(), 30);
+    QCOMPARE(page.value("pages").toInt(), 2);
+    QCOMPARE(page.value("items").toList().first().toMap().value("id").toString(), QString("p.29"));
+    QCOMPARE(market.browse("plugins", "", "", "name", "all", 99).value("page").toInt(), 2);
+    QCOMPARE(market.browse("plugins", "plugin 07", "", "name", "all", 1).value("total").toInt(), 1);
+    QCOMPARE(market.browse("plugins", "", "Widgets", "name", "all", 1).value("total").toInt(), 15);
+    QCOMPARE(market.browse("plugins", "", "", "name", "verified", 1).value("total").toInt(), 5);
+    QCOMPARE(market.browse("plugins", "", "", "name", "installable", 1).value("total").toInt(), 10);
+
+    market.setInstalledPlugins({{"p.3", true}, {"p.4", false}});
+    page = market.browse("plugins", "", "", "name", "installed", 1);
+    QCOMPARE(page.value("total").toInt(), 2);
+    QCOMPARE(page.value("items").toList().first().toMap().value("state").toString(), QString("enabled"));
+    QCOMPARE(market.categories().size(), 2);
+}
+
+// ---------------------------------------------------------------- real pointers
+
+namespace {
+
+// Puts QML in a real window with OmaCraft's backends, for tests that press the
+// mouse. OMACRAFT_TEST_SHOTS=dir also saves what each one looks like.
+struct Harness {
+    QQmlApplicationEngine engine;
+    QQuickWindow *window = nullptr;
+    void load(const QByteArray &body, QSize size) {
+        const QByteArray qml = "import QtQuick\nimport QtQuick.Controls\nApplicationWindow { visible: true; width: "
+            + QByteArray::number(size.width()) + "; height: " + QByteArray::number(size.height()) + "; " + body + " }";
+        engine.loadData(qml, QUrl("qrc:/Harness.qml"));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(window);
+        QVERIFY(QTest::qWaitForWindowExposed(window));
+        QTest::qWait(250);
+    }
+    // By the visual tree: a Repeater's items aren't QObject children.
+    QQuickItem *named(const QString &name, QQuickItem *from = nullptr) const {
+        from = from ? from : window->contentItem();
+        if (from->objectName() == name)
+            return from;
+        for (QQuickItem *child : from->childItems())
+            if (QQuickItem *found = named(name, child))
+                return found;
+        return nullptr;
+    }
+    QPoint middle(QQuickItem *item, qreal fx = 0.5) const {
+        return item->mapToScene(QPointF(item->width() * fx, item->height() / 2)).toPoint();
+    }
+    void drag(QPoint from, QPoint to) {
+        QTest::mouseMove(window, from);
+        QTest::mousePress(window, Qt::LeftButton, {}, from);
+        for (int i = 1; i <= 10; ++i) {
+            QTest::mouseMove(window, from + (to - from) * i / 10);
+            QTest::qWait(10);
+        }
+        QTest::mouseRelease(window, Qt::LeftButton, {}, to);
+        QTest::qWait(60);
+    }
+    void shot(const QString &name) {
+        const QString dir = qEnvironmentVariable("OMACRAFT_TEST_SHOTS");
+        if (!dir.isEmpty())
+            window->grabWindow().save(dir + "/" + name + ".png");
+    }
+};
+
+} // namespace
+
+void OmacraftTests::widgetBoardDragsWidgets() {
+    QTemporaryDir home;
+    Rofioma rofioma(home.path(), false);
+    Theme theme;
+    Harness h;
+    h.engine.rootContext()->setContextProperty("rofioma", &rofioma);
+    h.engine.rootContext()->setContextProperty("theme", &theme);
+    h.load("ScrollView { anchors.fill: parent; contentWidth: availableWidth; WidgetBoard { objectName: 'board'; width: 560 } }", {600, 1100});
+    if (QTest::currentTestFailed()) return;
+    const auto widgets = [&] { return rofioma.config().value("notify").toMap().value("widgets").toStringList(); };
+
+    // Library to panel, between dnd and mpris.
+    QQuickItem *tile = h.named("tile-volume");
+    QQuickItem *mpris = h.named("row-mpris");
+    QVERIFY(tile && mpris);
+    h.drag(h.middle(tile, 0.3), h.middle(mpris) - QPoint(0, 18));
+    QCOMPARE(widgets(), QStringList({"title", "dnd", "volume", "mpris", "notifications"}));
+    // Moving over the row without a button held isn't a drag.
+    QTest::mouseMove(h.window, h.middle(h.named("row-volume"), 0.3) + QPoint(10, 0));
+    QTest::qWait(250);
+    QVERIFY(h.named("board"));
+    QVERIFY(!h.named("board")->property("dragging").toBool());
+    h.shot("board-dropped");
+
+    // Within the panel: the title dragged below mpris.
+    h.drag(h.middle(h.named("row-title"), 0.3), h.middle(h.named("row-mpris"), 0.3) + QPoint(0, 12));
+    QCOMPARE(widgets(), QStringList({"dnd", "volume", "mpris", "title", "notifications"}));
+
+    // Out of the panel takes it away.
+    QTest::qWait(250);
+    QQuickItem *panel = h.named("panel");
+    const QPoint outside = panel->mapToScene(QPointF(panel->width() / 2, panel->height() + 160)).toPoint();
+    h.drag(h.middle(h.named("row-dnd"), 0.3), outside);
+    QCOMPARE(widgets(), QStringList({"volume", "mpris", "title", "notifications"}));
+    QVERIFY(h.named("tile-dnd"));
+}
+
+void OmacraftTests::colorWheelSetsOneColor() {
+    QTemporaryDir home;
+    Rofioma rofioma(home.path(), false);
+    Theme theme;
+    Harness h;
+    h.engine.rootContext()->setContextProperty("rofioma", &rofioma);
+    h.engine.rootContext()->setContextProperty("theme", &theme);
+    h.load("ColorPicker { id: picker; objectName: 'picker'; onPicked: hex => rofioma.setCustomColor('accent', hex); Component.onCompleted: openWith('#ff0000') }", {700, 600});
+    if (QTest::currentTestFailed()) return;
+    QTest::qWait(400);
+    h.shot("wheel");
+    auto *picker = h.window->findChild<QObject *>("picker");
+    QVERIFY(picker);
+    QVERIFY(picker->property("opened").toBool());
+    QCOMPARE(picker->property("hex").toString(), QString("#ff0000"));
+    // A click on the wheel itself: down from its middle, so blue-violet.
+    auto *item = picker->property("contentItem").value<QQuickItem *>();
+    QVERIFY(item);
+    QTest::mouseClick(h.window, Qt::LeftButton, {}, item->mapToScene(QPointF(item->width() / 2, 150)).toPoint());
+    QVERIFY(picker->property("hex").toString() != QString("#ff0000"));
+    const QString chosen = picker->property("hex").toString();
+    QMetaObject::invokeMethod(picker, "picked", Q_ARG(QString, chosen));
+    QCOMPARE(rofioma.palette().value("accent").toString(), chosen);
+}
+
+void OmacraftTests::marketPageOpensACard() {
+    QTemporaryDir home;
+    writeFile(home.filePath(".cache/omacraft/market/themes.html"),
+              R"(<a href="https://github.com/a/noir" x><img src="/assets/themes/noir.webp" alt="<b>Noir</b> theme screenshot"/></a>)");
+    Marketplace market(home.path(), false);
+    market.load("themes");
+    QTRY_VERIFY(market.loaded("themes"));
+    Theme theme;
+    Plugins plugins(home.path(), false);
+    Harness h;
+    h.engine.rootContext()->setContextProperty("market", &market);
+    h.engine.rootContext()->setContextProperty("theme", &theme);
+    h.engine.rootContext()->setContextProperty("plugins", &plugins);
+    h.load("MarketPage { anchors.fill: parent; kind: 'themes'; heading: 'Themes'; noun: 'theme'; active: true }", {1100, 760});
+    if (QTest::currentTestFailed()) return;
+    QTRY_VERIFY(h.named("card-https://github.com/a/noir") != nullptr);
+    QQuickItem *sheet = h.named("sheet");
+    QVERIFY(sheet);
+    QVERIFY(!sheet->isVisible());
+    QTest::mouseClick(h.window, Qt::LeftButton, {}, h.middle(h.named("card-https://github.com/a/noir")));
+    QTRY_VERIFY(sheet->isVisible());
+    h.shot("market-sheet");
+}
+
+void OmacraftTests::popupCardTakesEveryEffect() {
+    const QString card = QFINDTESTDATA("../plugins/rofioma/HydeCard.qml");
+    QVERIFY(!card.isEmpty());
+    QQmlEngine engine;
+    QQmlComponent component(&engine, QUrl::fromLocalFile(card));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    for (const auto &style : Rofioma::powerHovers()) {
+        std::unique_ptr<QObject> object(component.create());
+        QVERIFY(object);
+        object->setProperty("hoverStyle", style.toMap().value("id"));
+        object->setProperty("width", 120);
+        object->setProperty("height", 120);
+        object->setProperty("hot", true);
+        QTest::qWait(360);
+        const qreal scale = object->property("scale").toReal();
+        QVERIFY2(scale >= 1 && scale < 1.2, qPrintable(style.toMap().value("id").toString()));
+    }
+    const QString fx = QFINDTESTDATA("../plugins/rofioma/RofiFx.js");
+    QQmlComponent runner(&engine);
+    runner.setData("import QtQuick\nimport '" + QUrl::fromLocalFile(fx).toString().toUtf8() + "' as Fx\nQtObject {\n"
+                   "  function at(s, c, i) { return Fx.enter(s, c, i, 6, 100, 3) }\n}", QUrl::fromLocalFile(QDir::tempPath() + "/t.qml"));
+    QVERIFY2(runner.isReady(), qPrintable(runner.errorString()));
+    std::unique_ptr<QObject> fns(runner.create());
+    QVERIFY(fns);
+    // Every entrance starts somewhere else and ends with the card in place.
+    for (const auto &style : Rofioma::powerEnters()) {
+        const QString id = style.toMap().value("id").toString();
+        for (int i = 0; i < 6; ++i) {
+            QVariant end;
+            QMetaObject::invokeMethod(fns.get(), "at", Q_RETURN_ARG(QVariant, end), Q_ARG(QVariant, id), Q_ARG(QVariant, 1.0), Q_ARG(QVariant, i));
+            const QVariantMap m = end.toMap();
+            QCOMPARE(m.value("opacity").toDouble(), 1.0);
+            QCOMPARE(m.value("scale").toDouble(), 1.0);
+            QCOMPARE(m.value("x").toDouble(), 0.0);
+            QCOMPARE(m.value("y").toDouble(), 0.0);
+        }
+    }
+}
+
+namespace {
+QJsonObject readShellJson(const QString &home) {
+    QFile file(home + "/.config/omarchy/shell.json");
+    file.open(QIODevice::ReadOnly);
+    return QJsonDocument::fromJson(file.readAll()).object();
+}
+QStringList enabledIds(const QJsonObject &shell) {
+    QStringList ids;
+    for (const auto &value : shell.value("plugins").toArray())
+        ids << value.toObject().value("id").toString();
+    return ids;
+}
+QStringList disabledIds(const QJsonObject &shell) {
+    QStringList ids;
+    for (const auto &value : shell.value("disabledPlugins").toArray())
+        ids << value.toString();
+    return ids;
+}
+void installLockPlugin(const QString &home, const QString &id) {
+    writeFile(home + "/.config/omarchy/plugins/" + id + "/manifest.json",
+              QString(R"({"id":"%1","kinds":["service"],"omarchy":{"clonedFrom":"omarchy.lock"}})").arg(id).toUtf8());
+}
+// The helper with its paths moved under dir, and the step only root can do gone.
+QString helperInto(const QString &dir) {
+    QFile source(QFINDTESTDATA("../packaging/login/omacraft-login"));
+    source.open(QIODevice::ReadOnly);
+    QString text = QString::fromUtf8(source.readAll());
+    text.replace("theme_dir=/usr/share/sddm/themes/omacraft", "theme_dir=" + dir + "/theme");
+    text.replace("conf_dir=/etc/sddm.conf.d", "conf_dir=" + dir + "/conf");
+    text.replace("--clear-groups", "--keep-groups");
+    QDir().mkpath(dir + "/conf");
+    writeFile(dir + "/theme/Main.qml", "import QtQuick");
+    writeFile(dir + "/helper", text.toUtf8());
+    QFile::setPermissions(dir + "/helper", QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+    return dir + "/helper";
+}
+int runHelper(const QString &helper, const QStringList &arguments) {
+    QProcess process;
+    auto env = QProcessEnvironment::systemEnvironment();
+    env.insert("PKEXEC_UID", QString::number(getuid()));
+    process.setProcessEnvironment(env);
+    process.start("bash", QStringList{helper} + arguments);
+    process.waitForFinished(15000);
+    return process.exitStatus() == QProcess::NormalExit ? process.exitCode() : -1;
+}
+}
+
+void OmacraftTests::lockSwapNeverLeavesTheShellWithoutALock() {
+    QTemporaryDir home;
+    installLockPlugin(home.path(), "other.lock");
+    installLockPlugin(home.path(), "omacraft.lock");
+    writeFile(home.filePath(".config/omarchy/shell.json"),
+              R"({"plugins":[{"id":"other.lock"}],"disabledPlugins":["omarchy.lock"],"idle":{"lock":300}})");
+    Plugins plugins(home.path(), false);
+    plugins.refresh();
+    QVERIFY(plugins.isInstalled("omacraft.lock"));
+
+    plugins.setEnabled("omacraft.lock", true);
+    QTRY_VERIFY(!plugins.busy());
+    QJsonObject shell = readShellJson(home.path());
+    QCOMPARE(enabledIds(shell), QStringList{"omacraft.lock"});
+    QVERIFY(disabledIds(shell).contains("omarchy.lock"));
+    QCOMPARE(shell.value("idle").toObject().value("lock").toInt(), 300);
+
+    plugins.setEnabled("omacraft.lock", false);
+    QTRY_VERIFY(!plugins.busy());
+    shell = readShellJson(home.path());
+    QCOMPARE(enabledIds(shell), QStringList{"other.lock"});
+    QVERIFY(disabledIds(shell).contains("omarchy.lock"));
+}
+
+void OmacraftTests::lockSwapFallsBackToOmarchysLock() {
+    QTemporaryDir home;
+    installLockPlugin(home.path(), "omacraft.lock");
+    writeFile(home.filePath(".config/omarchy/shell.json"), R"({"plugins":[],"disabledPlugins":[]})");
+    Plugins plugins(home.path(), false);
+    plugins.refresh();
+    plugins.setEnabled("omacraft.lock", true);
+    QTRY_VERIFY(!plugins.busy());
+    QVERIFY(disabledIds(readShellJson(home.path())).contains("omarchy.lock"));
+
+    // What it replaced is remembered; a remembered plugin that's since gone
+    // can't leave the shell with nothing.
+    writeFile(home.filePath(".config/omacraft/lock-previous"), "deleted.plugin");
+    plugins.setEnabled("omacraft.lock", false);
+    QTRY_VERIFY(!plugins.busy());
+    const QJsonObject shell = readShellJson(home.path());
+    QVERIFY(!disabledIds(shell).contains("omarchy.lock"));
+    QVERIFY(!enabledIds(shell).contains("omacraft.lock"));
+    QVERIFY(!enabledIds(shell).contains("deleted.plugin"));
+}
+
+void OmacraftTests::lockSettingsSurviveAnything() {
+    QQmlApplicationEngine engine;
+    engine.loadData(R"(
+        import QtQuick
+        import "LockDefaults.js" as Defaults
+        QtObject {
+            property var bad: Defaults.clean({ blur: 9, fieldWidth: -5, fieldOpacity: "x", bgMode: "nope", unlockMs: 999999,
+                                               colorText: "red;}", note: "a\nb", showClock: "maybe", blockX: 500, shake: "false" })
+            property var nothing: Defaults.clean(null)
+            property var text: Defaults.clean({ fieldWidth: "500", showClock: "true", blur: "" })
+        }
+    )", QUrl("qrc:/HarnessDefaults.qml"));
+    QVERIFY(!engine.rootObjects().isEmpty());
+    QObject *root = engine.rootObjects().first();
+    const auto bad = root->property("bad").toMap();
+    QCOMPARE(bad.value("blur").toDouble(), 1.0);
+    QCOMPARE(bad.value("fieldWidth").toDouble(), 180.0);
+    QCOMPARE(bad.value("fieldOpacity").toDouble(), 0.8);
+    QCOMPARE(bad.value("bgMode").toString(), QString("wallpaper"));
+    QCOMPARE(bad.value("unlockMs").toDouble(), 800.0);
+    QCOMPARE(bad.value("colorText").toString(), QString());
+    QCOMPARE(bad.value("note").toString(), QString("a b"));
+    QCOMPARE(bad.value("showClock").toBool(), false);
+    QCOMPARE(bad.value("blockX").toDouble(), 100.0);
+    QCOMPARE(bad.value("shake").toBool(), false);
+    QCOMPARE(root->property("nothing").toMap().value("fieldHeight").toDouble(), 67.0);
+    const auto text = root->property("text").toMap();
+    QCOMPARE(text.value("fieldWidth").toDouble(), 500.0);
+    QCOMPARE(text.value("showClock").toBool(), true);
+    QCOMPARE(text.value("blur").toDouble(), 1.0);
+}
+
+void OmacraftTests::lockLogonKeepsLooksAndReadsSddm() {
+    QTemporaryDir home;
+    QTemporaryDir etc;
+    writeFile(etc.filePath("sddm.conf.d/10-theme.conf"), "[Theme]\nCurrent=omarchy\n");
+    writeFile(etc.filePath("sddm.conf.d/autologin.conf"), "[Autologin]\nUser=skll\nSession=omarchy.desktop\n");
+    writeFile(etc.filePath("sddm.conf.d/99-omarchy-login.conf"), "[Theme]\nCurrent=omarchy\n");
+    LockLogon lock(nullptr, nullptr, home.path(), etc.path(), home.filePath("themes"), false);
+    QCOMPARE(lock.loginTheme(), QString("omarchy"));
+    QCOMPARE(lock.autologinUser(), QString("skll"));
+    QVERIFY(!lock.autologinOverridden());
+
+    // Omacraft's overrides sort after every file of Omarchy's, and win.
+    writeFile(etc.filePath("sddm.conf.d/" + LockLogon::kThemeOverride), "[Theme]\nCurrent=omacraft\n");
+    writeFile(etc.filePath("sddm.conf.d/" + LockLogon::kAutologinOverride), "[Autologin]\nUser=\nSession=\n");
+    lock.reload();
+    QCOMPARE(lock.loginTheme(), QString("omacraft"));
+    QCOMPARE(lock.autologinUser(), QString());
+    QVERIFY(lock.autologinOverridden());
+
+    lock.set("lock", "blur", 0.25);
+    lock.set("lock", "panel", "card");
+    QFile saved(home.filePath(".config/omarchy/omacraft-lock.json"));
+    QVERIFY(saved.open(QIODevice::ReadOnly));
+    QCOMPARE(QJsonDocument::fromJson(saved.readAll()).object().value("panel").toString(), QString("card"));
+    LockLogon again(nullptr, nullptr, home.path(), etc.path(), home.filePath("themes"), false);
+    QCOMPARE(again.lockLook().value("blur").toDouble(), 0.25);
+    QVERIFY(lock.canUndoLock());
+    lock.undo("lock");
+    QVERIFY(!lock.lockLook().contains("panel"));
+
+    lock.set("nowhere", "blur", 1);
+    QVERIFY(!QFile::exists(home.filePath(".config/omacraft/nowhere.json")));
+
+    lock.setIdle("lock", 600);
+    QCOMPARE(lock.lockSeconds(), 600);
+    QCOMPARE(readShellJson(home.path()).value("idle").toObject().value("lock").toInt(), 600);
+    lock.setIdle("bogus", 5);
+    QVERIFY(!readShellJson(home.path()).value("idle").toObject().contains("bogus"));
+}
+
+void OmacraftTests::loginArgumentsCarryNoPaths() {
+    QTemporaryDir home;
+    LockLogon lock(nullptr, nullptr, home.path(), home.path(), home.filePath("themes"), false);
+    lock.setMany("login", {{"bgImage", "/home/me/a.png"}, {"avatar", "/home/me/b.png"}, {"bgFolder", "/x"}, {"blankSeconds", 9},
+                           {"bgMode", "folder"}, {"blur", 0.5}, {"showClock", true}});
+    const QStringList arguments = lock.loginArguments();
+    QVERIFY(arguments.contains("blur=0.5"));
+    QVERIFY(arguments.contains("showClock=true"));
+    for (const auto &argument : arguments) {
+        QVERIFY2(!argument.contains('/'), qPrintable(argument));
+        QVERIFY2(!argument.startsWith("bgMode=folder"), qPrintable(argument));
+        QVERIFY2(!argument.startsWith("blankSeconds"), qPrintable(argument));
+    }
+    QVERIFY(!arguments.filter(QRegularExpression("^themeAccent=#")).isEmpty());
+}
+
+void OmacraftTests::loginNeedsAPicture() {
+    QTemporaryDir home;
+    LockLogon lock(nullptr, nullptr, home.path(), home.path(), home.filePath("themes"), false);
+    QString why;
+    lock.setMany("login", {{"bgMode", "image"}, {"bgImage", "/home/me/clip.mp4"}});
+    QVERIFY(lock.loginBackgroundFile(&why).isEmpty());
+    QVERIFY(!why.isEmpty());
+    why.clear();
+    lock.setMany("login", {{"bgImage", "/home/me/photo.JPG"}});
+    QCOMPARE(lock.loginBackgroundFile(&why), QString("/home/me/photo.JPG"));
+    QVERIFY(why.isEmpty());
+    lock.setMany("login", {{"bgMode", "solid"}});
+    QVERIFY(lock.loginBackgroundFile(&why).isEmpty());
+    QVERIFY(why.isEmpty());
+}
+
+void OmacraftTests::loginHelperRefusesHostileInput() {
+    QTemporaryDir dir;
+    const QString helper = helperInto(dir.path());
+    const QString conf = dir.filePath("theme/theme.conf.user");
+
+    QCOMPARE(runHelper(helper, {"apply", "-", "-", "blur=0.5", "greeting={user}@{host}", "dotGlyph=\u25CF", "dateFormat=dddd, d MMMM", "colorText=#ff0000"}), 0);
+    QFile written(conf);
+    QVERIFY(written.open(QIODevice::ReadOnly));
+    const QByteArray bytes = written.readAll();
+    QVERIFY(bytes.contains("dateFormat=\"dddd, d MMMM\""));
+    QVERIFY(bytes.contains("colorText=\"#ff0000\""));
+
+    // None of these may change what's on disk.
+    const QStringList hostile{
+        "note=x\"\n[Theme]\nCurrent=evil", "note=a\\b", "note=semi;colon", "note=$(id)", "note=`id`", "note=a\nb",
+        "bgImage=/etc/shadow", "avatar=/root/.ssh/id_rsa", "Current=evil", "../../etc/passwd=1", "noequals",
+        "note=" + QString(161, 'x')};
+    for (const auto &setting : hostile) {
+        QVERIFY2(runHelper(helper, {"apply", "-", "-", setting}) != 0, qPrintable(setting));
+        written.seek(0);
+        QCOMPARE(written.readAll(), bytes);
+    }
+    QVERIFY(runHelper(helper, {"theme", "evil"}) != 0);
+    QVERIFY(runHelper(helper, {"autologin", "maybe"}) != 0);
+    QVERIFY(runHelper(helper, {"rm", "-rf", "/"}) != 0);
+    QVERIFY(runHelper(helper, {}) != 0);
+
+    // Pictures: read as the caller, sniffed by content, named by the helper.
+    writeFile(dir.filePath("fake.png"), "#!/bin/sh\nnot a picture\n");
+    QVERIFY(runHelper(helper, {"apply", dir.filePath("fake.png"), "-", "blur=0.5"}) != 0);
+    QVERIFY(runHelper(helper, {"apply", "relative.png", "-", "blur=0.5"}) != 0);
+    QVERIFY(runHelper(helper, {"apply", dir.filePath("missing.png"), "-", "blur=0.5"}) != 0);
+    QImage image(4, 4, QImage::Format_RGB32);
+    image.fill(Qt::red);
+    QVERIFY(image.save(dir.filePath("real.jpeg"), "PNG"));
+    QCOMPARE(runHelper(helper, {"apply", dir.filePath("real.jpeg"), "-", "blur=0.5"}), 0);
+    QVERIFY(QFile::exists(dir.filePath("theme/background.png")));
+    QFile rewritten(conf);
+    QVERIFY(rewritten.open(QIODevice::ReadOnly));
+    QVERIFY(rewritten.readAll().contains("bgImage=\"background.png\""));
+    QVERIFY(QDir(dir.filePath("theme")).entryList({".incoming*"}, QDir::Files | QDir::Hidden).isEmpty());
+
+    // A bad picture mid-apply leaves the look as it was, not half of a new one.
+    rewritten.seek(0);
+    const QByteArray good = rewritten.readAll();
+    QVERIFY(runHelper(helper, {"apply", "-", dir.filePath("fake.png"), "blur=0.9"}) != 0);
+    QFile after(conf);
+    QVERIFY(after.open(QIODevice::ReadOnly));
+    QCOMPARE(after.readAll(), good);
+    QVERIFY(QDir(dir.filePath("theme")).entryList({".incoming*", "*.XXXXXX"}, QDir::Files | QDir::Hidden).isEmpty());
+}
+
+void OmacraftTests::loginHelperOverridesAndReverts() {
+    QTemporaryDir dir;
+    const QString helper = helperInto(dir.path());
+    // Omarchy's own files, which must never be touched.
+    writeFile(dir.filePath("conf/autologin.conf"), "[Autologin]\nUser=skll\n");
+    writeFile(dir.filePath("conf/99-omarchy-login.conf"), "[Theme]\nCurrent=omarchy\n");
+
+    QCOMPARE(runHelper(helper, {"theme", "omacraft"}), 0);
+    QCOMPARE(runHelper(helper, {"autologin", "off"}), 0);
+    auto sddm = LockLogon::readSddmConfig(dir.filePath("conf"));
+    QCOMPARE(sddm.value("theme").toString(), QString("omacraft"));
+    QCOMPARE(sddm.value("autologinUser").toString(), QString());
+
+    QCOMPARE(runHelper(helper, {"theme", "omarchy"}), 0);
+    QCOMPARE(runHelper(helper, {"autologin", "on"}), 0);
+    sddm = LockLogon::readSddmConfig(dir.filePath("conf"));
+    QCOMPARE(sddm.value("theme").toString(), QString("omarchy"));
+    QCOMPARE(sddm.value("autologinUser").toString(), QString("skll"));
+    QCOMPARE(QDir(dir.filePath("conf")).entryList(QDir::Files).size(), 2);
+
+    QCOMPARE(runHelper(helper, {"apply", "-", "-", "blur=0.5"}), 0);
+    QCOMPARE(runHelper(helper, {"reset"}), 0);
+    QVERIFY(!QFile::exists(dir.filePath("theme/theme.conf.user")));
+    QVERIFY(QFile::exists(dir.filePath("theme/Main.qml")));
+}
+
+void OmacraftTests::lockPageDragsTheBlockAndPicksLooks() {
+    QTemporaryDir home;
+    Theme theme;
+    Plugins plugins(home.path(), false);
+    LockLogon lock(&plugins, nullptr, home.path(), home.path(), home.filePath("themes"), false);
+    Harness h;
+    auto *context = h.engine.rootContext();
+    context->setContextProperty("theme", &theme);
+    context->setContextProperty("plugins", &plugins);
+    context->setContextProperty("lockLogon", &lock);
+    context->setContextProperty("startTab", "");
+    h.load("LockLogonPage { anchors.fill: parent; active: true }", {1100, 760});
+    if (QTest::currentTestFailed()) return;
+
+    QQuickItem *grip = h.named("lockStageGrip");
+    QVERIFY(grip);
+    // Near the left third, near the middle: both snap.
+    const QPoint start = grip->mapToScene({grip->width() * 0.5, grip->height() * 0.5}).toPoint();
+    const QPoint end = grip->mapToScene({grip->width() * 0.16, grip->height() * 0.51}).toPoint();
+    h.drag(start, end);
+    QTRY_COMPARE(lock.lockLook().value("blockX").toDouble(), 15.0);
+    QCOMPARE(lock.lockLook().value("blockY").toDouble(), 50.0);
+
+    QQuickItem *looks = h.named("lockLooks");
+    QVERIFY(looks);
+    QTest::mouseClick(h.window, Qt::LeftButton, {}, looks->mapToScene({260, 50}).toPoint());
+    QTRY_COMPARE(lock.lockLook().value("bgMode").toString(), QString("solid"));
+    h.shot("lock-logon");
+}
+
+void OmacraftTests::aboutShowsCreditsAndTheRealLicence() {
+    const auto builtIn = [](const QString &path) {
+        QFile file(path);
+        return file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll()) : QString();
+    };
+    const QString license = builtIn(":/about/LICENSE");
+    const QString notices = builtIn(":/about/THIRD-PARTY-NOTICES.md");
+    QVERIFY(license.startsWith("MIT License"));
+    for (const char *work : {"Omacut", "Omarchy", "figlet.js", "HANCORE", "Burn My Windows", "JaKooLit", "HyDE", "Lock Screen Explorer", "### GPL-3.0"})
+        QVERIFY2(notices.contains(work), work);
+
+    Theme theme;
+    Harness h;
+    auto *context = h.engine.rootContext();
+    context->setContextProperty("theme", &theme);
+    context->setContextProperty("aboutLicense", license);
+    context->setContextProperty("aboutNotices", notices);
+    h.load("AboutDialog { id: about; objectName: 'about' }", {1000, 700});
+    if (QTest::currentTestFailed()) return;
+    QVERIFY(h.named("aboutSite"));
+    QVERIFY(h.named("aboutCopyright")->property("text").toString().contains("2026 skll"));
+    h.shot("about");
+    QObject *about = h.named("about");
+    about->setProperty("tab", "credits");
+    QVERIFY(h.named("aboutText")->property("text").toString().contains("Simon Schneegans"));
+    QVERIFY(!h.named("aboutText")->property("text").toString().contains("Permission is hereby granted"));
+    h.shot("about-credits");
+    about->setProperty("tab", "licences");
+    QVERIFY(h.named("aboutText")->property("text").toString().contains("Permission is hereby granted"));
+    QVERIFY(h.named("aboutText")->property("text").toString().contains("gpl-3.0.html"));
+    h.shot("about-licences");
+}
+
+void OmacraftTests::titleFontPickerOnlyChangesTheTitle()
+{
+    // The pick is saved in OmaCraft's window settings: Qt's test folder here.
+    QStandardPaths::setTestModeEnabled(true);
+    const QString saved = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + "/omacraft/window.ini";
+    QFile::remove(saved);
+    // Declared before the window, so it runs after the window has saved.
+    const auto cleanup = qScopeGuard([saved] {
+        QFile::remove(saved);
+        QDir().rmdir(QFileInfo(saved).absolutePath());
+        QStandardPaths::setTestModeEnabled(false);
+    });
+    QTemporaryDir cache;
+    // omascii runs from the repository's copy, which must stay as committed.
+    qputenv("PYTHONDONTWRITEBYTECODE", "1");
+    const QString plugin = QFileInfo(QString(__FILE__)).absolutePath() + "/../plugins/omascii";
+    Omascii omascii([plugin] { return plugin; });
+    IntroReel reel(&omascii, cache.path());
+
+    // Another font is another drawing of the title, cached on its own; the
+    // usual font is no font picked at all.
+    const QString usual = reel.cachePath("decrypt");
+    reel.setFont("Slant");
+    QVERIFY(reel.customFont());
+    QCOMPARE(reel.font(), QString("Slant"));
+    QVERIFY(reel.cachePath("decrypt") != usual);
+    reel.setFont(IntroReel::titleFont());
+    QVERIFY(!reel.customFont());
+    QCOMPARE(reel.cachePath("decrypt"), usual);
+
+    omascii.refresh();
+    QTRY_VERIFY_WITH_TIMEOUT(reel.available(), 30000);
+    const QVariantMap bootBefore = omascii.config();
+
+    Theme theme;
+    qmlRegisterType<AsciiView>("Omacraft", 1, 0, "AsciiView");
+    Harness h;
+    h.engine.rootContext()->setContextProperty("theme", &theme);
+    h.engine.rootContext()->setContextProperty("introReel", &reel);
+    h.load("IntroTitle { anchors.fill: parent; running: false }", {900, 640});
+    if (QTest::currentTestFailed()) return;
+
+    QQuickItem *button = h.named("titleFontButton");
+    QVERIFY(button);
+    QTRY_VERIFY(button->isVisible());
+    QTest::mouseClick(h.window, Qt::LeftButton, {}, h.middle(button));
+    QTRY_VERIFY_WITH_TIMEOUT(reel.fonts().size() > 100, 20000);
+    for (const char key : QByteArray("slant"))
+        QTest::keyClick(h.window, key);
+    QTest::qWait(100);
+    h.shot("title-font-picker");
+    QTest::keyClick(h.window, Qt::Key_Return);
+    QTRY_VERIFY(reel.font().contains("lant", Qt::CaseInsensitive));
+    QVERIFY(reel.customFont());
+    // The boot splash's own design is left as it was.
+    QCOMPARE(omascii.config(), bootBefore);
 }

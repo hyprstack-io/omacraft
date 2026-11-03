@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "omacraft.rofioma",
+  "name": "ROFIoma popups",
+  "version": "1.0.0",
+  "author": "skll",
+  "license": "MIT",
+  "description": "Draws ROFIoma's power menu, your own menus and the keybind cheatsheet in the shell instead of rofi, with HyDE's wlogout hover: the card under the pointer swells, rounds off and bounces. Type to filter, arrows and Enter to pick, and click a keybind to move it to new keys. OmaCraft's ROFIoma page designs them; its scripts open them.",
+  "kinds": [
+    "overlay"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "Popups.qml"
+  }
+}

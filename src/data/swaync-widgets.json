@@ -1,0 +1,115 @@
+{
+  "widgets": [
+    {
+      "id": "label#greeting",
+      "name": "Heading",
+      "glyph": "󰗀",
+      "description": "A line of your own text between widgets",
+      "config": { "text": "Control centre", "max-lines": 1 }
+    },
+    {
+      "id": "buttons-grid#session",
+      "name": "Session buttons",
+      "glyph": "󰐥",
+      "description": "Lock, log out, reboot and shut down",
+      "config": {
+        "buttons-per-row": 4,
+        "actions": [
+          { "label": "󰌾", "command": "omarchy-system-lock" },
+          { "label": "󰍃", "command": "omarchy-system logout" },
+          { "label": "󰜉", "command": "omarchy-system reboot" },
+          { "label": "󰐥", "command": "omarchy-system shutdown" }
+        ]
+      }
+    },
+    {
+      "id": "buttons-grid#network",
+      "name": "Network",
+      "glyph": "󰖩",
+      "description": "Open Wi-Fi and Bluetooth settings",
+      "config": {
+        "buttons-per-row": 2,
+        "actions": [
+          { "label": "󰖩  Wi-Fi", "command": "omarchy-launch-or-focus-tui impala" },
+          { "label": "󰂯  Bluetooth", "command": "omarchy-launch-or-focus-tui bluetui" }
+        ]
+      }
+    },
+    {
+      "id": "buttons-grid#capture",
+      "name": "Capture",
+      "glyph": "󰄀",
+      "description": "Take a screenshot or record the screen",
+      "config": {
+        "buttons-per-row": 2,
+        "actions": [
+          { "label": "󰄀  Screenshot", "command": "omarchy-capture-screenshot" },
+          { "label": "󰑋  Record", "command": "omarchy-capture-screenrecording --fullscreen" }
+        ]
+      }
+    },
+    {
+      "id": "buttons-grid#desktop",
+      "name": "Desktop tools",
+      "glyph": "󱁤",
+      "description": "Open Omarchy's menu, the theme picker and OmaCraft",
+      "config": {
+        "buttons-per-row": 3,
+        "actions": [
+          { "label": "󰍜  Menu", "command": "omarchy-menu" },
+          { "label": "󰏘  Themes", "command": "omarchy-theme-switcher" },
+          { "label": "󰆧  OmaCraft", "command": "omacraft" }
+        ]
+      }
+    },
+    {
+      "id": "menubar#system",
+      "name": "System menu",
+      "glyph": "󰍜",
+      "description": "A bar with a power drop-down and a lock button",
+      "config": {
+        "menu#power": {
+          "label": "󰐥  Power",
+          "position": "left",
+          "actions": [
+            { "label": "󰤄  Suspend", "command": "systemctl suspend" },
+            { "label": "󰜉  Reboot", "command": "omarchy-system reboot" },
+            { "label": "󰐥  Shut down", "command": "omarchy-system shutdown" }
+          ]
+        },
+        "buttons#quick": {
+          "position": "right",
+          "actions": [
+            { "label": "󰌾", "command": "omarchy-system-lock" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "slider#microphone",
+      "name": "Microphone",
+      "glyph": "󰍬",
+      "description": "The default microphone's level",
+      "config": {
+        "label": "󰍬",
+        "cmd_getter": "wpctl get-volume @DEFAULT_AUDIO_SOURCE@ | awk '{ print int($2 * 100) }'",
+        "cmd_setter": "wpctl set-volume @DEFAULT_AUDIO_SOURCE@ $value%",
+        "min": 0,
+        "max": 100
+      }
+    },
+    {
+      "id": "slider#keyboard",
+      "name": "Keyboard light",
+      "glyph": "󰌌",
+      "description": "The keyboard backlight, with brightnessctl",
+      "config": {
+        "label": "󰌌",
+        "cmd_getter": "brightnessctl -m --device='*kbd_backlight*' | cut -d, -f4 | tr -d %",
+        "cmd_setter": "brightnessctl --device='*kbd_backlight*' set $value%",
+        "min": 0,
+        "max": 100
+      }
+    }
+  ]
+}

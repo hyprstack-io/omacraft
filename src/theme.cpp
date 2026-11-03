@@ -4,6 +4,8 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QGuiApplication>
+#include <QPalette>
 #include <QRegularExpression>
 #include <cmath>
 
@@ -34,6 +36,15 @@ Theme::Theme(const QString &directory, QObject *parent)
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, [this] { m_debounce.start(); });
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, [this] { m_debounce.start(); });
     connect(&m_debounce, &QTimer::timeout, this, &Theme::reload);
+    // Markdown text takes its link colour from the application's palette.
+    connect(this, &Theme::changed, this, [this] {
+        if (auto *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance())) {
+            QPalette palette = QGuiApplication::palette();
+            palette.setColor(QPalette::Link, QColor(accent()));
+            palette.setColor(QPalette::LinkVisited, QColor(accent()));
+            app->setPalette(palette);
+        }
+    });
     reload();
 }
 

@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "omacraft.lock",
+  "name": "Lock & Logon",
+  "version": "1.0.0",
+  "author": "skll",
+  "license": "MIT",
+  "description": "Omarchy's lock screen with its layout, colours, opacity, images and transitions set from OmaCraft. Authentication is Omarchy's own, unchanged.",
+  "kinds": [
+    "service"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml"
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.lock",
+    "capabilities": [
+      "authentication"
+    ]
+  }
+}

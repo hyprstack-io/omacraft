@@ -1,0 +1,38 @@
+#!/bin/sh
+# One file to download and run: dist/omacraft-<version>-<arch>.run.
+#
+#   bin/bundle [ALIENFLARE_PKG]
+#
+# Packs the OmaCraft package built by makepkg (pkgbuild/) and, when given or
+# found beside AlienFlare's project, AlienFlare's package, behind a short
+# installer. The installer hands both to pacman, which installs every
+# dependency from the repositories, so nothing is copied around by hand.
+set -eu
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+cd "$ROOT"
+version=$(cat VERSION)
+arch=$(uname -m)
+
+pkg=$(ls -t pkgbuild/omacraft-"$version"-*-"$arch".pkg.tar.zst 2>/dev/null | head -1 || true)
+[ -n "$pkg" ] || { echo "No omacraft $version package for $arch in pkgbuild/: run makepkg -f there first." >&2; exit 1; }
+lights=${1:-$(ls -t "$HOME"/Projects/alienflare/pkgbuild/alienflare-*-"$arch".pkg.tar.zst 2>/dev/null | head -1 || true)}
+
+stage=$(mktemp -d)
+trap 'rm -rf "$stage"' EXIT
+mkdir -p "$stage/payload"
+cp "$pkg" "$stage/payload/"
+[ -n "$lights" ] && [ -f "$lights" ] && cp "$lights" "$stage/payload/"
+cp LICENSE THIRD-PARTY-NOTICES.md "$stage/payload/"
+(cd "$stage/payload" && sha256sum -- *.pkg.tar.zst > SHA256SUMS)
+
+mkdir -p dist
+out="dist/omacraft-$version-$arch.run"
+sed -e "s/@VERSION@/$version/g" -e "s/@ARCH@/$arch/g" "$ROOT/packaging/installer.sh" > "$stage/head.sh"
+# The payload starts on the line after the marker; the header finds it by number.
+lines=$(($(wc -l < "$stage/head.sh") + 1))
+sed -i "s/@PAYLOAD_LINE@/$lines/" "$stage/head.sh"
+{ cat "$stage/head.sh"; tar -C "$stage/payload" -c . ; } > "$out"
+chmod 755 "$out"
+(cd dist && sha256sum "$(basename "$out")" > "$(basename "$out").sha256")
+echo "Built $out ($(du -h "$out" | cut -f1))"
+echo "Contains: $(cd "$stage/payload" && ls -- *.pkg.tar.zst | tr '\n' ' ')"

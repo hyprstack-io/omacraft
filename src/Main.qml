@@ -31,14 +31,20 @@ ApplicationWindow {
         { id: "rofioma", name: "ROFIoma", glyph: "\u{f1401}", plugin: "", file: "RofiomaPage.qml" },
         { id: "ascii", name: "Boot Splash", glyph: "\u{f0b9e}", plugin: "omacraft.omascii", file: "AsciiPage.qml" },
         { id: "saver", name: "Screensaver", glyph: "\u{f1104}", plugin: "", file: "ScreensaverPage.qml" },
+        { id: "lock", name: "Lock & Logon", glyph: "\u{f033e}", plugin: "omacraft.lock", file: "LockLogonPage.qml" },
+        { id: "cursors", name: "Cursors & Icons", glyph: "\u{f01bf}", plugin: "", file: "CursorsIconsPage.qml" },
         { id: "hyprcraft", name: "Dotfile Generator", glyph: "\u{f0b0b}", plugin: "omacraft.hyprcraft", file: "HyprCraftPage.qml" },
         { id: "iso", name: "OmaBuilds", glyph: "\u{f0a4f}", plugin: "", file: "IsoPage.qml" },
-        { id: "lights", name: "Alienflare", glyph: "\u{f030c}", plugin: "", file: "LightsPage.qml" }
+        // Off the list without an Alienware keyboard; `omacraft lights` still opens it.
+        { id: "lights", name: "Alienflare", glyph: "\u{f030c}", plugin: "", file: "LightsPage.qml", hidden: !alienwareKeys },
+        { id: "market", name: "Plugin Marketplace", glyph: "\u{f0003}", plugin: "", file: "PluginMarketPage.qml" },
+        { id: "themes", name: "Theme Marketplace", glyph: "\u{f03d8}", plugin: "", file: "ThemeMarketPage.qml" }
     ]
     property int current: startPage
     property var visited: ({})
 
     property bool helpVisible: false
+    property bool aboutVisible: false
     property bool navCollapsed: false
     Settings {
         location: StandardPaths.writableLocation(StandardPaths.GenericConfigLocation) + "/omacraft/window.ini"
@@ -86,7 +92,7 @@ ApplicationWindow {
     // Letter shortcuts stand down while a text field (or the web view) has
     // the keyboard, or a dialog is up.
     readonly property bool typing: activeFocusItem !== null && activeFocusItem.cursorPosition !== undefined
-    readonly property bool overlayOpen: helpVisible || quitConfirmVisible
+    readonly property bool overlayOpen: helpVisible || quitConfirmVisible || aboutVisible
     readonly property bool webPage: page !== null && page.capturesKeys === true
     readonly property bool keysFree: !typing && !overlayOpen && !webPage
 
@@ -98,6 +104,14 @@ ApplicationWindow {
         seen[index] = true;
         visited = seen;
         helpVisible = false;
+    }
+    // The next page along that's on the list.
+    function step(by) {
+        let index = current;
+        do {
+            index = (index + by + pages.length) % pages.length;
+        } while (pages[index].hidden);
+        show(index);
     }
     function showPage(id) {
         for (let i = 0; i < pages.length; i++)
@@ -128,11 +142,33 @@ ApplicationWindow {
     property bool collapsed: false
     function collapse() {
         if (!edgeTab.supported || collapsed) return false;
+        previewLeft = 0;
         collapsed = true;
         edgeTab.attach(edgeTabWindow, win);
         edgeTabWindow.show();
         win.hide();
         return true;
+    }
+    // The Plugin Suite page's preview: the tab beside the open window for ten
+    // seconds, following its settings as they change.
+    readonly property int previewSeconds: 10
+    property int previewLeft: 0
+    function previewEdgeTab() {
+        if (!edgeTab.supported || collapsed) return;
+        previewLeft = previewSeconds;
+        edgeTab.attach(edgeTabWindow, win);
+        edgeTabWindow.show();
+    }
+    function endEdgePreview() {
+        if (previewLeft === 0) return;
+        previewLeft = 0;
+        if (!collapsed) edgeTabWindow.hide();
+    }
+    Timer {
+        running: win.previewLeft > 0
+        interval: 1000
+        repeat: true
+        onTriggered: win.previewLeft > 1 ? win.previewLeft-- : win.endEdgePreview()
     }
     function restore(pageId) {
         if (pageId) showPage(pageId);
@@ -164,7 +200,8 @@ ApplicationWindow {
 
     EdgeTab {
         id: edgeTabWindow
-        onRestoreWanted: win.restore("")
+        previewing: win.previewLeft > 0
+        onRestoreWanted: win.previewLeft > 0 ? win.endEdgePreview() : win.restore("")
         onQuitWanted: win.requestQuit()
     }
     Connections {
@@ -175,12 +212,13 @@ ApplicationWindow {
 
     // --- keys ---
     Shortcut { sequence: "?"; context: Qt.ApplicationShortcut; enabled: (win.keysFree || win.helpVisible) && !win.quitConfirmVisible; onActivated: win.helpVisible = !win.helpVisible }
+    Shortcut { sequence: "F1"; context: Qt.ApplicationShortcut; enabled: !win.quitConfirmVisible; onActivated: { win.helpVisible = false; win.aboutVisible = !win.aboutVisible; } }
     Shortcut { sequence: "Q"; context: Qt.ApplicationShortcut; enabled: win.keysFree && !(win.page && win.page.dialogOpen); onActivated: win.requestQuit() }
     Shortcut { sequence: "Ctrl+Q"; context: Qt.ApplicationShortcut; onActivated: win.requestQuit() }
     Shortcut { sequence: "Ctrl+B"; context: Qt.ApplicationShortcut; enabled: !win.webPage && !win.overlayOpen; onActivated: win.navCollapsed = !win.navCollapsed }
     Shortcut { sequence: "Ctrl+R"; context: Qt.ApplicationShortcut; enabled: !win.webPage && !win.overlayOpen; onActivated: plugins.restartShell() }
-    Shortcut { sequence: "Ctrl+PgDown"; context: Qt.ApplicationShortcut; onActivated: win.show((win.current + 1) % win.pages.length) }
-    Shortcut { sequence: "Ctrl+PgUp"; context: Qt.ApplicationShortcut; onActivated: win.show((win.current + win.pages.length - 1) % win.pages.length) }
+    Shortcut { sequence: "Ctrl+PgDown"; context: Qt.ApplicationShortcut; onActivated: win.step(1) }
+    Shortcut { sequence: "Ctrl+PgUp"; context: Qt.ApplicationShortcut; onActivated: win.step(-1) }
     Repeater {
         model: win.pages.length
         Item {
@@ -201,6 +239,8 @@ ApplicationWindow {
         onActivated: {
             if (win.quitConfirmVisible)
                 win.quitConfirmVisible = false;
+            else if (win.aboutVisible)
+                win.aboutVisible = false;
             else if (win.helpVisible)
                 win.helpVisible = false;
             else if (win.page && win.page.handleEscape && win.page.handleEscape())
@@ -253,16 +293,9 @@ ApplicationWindow {
                     Layout.bottomMargin: 14
                     Layout.topMargin: 4
                     spacing: 10
-                    Rectangle {
+                    AppLogo {
+                        objectName: "sidebarLogo"
                         Layout.alignment: Qt.AlignHCenter
-                        width: 32; height: 32; radius: 9
-                        color: theme.accent
-                        Label {
-                            anchors.centerIn: parent
-                            text: "◆"
-                            color: theme.accentForeground
-                            font.pixelSize: 15
-                        }
                         // Folded, the logo is what opens it out again.
                         HoverHandler { id: logoHover; enabled: win.navCollapsed; cursorShape: Qt.PointingHandCursor }
                         TapHandler { enabled: win.navCollapsed; onTapped: win.navCollapsed = false }
@@ -284,7 +317,16 @@ ApplicationWindow {
                     }
                 }
 
-                Repeater {
+                // Scrolls when the window's too short for every page.
+                ListView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    spacing: 2
+                    boundsBehavior: Flickable.StopAtBounds
+                    currentIndex: win.current
+                    highlightFollowsCurrentItem: false
+                    onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
                     model: win.pages
                     delegate: Rectangle {
                         id: nav
@@ -294,8 +336,9 @@ ApplicationWindow {
                         readonly property string pluginState: win.pageState(modelData)
                         readonly property color tone: Qt.color(theme.accent)
 
-                        Layout.fillWidth: true
-                        implicitHeight: 36
+                        visible: !modelData.hidden
+                        width: ListView.view.width
+                        height: visible ? 36 : 0
                         radius: 8
                         color: chosen ? Qt.rgba(tone.r, tone.g, tone.b, 0.13) : navHover.hovered ? theme.hover : "transparent"
 
@@ -350,19 +393,17 @@ ApplicationWindow {
                     }
                 }
 
-                Item { Layout.fillHeight: true }
-
                 Label {
                     Layout.fillWidth: true
                     visible: !plugins.shellRunning
-                    text: win.navCollapsed ? "!" : "The shell isn't answering."
+                    text: win.navCollapsed ? "!" : plugins.shellInstalled ? "The shell isn't answering." : "The Omarchy shell isn't installed."
                     horizontalAlignment: win.navCollapsed ? Text.AlignHCenter : Text.AlignLeft
                     color: theme.danger
                     font.pixelSize: 11
                     wrapMode: Text.WordWrap
                 }
                 Button {
-                    visible: !win.navCollapsed
+                    visible: !win.navCollapsed && plugins.shellInstalled
                     Layout.fillWidth: true
                     text: "Restart shell"
                     flat: true
@@ -371,7 +412,7 @@ ApplicationWindow {
                     onClicked: plugins.restartShell()
                 }
                 NavButton {
-                    visible: win.navCollapsed
+                    visible: win.navCollapsed && plugins.shellInstalled
                     Layout.alignment: Qt.AlignHCenter
                     glyph: "\u{f0450}"
                     tip: "Restart shell  (Ctrl R)"
@@ -381,9 +422,25 @@ ApplicationWindow {
                 NavButton {
                     visible: win.navCollapsed
                     Layout.alignment: Qt.AlignHCenter
+                    glyph: "\u{f02fd}"
+                    tip: "About Us  (F1)"
+                    onClicked: win.aboutVisible = true
+                }
+                NavButton {
+                    visible: win.navCollapsed
+                    Layout.alignment: Qt.AlignHCenter
                     glyph: "\u{f0142}"
                     tip: "Show the page names  (Ctrl B)"
                     onClicked: win.navCollapsed = false
+                }
+                Button {
+                    objectName: "aboutButton"
+                    visible: !win.navCollapsed
+                    Layout.fillWidth: true
+                    text: "About Us"
+                    flat: true
+                    focusPolicy: Qt.NoFocus
+                    onClicked: win.aboutVisible = true
                 }
                 RowLayout {
                     visible: !win.navCollapsed
@@ -438,6 +495,11 @@ ApplicationWindow {
         onRejected: win.quitConfirmVisible = false
     }
 
+    AboutDialog {
+        visible: win.aboutVisible
+        onClosed: win.aboutVisible = false
+    }
+
     // --- shortcuts overlay: the window's, then this page's ---
     Rectangle {
         visible: win.helpVisible
@@ -485,6 +547,7 @@ ApplicationWindow {
                         { keys: "Ctrl PgUp/PgDn", action: "Previous / next page" },
                         { keys: "Ctrl B", action: "Fold the sidebar to icons, or open it out" },
                         { keys: "Ctrl R", action: "Restart the Omarchy shell" },
+                        { keys: "F1", action: "About OmaCraft, credits and licences" },
                         { keys: "Esc", action: "Close, dismiss, or leave a field" },
                         { keys: "Q", action: "Quit (asks first while an ISO builds)" },
                         { keys: "?", action: "Show these shortcuts" }

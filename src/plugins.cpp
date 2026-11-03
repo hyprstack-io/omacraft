@@ -97,11 +97,21 @@ QList<Plugins::Definition> Plugins::definitions() {
          "Omarchy's background switcher with OmaCraft's wallpapers: theme backgrounds, Wallhaven search, the "
          "library and favourites as tabs of slanted previews, opened from a key without OmaCraft's window.",
          "wallpaper", "~/Work/omacraft/plugins/wallpicker", "\u{f08b9}"},
+        {"omacraft.rofioma", "ROFIoma popups",
+         "Draws ROFIoma's power menu, your menus and the keybind cheatsheet in the shell, with HyDE's wlogout "
+         "hover: cards swell, round off and bounce under the pointer. Click a keybind to move it.",
+         "rofioma", "~/Work/omacraft/plugins/rofioma", "\u{f1401}"},
+        {kLockId, "Lock & Logon",
+         "Omarchy's lock screen with its layout, colours, opacity, images and transitions set from OmaCraft. "
+         "Authentication stays Omarchy's own. Switching it on swaps out the lock in use, which switching off puts back.",
+         "lock", "~/Work/omacraft/plugins/lock", "\u{f033e}"},
         {"omacraft.hyprcraft", "Dotfile Generator",
          "Hyprland, Waybar, Rofi, SwayNC, GTK/Qt and terminal configurator. OmaCraft runs it on its own page.",
          "hyprcraft", "~/Projects/HyprCraft/omarchy-plugin", "\u{f0b0b}"},
     };
 }
+
+bool Plugins::shellInstalled() const { return !Proc::which("omarchy-shell").isEmpty(); }
 
 QString Plugins::installPath(const QString &id) const { return m_pluginsDir + "/" + id; }
 QString Plugins::stashPath(const QString &id) const { return m_stashDir + "/" + id; }
@@ -532,9 +542,96 @@ void Plugins::setEnabled(const QString &id, bool on) {
             runSteps({Step{{"omarchy-bar", "reset"}}}, "Back to the built-in Omarchy bar.");
         return;
     }
+    if (id == kLockId) {
+        switchLock(on, true);
+        return;
+    }
     runSteps({Step{{}, [=, this] { return editShell([&](QJsonObject &shell) { switchIn(shell, id, on); }); }},
               Step{{"omarchy-shell", "shell", "reloadConfig"}, {}, true}},
              on ? QString("%1 is on, run from OmaCraft.").arg(name) : QString("%1 is off.").arg(name));
+}
+
+// The lock is the one plugin that must never be missing: with no lock service
+// `omarchy system lock` does nothing, and idling leaves the screen open. So a
+// switch is always a swap, and the shell is asked afterwards who answers.
+QStringList Plugins::lockServices(const QJsonObject &shell) const {
+    QStringList ids;
+    for (const auto &value : shell.value("plugins").toArray()) {
+        const QString id = value.toObject().value("id").toString();
+        const auto manifest = readJsonObject(installPath(id) + "/manifest.json");
+        if (manifest.value("omarchy").toObject().value("clonedFrom").toString() == "omarchy.lock")
+            ids << id;
+    }
+    bool stockOff = false;
+    for (const auto &value : shell.value("disabledPlugins").toArray())
+        stockOff = stockOff || value.toString() == "omarchy.lock";
+    if (!stockOff)
+        ids << "omarchy.lock";
+    return ids;
+}
+
+void Plugins::swapLockIn(QJsonObject &shell, const QString &id, bool on) {
+    if (id != "omarchy.lock") {
+        switchIn(shell, id, on);
+        return;
+    }
+    // First-party: on unless it's listed as off.
+    QJsonArray disabled;
+    for (const auto &value : shell.value("disabledPlugins").toArray())
+        if (value.toString() != id)
+            disabled << value;
+    if (!on)
+        disabled << id;
+    shell["disabledPlugins"] = disabled;
+}
+
+void Plugins::switchLock(bool on, bool checkAfter) {
+    const QString previousPath = m_home + "/.config/omacraft/lock-previous";
+    const auto edit = [=, this]() -> QString {
+        return editShell([&](QJsonObject &shell) {
+            if (on) {
+                QStringList others = lockServices(shell);
+                others.removeAll(kLockId);
+                if (!others.isEmpty())
+                    Proc::writeAtomically(previousPath, others.first().toUtf8());
+                for (const auto &other : others)
+                    swapLockIn(shell, other, false);
+                swapLockIn(shell, kLockId, true);
+            } else {
+                QFile file(previousPath);
+                QString previous = file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll()).trimmed() : QString();
+                // Back to what was in use, if it's still here; else Omarchy's own.
+                if (previous.isEmpty() || (previous != "omarchy.lock" && !QFileInfo::exists(installPath(previous) + "/manifest.json")))
+                    previous = "omarchy.lock";
+                swapLockIn(shell, kLockId, false);
+                swapLockIn(shell, previous, true);
+            }
+        });
+    };
+    QList<Step> steps{Step{{}, edit}, Step{{"omarchy-shell", "shell", "reloadConfig"}, {}, true}};
+    if (checkAfter) {
+        steps << Step{{"sleep", "3"}, {}, true};
+        steps << Step{{}, [=, this]() -> QString { checkLock(on); return {}; }};
+    }
+    // The check says how it went; a rollback's own error must stand.
+    runSteps(steps, {});
+}
+
+void Plugins::checkLock(bool on) {
+    if (!m_runCommands)
+        return;
+    Proc::run(this, "omarchy-shell", {"lock", "status"}, [this, on](const Proc::Result &result) {
+        const auto status = QJsonDocument::fromJson(result.out).object();
+        const bool answering = status.value("passwordPam").toBool();
+        if (on && !(answering && status.value("provider").toString() == kLockId)) {
+            switchLock(false, false);
+            setError("OmaCraft's lock didn't answer, so the previous lock was put back. Restart the shell and try again.");
+        } else if (!answering) {
+            setError("No lock screen is answering yet. Restart the shell (Ctrl R) before you rely on locking.");
+        } else {
+            setNotice(on ? "OmaCraft's lock screen is in use." : "The previous lock screen is back.");
+        }
+    }, 5000);
 }
 
 void Plugins::takeIconsOffBar() {

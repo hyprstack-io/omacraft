@@ -1,7 +1,7 @@
 # Agent Dock (`omacraft.agentdock`)
 
-A floating dock pill on the screen edge, only as tall as the icons it holds.
-Expanded, it becomes a resizable floating side panel with one tab per AI agent: Claude Code and Gemini by default. Each
+A floating dock pill on the left, right or bottom edge of the screen, only as long as the icons it holds.
+It can auto-hide behind its edge. Expanded, it becomes a resizable floating panel (beside a side dock, above a bottom one) with one tab per AI agent: Claude Code and Gemini by default. Each
 agent runs in its own terminal (foot) that the plugin floats and pins into the
 panel. While the dock is collapsed, the agent tabs are hidden, but their
 sessions keep running on the hidden `special:agentdock` workspace.
@@ -11,7 +11,7 @@ sessions keep running on the hidden `special:agentdock` workspace.
 - **Toggle:** Super+Alt+A, the robot icon in the bar, or the chevron at the top of the dock.
 - **Tabs:** click to switch, middle-click or the × to end a session. Clicking the
   active tab brings its terminal back if it was moved.
-- **Resize:** drag the panel's edge (the side away from the dock). Double-click the edge to reset to 520px.
+- **Resize:** drag the panel's edge (the side away from the dock: its inner side, or its top above a bottom dock). Double-click the edge to reset to 520px.
   The width is saved in `~/.local/state/skll-agentdock/state.json`.
 - **Dock icons:** click to launch. Drag to reorder, or drag off the dock and
   release to remove. Right-click for Open / Move up / Move down / Remove.
@@ -19,17 +19,23 @@ sessions keep running on the hidden `special:agentdock` workspace.
   launcher fades while you drag, and the drop lands where the pointer is.
   Dropping a `.desktop` file from a file manager works too.
 - **Settings:** the gear at the bottom of the dock opens a card with four tabs:
-  - *General*: position (left/right), floating gap, icon size, opacity,
-    reserved space, reset icons / width.
+  - *General*: position (left, bottom or right), auto-hide, floating gap, icon size, opacity,
+    reserved space, reset icons / panel size.
   - *Look*: magnify on hover (the macOS effect: the icon under the pointer
     grows to the chosen size and its neighbours grow less, over 1-4 icons
-    either side), the dock's shape (rounded, pill, soft, square, or attached
+    either side; icons grow out past the dock's open side, so the dock itself
+    only lengthens to make room and never shifts sideways), the dock's shape (rounded, pill, soft, square, or attached
     to the screen edge), icon tile shape (rounded, circle, squircle, square,
     diamond) and when tiles show, the dock and accent colours, and the border.
   - *Items*: add a spacer or divider, search installed apps and add or
     remove them, or add a custom command (name, glyph, command).
   - *Agents*: which agent tabs are shown, and the start folder for new sessions.
 - Spacers and dividers drag, reorder and remove like icons.
+- **Auto-hide:** the dock slides behind its screen edge 0.7 s after the
+  pointer leaves, leaving a small accent nub. Push the pointer against that
+  edge where the dock lives to bring it back. It stays out while the panel,
+  settings or a menu is open, or while you drag. An auto-hiding dock never
+  reserves space.
 
 Dock icons and settings live in `~/.local/state/skll-agentdock/state.json`.
 
@@ -67,7 +73,7 @@ omarchy-shell agentdock settingsTab look            # general | look | items | a
 omarchy-shell agentdock set gap 6                   # any saved setting, value as JSON
 ```
 
-`set` takes `position`, `gap`, `iconSize`, `opacity`, `reserveCollapsed`,
+`set` takes `position` (left, right, bottom), `autoHide`, `gap`, `iconSize`, `opacity`, `reserveCollapsed`,
 `reserveExpanded`, `hiddenAgents`, `cwd`, `dock`, `width`, and the look:
 `magnify` (true/false), `magnifyScale` (1.1-2.4), `magnifyRange` (1-4),
 `dockShape`, `iconShape`, `iconPlate` (hover, always, outline), `dockColor`

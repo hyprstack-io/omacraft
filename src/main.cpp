@@ -4,7 +4,9 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
 #include <QGuiApplication>
+#include <QTextStream>
 #include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -25,11 +27,14 @@
 #include "bar.h"
 #include "bootsplash.h"
 #include "burn.h"
+#include "cursoricons.h"
 #include "edgetab.h"
 #include "hyprcraft.h"
 #include "isobuilder.h"
 #include "lights.h"
+#include "marketplace.h"
 #include "launcher.h"
+#include "locklogon.h"
 #include "omascii.h"
 #include "introreel.h"
 #include "rofioma.h"
@@ -38,6 +43,7 @@
 #include "portalfilepicker.h"
 #include "syntaxhighlighter.h"
 #include "folders.h"
+#include "hardware.h"
 #include "theme.h"
 #include "themesync.h"
 #include "wallpaper.h"
@@ -71,11 +77,20 @@ public:
 };
 
 int main(int argc, char *argv[]) {
+    if (argc > 1 && (QString(argv[1]) == "--version" || QString(argv[1]) == "-V")) {
+        QTextStream(stdout) << "omacraft " << OMACRAFT_VERSION << Qt::endl;
+        return 0;
+    }
+
     // `omacraft --sync-colors` is the theme-set hook's: no window, just bring
     // OmaCraft's parts up to the new theme.
     if (argc > 1 && QString(argv[1]) == "--sync-colors") {
         QCoreApplication app(argc, argv);
-        return ThemeSync::syncNow();
+        const int synced = ThemeSync::syncNow();
+        // Omarchy has just put its theme's icons back: the Cursors & Icons
+        // choice goes on again, a theme-following one in the new colours.
+        CursorsIcons::syncNow();
+        return synced;
     }
 
     // `omacraft pick [tab]` opens the wallpaper picker over the desktop and
@@ -92,12 +107,48 @@ int main(int argc, char *argv[]) {
     QGuiApplication app(argc, argv);
     app.setApplicationName("omacraft");
     app.setApplicationDisplayName("OmaCraft");
-    app.setApplicationVersion("0.2.0");
+    app.setApplicationVersion(OMACRAFT_VERSION);
 
     // Matches the window to omacraft.desktop, so the compositor (Wayland
     // app_id) and the launcher pick up the installed icon.
     app.setDesktopFileName("omacraft");
     app.setWindowIcon(QIcon::fromTheme("omacraft"));
+
+    // omacraft keys move FROM [TO] | keys capture on|off: the cheatsheet
+    // overlay edits binds through these, so OmaCraft stays the one writer of
+    // the moved keys. TO left out puts the bind back on its own keys.
+    const QStringList args = app.arguments();
+    if (args.size() >= 3 && args.at(1) == "keys") {
+        Rofioma rofioma;
+        QTextStream out(stdout), err(stderr);
+        if (args.at(2) == "move" && args.size() >= 4) {
+            const QString problem = rofioma.moveBind(args.at(3), args.size() >= 5 ? args.at(4) : QString());
+            if (!problem.isEmpty()) {
+                err << problem << Qt::endl;
+                return 1;
+            }
+            out << "ok" << Qt::endl;
+            return 0;
+        }
+        if (args.at(2) == "capture" && args.size() >= 4) {
+            rofioma.captureKeys(args.at(3) == "on");
+            // Let a first capture's reload land before the submap is entered.
+            QTimer::singleShot(900, &app, &QCoreApplication::quit);
+            return app.exec();
+        }
+        // keys bind POPUP KEY: one of ROFIoma's own keys (power, emoji,
+        // glyphs, keybinds, notifications, menu-<id>); an empty KEY clears it.
+        if (args.at(2) == "bind" && args.size() >= 4) {
+            if (!rofioma.bindKey(args.at(3), args.size() >= 5 ? args.at(4) : QString())) {
+                err << rofioma.error() << Qt::endl;
+                return 1;
+            }
+            out << "ok" << Qt::endl;
+            return 0;
+        }
+        err << "usage: omacraft keys move FROM [TO] | omacraft keys capture on|off | omacraft keys bind POPUP [KEY]" << Qt::endl;
+        return 2;
+    }
 
     // One OmaCraft at a time: launched again (from the launcher, a key or
     // the bar), it hands its page to the one running, folded or not.
@@ -148,8 +199,20 @@ int main(int argc, char *argv[]) {
     Lights lights;
     // ROFIoma: rofi popups and swaync's notifications.
     Rofioma rofioma;
+    // The marketplaces browse omarchy's catalogues; Omarchy's own tools install.
+    Marketplace market;
+    QObject::connect(&market, &Marketplace::installedChanged, &plugins, &Plugins::refresh);
+    // Lock & Logon: the lock's look, the idle times and the login screen.
+    LockLogon lockLogon(&plugins, &picker);
+    QObject::connect(&lockLogon, &LockLogon::idleChanged, &saver, &Screensaver::refreshSystem);
+    // Cursors & Icons: icon and cursor themes, imported and chosen.
+    CursorsIcons cursorIcons(&picker);
+    QObject::connect(&theme, &Theme::changed, &cursorIcons, &CursorsIcons::themeSwitched);
     ThemeSync themeSync(&dock, &animations, &burn, &launcher, &omascii, &wallpaper);
-    themeSync.setLights(&lights);
+    // Without the keyboard there's nothing for the wallpaper's colours to light.
+    const bool alienwareKeys = Hardware::hasAlienwareKeys();
+    if (alienwareKeys)
+        themeSync.setLights(&lights);
 
     // Each page follows the plugins as they're installed, removed and moved.
     QObject::connect(&plugins, &Plugins::changed, &animations, &Animations::refresh);
@@ -180,7 +243,9 @@ int main(int argc, char *argv[]) {
     qmlRegisterType<AsciiView>("Omacraft", 1, 0, "AsciiView");
 
     QQmlApplicationEngine engine;
+    engine.setNetworkAccessManagerFactory(&market.imageCache());
     engine.addImageProvider("icon", new IconProvider);
+    engine.addImageProvider("cursor", new CursorImageProvider);
     auto *context = engine.rootContext();
     context->setContextProperty("theme", &theme);
     context->setContextProperty("plugins", &plugins);
@@ -201,11 +266,22 @@ int main(int argc, char *argv[]) {
     context->setContextProperty("folders", &folders);
     context->setContextProperty("themeSync", &themeSync);
     context->setContextProperty("lights", &lights);
+    context->setContextProperty("alienwareKeys", alienwareKeys);
     context->setContextProperty("rofioma", &rofioma);
+    context->setContextProperty("market", &market);
+    context->setContextProperty("lockLogon", &lockLogon);
+    context->setContextProperty("cursorIcons", &cursorIcons);
     context->setContextProperty("edgeTab", &edgeTab);
+    // About Us shows the licence and notices as they're shipped.
+    const auto builtIn = [](const QString &path) {
+        QFile file(path);
+        return file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll()) : QString();
+    };
+    context->setContextProperty("aboutLicense", builtIn(":/about/LICENSE"));
+    context->setContextProperty("aboutNotices", builtIn(":/about/THIRD-PARTY-NOTICES.md"));
 
     // `omacraft <page>` opens on that page, for keybindings and the bar.
-    const QStringList pages{"plugins", "wallpaper", "animations", "effects", "dock", "bar", "launcher", "rofioma", "ascii", "saver", "hyprcraft", "iso", "lights"};
+    const QStringList pages{"plugins", "wallpaper", "animations", "effects", "dock", "bar", "launcher", "rofioma", "ascii", "saver", "lock", "cursors", "hyprcraft", "iso", "lights", "market", "themes"};
     const QString start = app.arguments().value(1);
     context->setContextProperty("startPage", qMax(0, pages.indexOf(start)));
     // `omacraft wallpaper colors` also opens a page's own tab.
@@ -221,6 +297,10 @@ int main(int argc, char *argv[]) {
     const QString screenshot = qEnvironmentVariable("OMACRAFT_SCREENSHOT");
     if (!screenshot.isEmpty()) {
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        // OMACRAFT_SCREENSHOT_SIZE=WxH shoots a bigger window, to see a whole page.
+        const QStringList size = qEnvironmentVariable("OMACRAFT_SCREENSHOT_SIZE").split('x');
+        if (size.size() == 2 && size.at(0).toInt() > 0 && size.at(1).toInt() > 0)
+            window->resize(size.at(0).toInt(), size.at(1).toInt());
         QTimer::singleShot(qEnvironmentVariableIntValue("OMACRAFT_SCREENSHOT_DELAY") > 0
                                ? qEnvironmentVariableIntValue("OMACRAFT_SCREENSHOT_DELAY") : 3000,
                            &app, [window, screenshot] {

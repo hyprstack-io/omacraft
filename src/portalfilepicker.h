@@ -13,6 +13,8 @@ public:
 
     void chooseFolder(const QString &purpose, const QString &title, const QString &startFolder) override;
     void chooseIso(const QString &startFolder) override;
+    void chooseImage(const QString &purpose, const QString &title, const QString &startFolder) override;
+    void chooseArchive(const QString &purpose, const QString &title, const QString &startFolder) override;
 
 private slots:
     void handleResponse(uint response, const QVariantMap &results);

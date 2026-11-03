@@ -72,8 +72,49 @@ QVariantMap IntroReel::titleConfig(const QVariantMap &boot) {
 }
 
 QString IntroReel::configJson() const {
-    return QString::fromUtf8(QJsonDocument(QJsonObject::fromVariantMap(titleConfig(m_omascii->config())))
-                                 .toJson(QJsonDocument::Compact));
+    QVariantMap config = titleConfig(m_omascii->config());
+    if (!m_font.isEmpty())
+        config.insert("font", m_font);
+    return QString::fromUtf8(QJsonDocument(QJsonObject::fromVariantMap(config)).toJson(QJsonDocument::Compact));
+}
+
+void IntroReel::setFont(const QString &name) {
+    const QString font = name == titleFont() ? QString() : name.trimmed();
+    if (font == m_font)
+        return;
+    m_font = font;
+    emit fontChanged();
+    // The new font plays once it's drawn; the old one plays until then.
+    sync();
+}
+
+void IntroReel::loadFonts() {
+    if (m_fontsLoaded || m_loadingFonts)
+        return;
+    const QString program = m_omascii->cli();
+    if (program.isEmpty())
+        return;
+    m_loadingFonts = true;
+    emit fontsChanged();
+    Proc::run(this, program, {"fonts", "--json"}, [this, program](const Proc::Result &figlet) {
+        QVariantList fonts;
+        for (const QVariant &font : Omascii::parseFonts(figlet.out)) {
+            QVariantMap map = font.toMap();
+            map.insert("set", "FIGlet");
+            fonts << map;
+        }
+        Proc::run(this, program, {"fonts", "--json", "--tdf"}, [this, fonts](const Proc::Result &tdf) mutable {
+            for (const QVariant &font : Omascii::parseFonts(tdf.out)) {
+                QVariantMap map = font.toMap();
+                map.insert("set", "TheDraw");
+                fonts << map;
+            }
+            m_fonts = fonts;
+            m_loadingFonts = false;
+            m_fontsLoaded = !fonts.isEmpty();
+            emit fontsChanged();
+        });
+    });
 }
 
 QString IntroReel::cachePath(const QString &effect) const {
@@ -105,10 +146,12 @@ void IntroReel::sync() {
     const int keep = m_effects.indexOf(was);
     m_index = keep >= 0 ? keep : int(QRandomGenerator::global()->bounded(m_effects.size()));
     emit effectChanged();
-    Proc::run(this, m_omascii->cli(), {"render", "--json", "--config-json", configJson()},
-              [this](const Proc::Result &result) {
+    const QString config = configJson();
+    Proc::run(this, m_omascii->cli(), {"render", "--json", "--config-json", config},
+              [this, config](const Proc::Result &result) {
         const QString html = QJsonDocument::fromJson(result.out).object().value("html").toString();
-        if (result.ok() && !html.isEmpty()) {
+        // A still for a font switched away from since is dropped.
+        if (result.ok() && !html.isEmpty() && config == configJson()) {
             m_still = html;
             emit stillChanged();
         }
@@ -162,18 +205,24 @@ bool IntroReel::readCached(const QString &effect) {
 
 void IntroReel::render(const QString &effect) {
     const QString program = m_omascii->cli();
-    if (program.isEmpty() || m_rendering.contains(effect))
-        return;
-    m_rendering.insert(effect);
     const QString path = cachePath(effect);
+    if (program.isEmpty() || m_rendering.contains(path))
+        return;
+    m_rendering.insert(path);
     Proc::run(this, program, {"frames", effect, "--json", "--config-json", configJson()},
               [this, effect, path](const Proc::Result &result) {
-        m_rendering.remove(effect);
+        m_rendering.remove(path);
         if (result.ok() && !QJsonDocument::fromJson(result.out).object().value("frames").toArray().isEmpty()) {
             QDir().mkpath(m_cacheDir);
             Proc::writeAtomically(path, result.out);
         }
         if (effect == this->effect()) {
+            if (path != cachePath(effect)) {
+                // Drawn in a font that's since been switched: draw this one.
+                if (!readCached(effect))
+                    render(effect);
+                return;
+            }
             // Nothing to show for it: move on rather than sit on a broken one.
             if (!readCached(effect)) {
                 setLoading(false);

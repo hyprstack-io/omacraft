@@ -14,6 +14,9 @@ Rectangle {
     color: theme.sunken
     border.color: field.activeFocus ? theme.accent : theme.border
 
+    // forceActiveFocus() on the box (a page's / or Ctrl F) lands in the field.
+    onActiveFocusChanged: if (activeFocus) field.forceActiveFocus()
+
     Label {
         id: glass
         anchors.left: parent.left

@@ -4,6 +4,10 @@ CONFIG += c++20 release
 TARGET = omacraft
 TEMPLATE = app
 
+# One version, shared with the package.
+VERSION = $$cat($$PWD/VERSION)
+DEFINES += OMACRAFT_VERSION=\\\"$$VERSION\\\"
+
 HEADERS += \
     src/agentdock.h \
     src/animations.h \
@@ -16,9 +20,13 @@ HEADERS += \
     src/edgetab.h \
     src/folders.h \
     src/filepicker.h \
+    src/hardware.h \
     src/hyprcraft.h \
     src/isobuilder.h \
     src/launcher.h \
+    src/locklogon.h \
+    src/cursoricons.h \
+    src/marketplace.h \
     src/burn.h \
     src/omascii.h \
     src/plugins.h \
@@ -51,9 +59,13 @@ SOURCES += \
     src/buildconfig.cpp \
     src/drives.cpp \
     src/folders.cpp \
+    src/hardware.cpp \
     src/hyprcraft.cpp \
     src/isobuilder.cpp \
     src/launcher.cpp \
+    src/locklogon.cpp \
+    src/cursoricons.cpp \
+    src/marketplace.cpp \
     src/burn.cpp \
     src/omascii.cpp \
     src/plugins.cpp \

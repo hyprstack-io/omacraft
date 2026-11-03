@@ -1,0 +1,25 @@
+post_install() {
+  cat <<'NOTE'
+==> OmaCraft is installed. Open it from the app launcher, or run: omacraft
+==> Plugins run in the Omarchy 4 shell. Check this machine with: omacraft-doctor
+NOTE
+}
+
+post_upgrade() {
+  cat <<'NOTE'
+==> Linked plugins now point at the new version. Load them with: omarchy restart shell
+NOTE
+}
+
+post_remove() {
+  cat <<'NOTE'
+==> Your settings stay in ~/.config/omacraft and ~/.local/share/omacraft.
+==> Plugins you installed are now broken links in ~/.config/omarchy/plugins, and
+==> any that were on stay listed in ~/.config/omarchy/shell.json. To drop the links:
+==>   find ~/.config/omarchy/plugins -maxdepth 1 -xtype l -lname '/usr/share/omacraft/*' -delete
+==> A boot theme set from OmaCraft stays selected; reset it with: omarchy plymouth reset
+==> If the lock was OmaCraft's, turn it off first; a broken link leaves no lock screen.
+==> The login overrides stay too. Remove them with:
+==>   sudo rm -f /etc/sddm.conf.d/zz-omacraft-theme.conf /etc/sddm.conf.d/zz-omacraft-autologin.conf
+NOTE
+}

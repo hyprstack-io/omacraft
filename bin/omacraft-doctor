@@ -1,0 +1,155 @@
+#!/bin/bash
+# Says whether this machine can run OmaCraft and its plugins, and prints what a
+# bug report needs. It reads the system and changes nothing.
+
+fails=0 warns=0
+if [[ -t 1 ]]; then
+  ok=$'\e[32m  ok\e[0m' warn=$'\e[33mwarn\e[0m' fail=$'\e[31mfail\e[0m'
+else
+  ok='  ok' warn='warn' fail='fail'
+fi
+pass() { printf '%s  %s\n' "$ok" "$1"; }
+warned() { printf '%s  %s\n' "$warn" "$1"; warns=$((warns + 1)); }
+failed() { printf '%s  %s\n' "$fail" "$1"; fails=$((fails + 1)); }
+has() { command -v "$1" >/dev/null 2>&1; }
+info() { printf '  %-12s %s\n' "$1" "${2:-unknown}"; }
+
+config=${XDG_CONFIG_HOME:-$HOME/.config}
+
+echo 'OmaCraft doctor'
+echo
+echo 'Needed'
+
+if [[ -f /etc/arch-release ]] || grep -qE '^ID(_LIKE)?=.*arch' /etc/os-release 2>/dev/null; then
+  pass 'Arch-based system'
+else
+  failed 'This is not an Arch-based system'
+fi
+
+if has hyprland || has Hyprland; then
+  version=$(Hyprland --version 2>/dev/null | sed -nE '1s/^Hyprland ([0-9.]+).*/\1/p')
+  if [[ -n $version ]] && has vercmp && (($(vercmp "$version" 0.53) < 0)); then
+    failed "Hyprland $version is too old: OmaCraft writes Lua config, which needs 0.53 or newer"
+  else
+    pass "Hyprland ${version:-(version unknown)}"
+  fi
+else
+  failed 'Hyprland is not installed'
+fi
+
+if [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]]; then
+  pass 'Running inside Hyprland'
+else
+  warned 'Not inside a Hyprland session, so the live checks below may not apply'
+fi
+
+if [[ -f $config/hypr/hyprland.lua ]]; then
+  pass 'Hyprland uses Lua config'
+elif [[ -f $config/hypr/hyprland.conf ]]; then
+  warned 'Hyprland uses hyprland.conf: keys, borders and transitions need ~/.config/hypr/hyprland.lua'
+else
+  warned 'No Hyprland config found in ~/.config/hypr'
+fi
+
+if has quickshell || has qs; then
+  pass 'Quickshell'
+else
+  failed 'Quickshell is not installed'
+fi
+
+if has omarchy-shell; then
+  pass "Omarchy shell ($(cat "${OMARCHY_PATH:-/usr/share/omarchy}/version" 2>/dev/null || echo 'version unknown'))"
+  if timeout 5 omarchy-shell shell listPlugins >/dev/null 2>&1; then
+    pass 'The shell is answering'
+  else
+    warned 'The shell is not answering. Start it with: omarchy restart shell'
+  fi
+else
+  failed 'The Omarchy 4 shell is not installed. OmaCraft opens, but its plugins need omarchy-shell to load'
+fi
+
+packaged=${OMACRAFT_PLUGINS_DIR:-/usr/share/omacraft/plugins}
+count=$(find "$packaged" -mindepth 2 -maxdepth 2 -name manifest.json 2>/dev/null | wc -l)
+if ((count > 0)); then
+  pass "$count plugins in $packaged"
+else
+  failed "No plugins in $packaged: reinstall the omacraft package"
+fi
+
+if [[ -d $config/omarchy/plugins ]]; then
+  broken=$(find "$config/omarchy/plugins" -maxdepth 1 -xtype l 2>/dev/null)
+  if [[ -n $broken ]]; then
+    warned "Broken plugin links: $(echo "$broken" | xargs -n1 basename | tr '\n' ' ')"
+  fi
+fi
+
+if [[ -f ${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/current/theme/colors.toml ]]; then
+  pass 'Omarchy theme found'
+else
+  warned 'No Omarchy theme found, so OmaCraft uses its own colours'
+fi
+
+if has fc-list && fc-list | grep -qi 'JetBrainsMono Nerd'; then
+  pass 'JetBrainsMono Nerd Font'
+else
+  warned 'JetBrainsMono Nerd Font not found, so icons will show as boxes'
+fi
+
+if pgrep -f 'polkit.*(agent|authentication)|hyprpolkitagent' >/dev/null 2>&1; then
+  pass 'Polkit agent running'
+else
+  warned 'No polkit agent seen: Screensaver installs and OmaBuilds need one to ask for your password'
+fi
+
+if pgrep -x xdg-desktop-portal >/dev/null 2>&1 || ! has systemctl \
+  || systemctl --user is-active --quiet xdg-desktop-portal 2>/dev/null; then
+  pass 'Desktop portal'
+else
+  warned 'xdg-desktop-portal is not running: file pickers may not open'
+fi
+
+echo
+echo 'Optional'
+for item in \
+  'plymouth-set-default-theme:plymouth:Boot Splash' \
+  'ttfx:ttfx:animated boot intros' \
+  'mkarchiso:archiso:OmaBuilds' \
+  'mksquashfs:squashfs-tools:OmaBuilds' \
+  'matugen:matugen:matugen wallpaper colours' \
+  'rofi:rofi:ROFIoma' \
+  'swaync:swaync:ROFIoma notifications' \
+  'wl-copy:wl-clipboard:ROFIoma pickers' \
+  'wtype:wtype:ROFIoma typing'; do
+  IFS=: read -r command package purpose <<<"$item"
+  if has "$command"; then
+    pass "$package ($purpose)"
+  else
+    printf '  --  %s not installed (%s)\n' "$package" "$purpose"
+  fi
+done
+
+echo
+echo 'This machine'
+info OmaCraft "$(pacman -Q omacraft 2>/dev/null)"
+info System "$(. /etc/os-release 2>/dev/null; echo "${PRETTY_NAME:-unknown}") on $(uname -m)"
+info Kernel "$(uname -r)"
+info Model "$(cat /sys/class/dmi/id/sys_vendor /sys/class/dmi/id/product_name 2>/dev/null | tr '\n' ' ')"
+info CPU "$(sed -n 's/^model name[[:space:]]*: //p' /proc/cpuinfo | head -1)"
+if has lspci; then
+  while IFS= read -r gpu; do info GPU "$gpu"; done < <(lspci | sed -nE 's/.*(VGA compatible controller|3D controller|Display controller): //p')
+fi
+if has pacman; then
+  info Qt "$(pacman -Q qt6-base 2>/dev/null)"
+  info Shell "$(pacman -Q quickshell 2>/dev/null)"
+fi
+if has hyprctl && has jq && [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]]; then
+  while IFS= read -r monitor; do info Monitor "$monitor"; done \
+    < <(hyprctl monitors -j 2>/dev/null | jq -r '.[] | "\(.name) \(.width)x\(.height)@\(.refreshRate | floor) scale \(.scale)"')
+fi
+
+echo
+if ((fails > 0)); then
+  echo "$fails problem(s) stop OmaCraft working here, $warns warning(s)."
+  exit 1
+fi
+echo "Ready, with $warns warning(s)."

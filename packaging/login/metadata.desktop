@@ -1,0 +1,9 @@
+[SddmGreeterTheme]
+Name=OmaCraft
+Description=The login screen designed on OmaCraft's Lock & Logon page
+Author=skll
+Type=sddm-theme
+Version=1.0
+MainScript=Main.qml
+ConfigFile=theme.conf
+QtVersion=6

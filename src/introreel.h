@@ -28,6 +28,13 @@ class IntroReel : public QObject {
     // The finished art, shown until the first intro is ready.
     Q_PROPERTY(QString still READ still NOTIFY stillChanged)
     Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
+    // The font the title is drawn in: one picked to try out, else the usual.
+    // Only the title changes; the boot splash keeps its own font.
+    Q_PROPERTY(QString font READ font NOTIFY fontChanged)
+    Q_PROPERTY(bool customFont READ customFont NOTIFY fontChanged)
+    // Every font omascii has, FIGlet then TheDraw: { name, detail, set }.
+    Q_PROPERTY(QVariantList fonts READ fonts NOTIFY fontsChanged)
+    Q_PROPERTY(bool loadingFonts READ loadingFonts NOTIFY fontsChanged)
 
 public:
     explicit IntroReel(Omascii *omascii, const QString &cacheDir = {}, QObject *parent = nullptr);
@@ -42,6 +49,10 @@ public:
     int hold() const { return m_hold; }
     QString still() const { return m_still; }
     bool loading() const { return m_loading; }
+    QString font() const { return m_font.isEmpty() ? titleFont() : m_font; }
+    bool customFont() const { return !m_font.isEmpty(); }
+    QVariantList fonts() const { return m_fonts; }
+    bool loadingFonts() const { return m_loadingFonts; }
 
     // The settings the title is drawn with: the boot design's colours, the
     // word in its own font, no picture, border or padding.
@@ -54,6 +65,10 @@ public:
     Q_INVOKABLE void next();
     Q_INVOKABLE void previous();
     Q_INVOKABLE void show(int index);
+    // An empty name goes back to the usual font.
+    Q_INVOKABLE void setFont(const QString &name);
+    // Asks omascii for its fonts, once.
+    Q_INVOKABLE void loadFonts();
 
 signals:
     void effectsChanged();
@@ -61,6 +76,8 @@ signals:
     void framesChanged();
     void stillChanged();
     void loadingChanged();
+    void fontChanged();
+    void fontsChanged();
 
 private:
     void sync();
@@ -80,6 +97,12 @@ private:
     int m_hold = 60;
     QString m_still;
     bool m_loading = false;
+    // By cache path, so a render for a font no longer shown can't block or
+    // stand in for the one that is.
     QSet<QString> m_rendering;
+    QString m_font;
+    QVariantList m_fonts;
+    bool m_loadingFonts = false;
+    bool m_fontsLoaded = false;
     QString m_drawnFrom;
 };

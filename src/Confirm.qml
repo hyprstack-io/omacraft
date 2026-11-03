@@ -34,7 +34,7 @@ Rectangle {
             anchors.margins: 22
             spacing: 12
             Label { text: confirm.heading; color: theme.text; font.pixelSize: 16; font.weight: Font.DemiBold }
-            Label { Layout.fillWidth: true; text: confirm.body; color: theme.textSoft; wrapMode: Text.WordWrap }
+            Label { Layout.fillWidth: true; text: confirm.body; textFormat: Text.PlainText; color: theme.textSoft; wrapMode: Text.WordWrap }
             RowLayout {
                 Layout.fillWidth: true
                 Layout.topMargin: 6

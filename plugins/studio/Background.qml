@@ -351,10 +351,13 @@ Item {
     if (!bgSwitchProc.running) bgSwitchProc.running = true
   }
 
+  // Right double-click: OmaCraft's wallpaper carousel. Without it (not
+  // installed, or switched off) Omarchy's own picker opens as before.
   function openThemeSwitcher() {
+    if (root.shell && root.shell.summon("omacraft.wallpicker", "{}")) return
     var payload = JSON.stringify({ source: "themes" })
-    if (!root.shell || !root.shell.summon("omarchy.image-picker", payload))
-      Util.execArgv(["omarchy-shell", "shell", "summon", "omarchy.image-picker", payload])
+    if (root.shell && root.shell.summon("omarchy.image-picker", payload)) return
+    Util.execArgv(["omarchy-shell", "shell", "summon", "omacraft.wallpicker", "{}"])
   }
 
   Process {

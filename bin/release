@@ -1,0 +1,38 @@
+#!/bin/sh
+# Getting a version out.
+#   bin/release check   everything that must hold before tagging
+#   bin/release aur     after the tag is on GitHub: pin the tarball's checksum
+#                       in packaging/aur and write its .SRCINFO
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+cd "$ROOT"
+version=$(cat VERSION)
+aur=packaging/aur
+
+case ${1:-} in
+check)
+  [ -z "$(git status --porcelain)" ] || { echo "Commit first: the tag ships what's committed."; exit 1; }
+  grep -q "^pkgver=$version$" "$aur/PKGBUILD" || { echo "$aur/PKGBUILD doesn't say $version."; exit 1; }
+  bin/sync-plugins --check
+  if git grep -nIE '/home/skll|~/Work/omacraft/build' -- src plugins bin/stage packaging; then
+    echo "A developer's path would ship."
+    exit 1
+  fi
+  bin/build
+  [ "$(build/omacraft --version)" = "omacraft $version" ]
+  bin/test
+  echo "Ready: git tag v$version && git push origin main v$version, then bin/release aur"
+  ;;
+aur)
+  url="https://github.com/SK33M/omacraft/archive/refs/tags/v$version.tar.gz"
+  sum=$(curl -fsSL "$url" | sha256sum | cut -d' ' -f1)
+  sed -i "s/^sha256sums=.*/sha256sums=('$sum')/" "$aur/PKGBUILD"
+  (cd "$aur" && makepkg --printsrcinfo > .SRCINFO)
+  echo "Pinned $sum. Copy PKGBUILD, omacraft.install and .SRCINFO into the AUR repo and push."
+  ;;
+*)
+  echo "usage: bin/release check | aur" >&2
+  exit 2
+  ;;
+esac

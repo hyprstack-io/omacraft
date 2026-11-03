@@ -116,6 +116,38 @@ void PortalFilePicker::chooseIso(const QString &startFolder) {
     requestFile(QStringLiteral("Choose an ISO to flash"), options, Action::Iso);
 }
 
+void PortalFilePicker::chooseImage(const QString &purpose, const QString &title, const QString &startFolder) {
+    const PortalFileFilter images{QStringLiteral("Pictures"), {{1, QStringLiteral("image/jpeg")}, {1, QStringLiteral("image/png")}, {1, QStringLiteral("image/webp")}}};
+    QVariantMap options;
+    options.insert(QStringLiteral("accept_label"), QStringLiteral("Choose"));
+    options.insert(QStringLiteral("modal"), true);
+    options.insert(QStringLiteral("multiple"), false);
+    options.insert(QStringLiteral("current_folder"), portalPathBytes(startIn(startFolder)));
+    options.insert(QStringLiteral("filters"), QVariant::fromValue(PortalFileFilters{images}));
+    options.insert(QStringLiteral("current_filter"), QVariant::fromValue(images));
+
+    m_pendingPurpose = purpose;
+    requestFile(title, options, Action::Folder);
+}
+
+void PortalFilePicker::chooseArchive(const QString &purpose, const QString &title, const QString &startFolder) {
+    // Glob patterns (type 0), since theme packs come in every compression.
+    const PortalFileFilter archives{QStringLiteral("Theme archives"),
+                                    {{0, QStringLiteral("*.tar")}, {0, QStringLiteral("*.tar.gz")}, {0, QStringLiteral("*.tgz")},
+                                     {0, QStringLiteral("*.tar.xz")}, {0, QStringLiteral("*.txz")}, {0, QStringLiteral("*.tar.zst")},
+                                     {0, QStringLiteral("*.tar.bz2")}, {0, QStringLiteral("*.zip")}, {0, QStringLiteral("*.7z")}}};
+    QVariantMap options;
+    options.insert(QStringLiteral("accept_label"), QStringLiteral("Import"));
+    options.insert(QStringLiteral("modal"), true);
+    options.insert(QStringLiteral("multiple"), false);
+    options.insert(QStringLiteral("current_folder"), portalPathBytes(startIn(startFolder)));
+    options.insert(QStringLiteral("filters"), QVariant::fromValue(PortalFileFilters{archives}));
+    options.insert(QStringLiteral("current_filter"), QVariant::fromValue(archives));
+
+    m_pendingPurpose = purpose;
+    requestFile(title, options, Action::Folder);
+}
+
 bool PortalFilePicker::connectToRequestPath(const QString &path) {
     m_pendingPath = path;
     return QDBusConnection::sessionBus().connect(

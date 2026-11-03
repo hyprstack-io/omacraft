@@ -1,0 +1,49 @@
+# Maintainer: skll <159516417+SK33M@users.noreply.github.com>
+pkgname=omacraft
+pkgver=0.3.0
+pkgrel=1
+pkgdesc='One home for the Omarchy shell plugins, Dotfile Generator and the OmaBuilds ISO builder'
+arch=('x86_64' 'aarch64')
+url='https://github.com/SK33M/omacraft'
+license=('MIT' 'Apache-2.0')
+depends=('qt6-base' 'qt6-declarative' 'qt6-wayland' 'qt6-svg' 'qt6-imageformats' 'qt6-webengine' 'layer-shell-qt'
+         'hyprland>=0.53' 'quickshell' 'ttf-jetbrains-mono-nerd' 'xdg-desktop-portal' 'polkit'
+         'python' 'python-pillow' 'nodejs' 'jq' 'curl' 'git' 'fontconfig' 'zstd' 'unzip'
+         'inotify-tools' 'libnotify' 'gtk3' 'xdg-utils' 'util-linux' 'coreutils' 'pacman' 'libarchive' 'glib2')
+optdepends=('omarchy: the Omarchy 4 shell every plugin runs in; plain Hyprland can run the app but not the plugins'
+            'archiso: building ISOs in OmaBuilds'
+            'squashfs-tools: building ISOs in OmaBuilds'
+            'erofs-utils: EROFS live images in OmaBuilds'
+            'plymouth: the boot screen, from Boot Splash'
+            'ttfx: the animated boot splash intros (Omarchy repo)'
+            'imagemagick: image ASCII art in omascii'
+            'matugen: the matugen wallpaper colour scheme'
+            'python-pywal16: the pywal wallpaper colour scheme (AUR)'
+            'flavours: the flavours wallpaper colour scheme (AUR)'
+            "rofi: ROFIoma's popups"
+            "wl-clipboard: ROFIoma's emoji and glyph pickers, copying exports"
+            "wtype: ROFIoma's pickers typing what is picked"
+            'swaync: notifications styled in ROFIoma'
+            'python-pyqt6-webengine: Dotfile Generator popped out of OmaCraft into its own window'
+            'alienflare: the keyboard lights on Alienware laptops')
+makedepends=('gcc' 'make' 'rsync')
+options=('!debug')
+install=omacraft.install
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+_root() {
+  echo "${_tree:-$srcdir/$pkgname-$pkgver}"
+}
+
+build() {
+  mkdir -p "$srcdir/build"
+  cd "$srcdir/build"
+  qmake6 "$(_root)/omacraft.pro" \
+    QMAKE_CFLAGS_RELEASE="$CFLAGS" QMAKE_CXXFLAGS_RELEASE="$CXXFLAGS" QMAKE_LFLAGS_RELEASE="$LDFLAGS"
+  make -j"$(nproc)"
+}
+
+package() {
+  "$(_root)/bin/stage" "$srcdir/build/omacraft" "$pkgdir"
+}

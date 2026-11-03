@@ -14,10 +14,11 @@ Item {
     property bool keysFree: false
     signal openPage(string name)
 
-    readonly property bool dialogOpen: false
+    readonly property bool dialogOpen: packConfirm.visible
     readonly property var shortcuts: [
         { keys: "T / Shift T", action: "Next / previous tab" },
-        { keys: "O", action: "Open this tab's popup for real" }
+        { keys: "O", action: "Open this tab's popup for real" },
+        { keys: "R", action: "Play the stage's entrance again" }
     ]
 
     readonly property var tabs: [
@@ -35,6 +36,48 @@ Item {
     readonly property var cfg: rofioma.config
     readonly property var pal: rofioma.palette
     readonly property var power: cfg.power || {}
+
+    // Hyprland's name for a pressed key, and the combo with its modifiers,
+    // as the overlay's cheatsheet reads them. Shifted symbols bind as their
+    // unshifted key.
+    function keyName(event) {
+        const k = event.key;
+        if (k >= Qt.Key_A && k <= Qt.Key_Z) return String.fromCharCode(k);
+        if (k >= Qt.Key_0 && k <= Qt.Key_9) return String.fromCharCode(k);
+        if (k >= Qt.Key_F1 && k <= Qt.Key_F24) return "F" + (k - Qt.Key_F1 + 1);
+        const named = {};
+        named[Qt.Key_Return] = "RETURN"; named[Qt.Key_Enter] = "RETURN"; named[Qt.Key_Space] = "SPACE";
+        named[Qt.Key_Tab] = "TAB"; named[Qt.Key_Backtab] = "TAB"; named[Qt.Key_Backspace] = "BACKSPACE";
+        named[Qt.Key_Delete] = "DELETE"; named[Qt.Key_Insert] = "INSERT"; named[Qt.Key_Home] = "HOME"; named[Qt.Key_End] = "END";
+        named[Qt.Key_PageUp] = "PAGE_UP"; named[Qt.Key_PageDown] = "PAGE_DOWN"; named[Qt.Key_Print] = "PRINT";
+        named[Qt.Key_Left] = "LEFT"; named[Qt.Key_Right] = "RIGHT"; named[Qt.Key_Up] = "UP"; named[Qt.Key_Down] = "DOWN";
+        named[Qt.Key_Comma] = "COMMA"; named[Qt.Key_Less] = "COMMA"; named[Qt.Key_Period] = "PERIOD"; named[Qt.Key_Greater] = "PERIOD";
+        named[Qt.Key_Slash] = "SLASH"; named[Qt.Key_Question] = "SLASH"; named[Qt.Key_Minus] = "MINUS"; named[Qt.Key_Underscore] = "MINUS";
+        named[Qt.Key_Equal] = "EQUAL"; named[Qt.Key_Plus] = "EQUAL"; named[Qt.Key_Semicolon] = "SEMICOLON"; named[Qt.Key_Colon] = "SEMICOLON";
+        named[Qt.Key_Apostrophe] = "APOSTROPHE"; named[Qt.Key_QuoteDbl] = "APOSTROPHE"; named[Qt.Key_QuoteLeft] = "GRAVE";
+        named[Qt.Key_AsciiTilde] = "GRAVE"; named[Qt.Key_BracketLeft] = "BRACKETLEFT"; named[Qt.Key_BraceLeft] = "BRACKETLEFT";
+        named[Qt.Key_BracketRight] = "BRACKETRIGHT"; named[Qt.Key_BraceRight] = "BRACKETRIGHT";
+        named[Qt.Key_Backslash] = "BACKSLASH"; named[Qt.Key_Bar] = "BACKSLASH";
+        named[Qt.Key_Exclam] = "1"; named[Qt.Key_At] = "2"; named[Qt.Key_NumberSign] = "3"; named[Qt.Key_Dollar] = "4";
+        named[Qt.Key_Percent] = "5"; named[Qt.Key_AsciiCircum] = "6"; named[Qt.Key_Ampersand] = "7"; named[Qt.Key_Asterisk] = "8";
+        named[Qt.Key_ParenLeft] = "9"; named[Qt.Key_ParenRight] = "0";
+        return named[k] || "";
+    }
+    function isModifierKey(k) {
+        return k === Qt.Key_Shift || k === Qt.Key_Control || k === Qt.Key_Alt || k === Qt.Key_Meta
+            || k === Qt.Key_Super_L || k === Qt.Key_Super_R || k === Qt.Key_AltGr || k === Qt.Key_CapsLock;
+    }
+    function comboOf(event) {
+        const name = keyName(event);
+        if (name === "") return "";
+        const keys = [];
+        if (event.modifiers & Qt.MetaModifier) keys.push("SUPER");
+        if (event.modifiers & Qt.ShiftModifier) keys.push("SHIFT");
+        if (event.modifiers & Qt.ControlModifier) keys.push("CTRL");
+        if (event.modifiers & Qt.AltModifier) keys.push("ALT");
+        keys.push(name);
+        return keys.join(" + ");
+    }
     readonly property var notifyCfg: cfg.notify || {}
     readonly property var lookCfg: cfg.look || {}
     readonly property var currentMenu: {
@@ -49,6 +92,10 @@ Item {
     readonly property var emojiSample: rofioma.searchSymbols("emoji", "", "", 70)
 
     function handleEscape() {
+        if (packConfirm.visible) {
+            packConfirm.visible = false;
+            return true;
+        }
         if (glyphChooser.opened) {
             glyphChooser.close();
             return true;
@@ -59,7 +106,11 @@ Item {
         }
         return false;
     }
-    function acceptDialog() {}
+    function acceptDialog() {
+        if (!packConfirm.visible) return;
+        packConfirm.visible = false;
+        rofioma.installWidgetPack(packConfirm.pack.path);
+    }
     function cycleTab(step) {
         let i = tabs.findIndex(t => t.id === tab);
         tab = tabs[(i + step + tabs.length) % tabs.length].id;
@@ -75,6 +126,7 @@ Item {
     Shortcut { sequence: "T"; context: Qt.ApplicationShortcut; enabled: page.keys; onActivated: page.cycleTab(1) }
     Shortcut { sequence: "Shift+T"; context: Qt.ApplicationShortcut; enabled: page.keys; onActivated: page.cycleTab(-1) }
     Shortcut { sequence: "O"; context: Qt.ApplicationShortcut; enabled: page.keys; onActivated: page.openPopup() }
+    Shortcut { sequence: "R"; context: Qt.ApplicationShortcut; enabled: page.keys; onActivated: stageView.replay() }
 
     onActiveChanged: if (active) { rofioma.reload(); rofioma.refreshBinds(); }
 
@@ -113,14 +165,27 @@ Item {
         }
     }
 
+    // A text field sized for a row of other controls: Material's own is
+    // tall and padded enough to crush a short one to a sliver.
+    component CompactField: TextField {
+        implicitHeight: 40
+        topPadding: 8
+        bottomPadding: 8
+        leftPadding: 10
+        rightPadding: 10
+        font.pixelSize: 13
+    }
+
     // A glyph that opens the chooser.
     component GlyphButton: Rectangle {
         id: gb
         property string glyph
         signal chosen(string symbol)
-        implicitWidth: 36
-        implicitHeight: 32
-        radius: 7
+        implicitWidth: 40
+        implicitHeight: 40
+        Layout.preferredWidth: 40
+        Layout.preferredHeight: 40
+        radius: 8
         color: gbHover.hovered ? theme.hover : theme.inset
         border.color: theme.border
         Label {
@@ -128,13 +193,41 @@ Item {
             text: gb.glyph
             color: theme.text
             font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 17
+            font.pixelSize: 19
         }
         HoverHandler { id: gbHover; cursorShape: Qt.PointingHandCursor }
         TapHandler { onTapped: glyphChooser.choose(gb.glyph, symbol => gb.chosen(symbol)) }
         ToolTip.visible: gbHover.hovered
         ToolTip.delay: 400
         ToolTip.text: "Pick a Nerd Font glyph"
+    }
+
+    // A square glyph button the size of a GlyphButton, so its glyph sits
+    // centred in its own frame instead of in a wide, padded ToolButton.
+    component OrderButton: Rectangle {
+        id: ob
+        property string glyph
+        property string hint
+        property bool danger: false
+        signal clicked()
+        Layout.preferredWidth: 40
+        Layout.preferredHeight: 40
+        radius: 8
+        opacity: enabled ? 1 : 0.35
+        color: obHover.hovered && enabled ? theme.hover : "transparent"
+        border.color: obHover.hovered && enabled ? theme.border : "transparent"
+        Label {
+            anchors.centerIn: parent
+            text: ob.glyph
+            color: ob.danger && obHover.hovered ? theme.danger : theme.textSoft
+            font.family: "JetBrainsMono Nerd Font"
+            font.pixelSize: 17
+        }
+        HoverHandler { id: obHover; cursorShape: ob.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor }
+        TapHandler { enabled: ob.enabled; onTapped: ob.clicked() }
+        ToolTip.visible: obHover.hovered && hint !== ""
+        ToolTip.delay: 400
+        ToolTip.text: hint
     }
 
     component Section: Card {
@@ -148,6 +241,92 @@ Item {
             anchors.margins: 16
             spacing: 12
             SectionLabel { text: title; visible: title !== "" }
+        }
+    }
+
+    // A labelled row of chips, wrapping.
+    component Picks: RowLayout {
+        id: picks
+        property string label
+        property var options: []
+        property string current
+        signal picked(string id)
+        Layout.fillWidth: true
+        spacing: 8
+        Label { text: picks.label; color: theme.textSoft; Layout.preferredWidth: 90; Layout.alignment: Qt.AlignTop; Layout.topMargin: 6 }
+        Flow {
+            Layout.fillWidth: true
+            spacing: 4
+            Repeater {
+                model: picks.options
+                Chip {
+                    required property var modelData
+                    text: modelData.name
+                    chosen: picks.current === modelData.id
+                    onClicked: picks.picked(modelData.id)
+                    ToolTip.visible: hoverTip.hovered && modelData.description !== undefined
+                    ToolTip.delay: 450
+                    ToolTip.text: modelData.description || ""
+                    HoverHandler { id: hoverTip }
+                }
+            }
+        }
+    }
+
+    // How a popup moves: its entrance, its lit card and what's behind it. set
+    // writes one of them, so this serves the power menu and every menu.
+    component EffectsSection: Section {
+        id: fxSection
+        property var source: ({})
+        property string defaultEnter: "fade"
+        property bool hoverable: true
+        property var writer: null
+        title: "Effects"
+
+        Label {
+            visible: (page.cfg.look || {}).engine === "rofi"
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            color: theme.warningText
+            font.pixelSize: 11
+            text: "These play in the OmaCraft popups, which are set to rofi in Look. rofi draws popups without animation."
+        }
+        Picks {
+            label: "Entrance"
+            options: rofioma.powerEnters
+            current: fxSection.source.enter || fxSection.defaultEnter
+            onPicked: id => { fxSection.writer("enter", id); stageView.replay(); }
+        }
+        Picks {
+            visible: fxSection.hoverable
+            label: "Hover"
+            options: rofioma.powerHovers
+            current: fxSection.source.hover || "hyde"
+            onPicked: id => fxSection.writer("hover", id)
+        }
+        Label {
+            visible: !fxSection.hoverable
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            color: theme.textDim
+            font.pixelSize: 11
+            text: "The Wlogout style keeps HyDE's own hover; its bar swells out of the row."
+        }
+        Picks {
+            label: "Backdrop"
+            options: rofioma.backdrops
+            current: fxSection.source.backdrop || "dim"
+            onPicked: id => fxSection.writer("backdrop", id)
+        }
+        SliderRow {
+            label: "Duration"
+            from: 0.4; to: 2.5; stepSize: 0.1; decimals: 1; suffix: "×"
+            value: fxSection.source.speed || 1
+            onMoved: v => { fxSection.writer("speed", Math.round(v * 10) / 10); stageView.replay(); }
+        }
+        RowLayout {
+            Item { Layout.fillWidth: true }
+            Button { text: "Play again"; flat: true; focusPolicy: Qt.NoFocus; onClicked: stageView.replay() }
         }
     }
 
@@ -206,6 +385,43 @@ Item {
             onDismissed: rofioma.dismissMessages()
         }
 
+        // The shell overlay that draws the power menu, the menus and the
+        // cheatsheet with HyDE's hover. Without it they open in rofi.
+        Rectangle {
+            id: overlayCard
+            readonly property var plugin: { plugins.plugins; return plugins.plugin("omacraft.rofioma"); }
+            readonly property bool installed: plugin.installed === true
+            readonly property bool on: installed && plugin.enabled === true
+            readonly property bool wanted: (page.cfg.look || {}).engine !== "rofi"
+            visible: wanted && !on && ["power", "menus", "keybinds"].indexOf(page.tab) >= 0
+            Layout.fillWidth: true
+            implicitHeight: overlayRow.implicitHeight + 20
+            radius: 10
+            color: theme.inset
+            border.color: theme.accent
+            RowLayout {
+                id: overlayRow
+                anchors.fill: parent
+                anchors.margins: 10
+                anchors.leftMargin: 14
+                spacing: 10
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    color: theme.text
+                    text: !overlayCard.installed
+                          ? "Install ROFIoma popups for HyDE's hover (cards swell, round off and bounce) and click-to-move keybinds. Until then these open in rofi, which can't animate."
+                          : "ROFIoma popups is installed but off. Enable it so these open with HyDE's hover instead of in rofi."
+                }
+                Button {
+                    text: overlayCard.installed ? "Enable" : "Install"
+                    enabled: !plugins.busy
+                    focusPolicy: Qt.NoFocus
+                    onClicked: overlayCard.installed ? plugins.setEnabled("omacraft.rofioma", true) : plugins.install("omacraft.rofioma")
+                }
+            }
+        }
+
         RowLayout {
             Layout.fillWidth: true
             Segmented {
@@ -229,6 +445,7 @@ Item {
                 Layout.maximumWidth: Layout.preferredWidth
                 spacing: 10
                 RofiPreview {
+                    id: stageView
                     Layout.fillWidth: true
                     Layout.preferredHeight: Math.round((page.width - 56) * 0.52 * 0.5625)
                     kind: page.tab === "menus" ? "menu" : page.tab === "look" ? "power" : page.tab
@@ -305,9 +522,19 @@ Item {
                                     }
                                 }
                             }
-                            SliderRow { label: "Button size"; from: 60; to: 260; stepSize: 2; decimals: 0; suffix: "px"; value: page.power.size || 150; onMoved: v => rofioma.set("power.size", Math.round(v)) }
+                            Label {
+                                visible: page.power.style === "wlogout"
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                color: theme.textDim
+                                font.pixelSize: 11
+                                text: rofioma.missing.some(t => t.program === "wlogout")
+                                      ? "wlogout isn't installed, so this opens as the rofi Row until it is (install it from the AUR above)."
+                                      : "Drawn by wlogout, sized from your screen as HyDE sizes it: the bar's height and ends come from the monitor, the icon from Icon size."
+                            }
+                            SliderRow { visible: page.power.style !== "wlogout"; label: "Button size"; from: 60; to: 260; stepSize: 2; decimals: 0; suffix: "px"; value: page.power.size || 150; onMoved: v => rofioma.set("power.size", Math.round(v)) }
                             SliderRow { label: "Icon size"; from: 12; to: 96; stepSize: 1; decimals: 0; suffix: "pt"; value: page.power.glyphSize || 44; onMoved: v => rofioma.set("power.glyphSize", Math.round(v)) }
-                            SliderRow { label: "Spacing"; from: 0; to: 48; stepSize: 1; decimals: 0; suffix: "px"; value: page.power.spacing !== undefined ? page.power.spacing : 14; onMoved: v => rofioma.set("power.spacing", Math.round(v)) }
+                            SliderRow { visible: page.power.style !== "wlogout"; label: "Spacing"; from: 0; to: 48; stepSize: 1; decimals: 0; suffix: "px"; value: page.power.spacing !== undefined ? page.power.spacing : 14; onMoved: v => rofioma.set("power.spacing", Math.round(v)) }
                             SliderRow {
                                 visible: (page.cfg.power || {}).style !== "list"
                                 label: "Dim the screen"; from: 0; to: 0.9; stepSize: 0.05; suffix: ""
@@ -324,6 +551,13 @@ Item {
                             KeyRow { popup: "power"; suggested: "SUPER + CTRL + ESCAPE" }
                         }
 
+                        EffectsSection {
+                            source: page.power
+                            defaultEnter: "cascade"
+                            hoverable: page.power.style !== "wlogout"
+                            writer: (field, value) => rofioma.set("power." + field, value)
+                        }
+
                         Section {
                             title: "Buttons"
                             Label {
@@ -331,55 +565,87 @@ Item {
                                 wrapMode: Text.WordWrap
                                 color: theme.textDim
                                 font.pixelSize: 11
-                                text: "On or off, icon, name, the command it runs, its letter, and whether it asks first."
+                                text: "Each button's icon, name, letter, whether it asks first and whether it's shown, with the command it runs underneath."
                             }
+                            // One tile per button: the icon, name, letter and
+                            // order on top, the command it runs underneath.
                             Repeater {
                                 model: (page.cfg.power || {}).buttons || []
-                                delegate: RowLayout {
+                                delegate: Rectangle {
                                     id: buttonRow
                                     required property var modelData
                                     required property int index
+                                    readonly property bool on: modelData.enabled !== false
+                                    readonly property int count: ((page.cfg.power || {}).buttons || []).length
                                     Layout.fillWidth: true
-                                    spacing: 6
-                                    Switch {
-                                        checked: buttonRow.modelData.enabled !== false
-                                        focusPolicy: Qt.NoFocus
-                                        onToggled: rofioma.setPowerButton(buttonRow.index, "enabled", checked)
+                                    implicitHeight: buttonCol.implicitHeight + 20
+                                    radius: 10
+                                    color: theme.inset
+                                    border.color: theme.border
+                                    opacity: on ? 1 : 0.6
+
+                                    ColumnLayout {
+                                        id: buttonCol
+                                        anchors.fill: parent
+                                        anchors.margins: 10
+                                        spacing: 8
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 8
+                                            GlyphButton {
+                                                glyph: buttonRow.modelData.glyph
+                                                onChosen: symbol => rofioma.setPowerButton(buttonRow.index, "glyph", symbol)
+                                            }
+                                            CompactField {
+                                                Layout.fillWidth: true
+                                                Layout.minimumWidth: 80
+                                                text: buttonRow.modelData.label
+                                                placeholderText: "Name"
+                                                onEditingFinished: if (text !== buttonRow.modelData.label) rofioma.setPowerButton(buttonRow.index, "label", text)
+                                            }
+                                            CompactField {
+                                                Layout.preferredWidth: 44
+                                                horizontalAlignment: Text.AlignHCenter
+                                                leftPadding: 4
+                                                rightPadding: 4
+                                                maximumLength: 1
+                                                text: buttonRow.modelData.key || ""
+                                                font.family: "monospace"
+                                                onEditingFinished: if (text !== (buttonRow.modelData.key || "")) rofioma.setPowerButton(buttonRow.index, "key", text.toLowerCase())
+                                                ToolTip.visible: hovered
+                                                ToolTip.text: "The letter that picks it"
+                                            }
+                                            CheckBox {
+                                                text: "Ask"
+                                                checked: buttonRow.modelData.confirm === true
+                                                focusPolicy: Qt.NoFocus
+                                                onToggled: rofioma.setPowerButton(buttonRow.index, "confirm", checked)
+                                                ToolTip.visible: hovered
+                                                ToolTip.text: "Ask before running it"
+                                            }
+                                            Switch {
+                                                checked: buttonRow.on
+                                                focusPolicy: Qt.NoFocus
+                                                onToggled: rofioma.setPowerButton(buttonRow.index, "enabled", checked)
+                                                ToolTip.visible: hovered
+                                                ToolTip.text: buttonRow.on ? "Shown in the menu" : "Left out of the menu"
+                                            }
+                                        }
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 8
+                                            CompactField {
+                                                Layout.fillWidth: true
+                                                text: buttonRow.modelData.command
+                                                placeholderText: "Command to run"
+                                                font.family: "monospace"
+                                                font.pixelSize: 12
+                                                onEditingFinished: if (text !== buttonRow.modelData.command) rofioma.setPowerButton(buttonRow.index, "command", text)
+                                            }
+                                            OrderButton { glyph: "\u{f005d}"; hint: "Move earlier"; enabled: buttonRow.index > 0; onClicked: rofioma.movePowerButton(buttonRow.index, buttonRow.index - 1) }
+                                            OrderButton { glyph: "\u{f0045}"; hint: "Move later"; enabled: buttonRow.index < buttonRow.count - 1; onClicked: rofioma.movePowerButton(buttonRow.index, buttonRow.index + 1) }
+                                        }
                                     }
-                                    GlyphButton {
-                                        glyph: buttonRow.modelData.glyph
-                                        onChosen: symbol => rofioma.setPowerButton(buttonRow.index, "glyph", symbol)
-                                    }
-                                    TextField {
-                                        Layout.preferredWidth: 96
-                                        text: buttonRow.modelData.label
-                                        onEditingFinished: if (text !== buttonRow.modelData.label) rofioma.setPowerButton(buttonRow.index, "label", text)
-                                    }
-                                    TextField {
-                                        Layout.fillWidth: true
-                                        text: buttonRow.modelData.command
-                                        font.family: "monospace"
-                                        font.pixelSize: 11
-                                        onEditingFinished: if (text !== buttonRow.modelData.command) rofioma.setPowerButton(buttonRow.index, "command", text)
-                                    }
-                                    TextField {
-                                        Layout.preferredWidth: 34
-                                        horizontalAlignment: Text.AlignHCenter
-                                        maximumLength: 1
-                                        text: buttonRow.modelData.key || ""
-                                        font.family: "monospace"
-                                        onEditingFinished: if (text !== (buttonRow.modelData.key || "")) rofioma.setPowerButton(buttonRow.index, "key", text.toLowerCase())
-                                        ToolTip.visible: hovered
-                                        ToolTip.text: "The letter that picks it"
-                                    }
-                                    CheckBox {
-                                        text: "Ask"
-                                        checked: buttonRow.modelData.confirm === true
-                                        focusPolicy: Qt.NoFocus
-                                        onToggled: rofioma.setPowerButton(buttonRow.index, "confirm", checked)
-                                    }
-                                    ToolButton { text: "\u{f005d}"; font.family: "JetBrainsMono Nerd Font"; enabled: buttonRow.index > 0; focusPolicy: Qt.NoFocus; onClicked: rofioma.movePowerButton(buttonRow.index, buttonRow.index - 1) }
-                                    ToolButton { text: "\u{f0045}"; font.family: "JetBrainsMono Nerd Font"; enabled: buttonRow.index < ((page.cfg.power || {}).buttons || []).length - 1; focusPolicy: Qt.NoFocus; onClicked: rofioma.movePowerButton(buttonRow.index, buttonRow.index + 1) }
                                 }
                             }
                             RowLayout {
@@ -483,32 +749,47 @@ Item {
                             SectionLabel { text: "Items"; Layout.topMargin: 6 }
                             Repeater {
                                 model: menuEditor.m.items || []
-                                delegate: RowLayout {
+                                delegate: Rectangle {
                                     id: itemRow
                                     required property var modelData
                                     required property int index
                                     Layout.fillWidth: true
-                                    spacing: 6
-                                    GlyphButton {
-                                        glyph: itemRow.modelData.glyph || ""
-                                        onChosen: symbol => rofioma.setMenuItem(menuEditor.m.id, itemRow.index, "glyph", symbol)
+                                    implicitHeight: itemCol.implicitHeight + 20
+                                    radius: 10
+                                    color: theme.inset
+                                    border.color: theme.border
+
+                                    ColumnLayout {
+                                        id: itemCol
+                                        anchors.fill: parent
+                                        anchors.margins: 10
+                                        spacing: 8
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 8
+                                            GlyphButton {
+                                                glyph: itemRow.modelData.glyph || ""
+                                                onChosen: symbol => rofioma.setMenuItem(menuEditor.m.id, itemRow.index, "glyph", symbol)
+                                            }
+                                            CompactField {
+                                                Layout.fillWidth: true
+                                                text: itemRow.modelData.label
+                                                placeholderText: "Name"
+                                                onEditingFinished: if (text !== itemRow.modelData.label) rofioma.setMenuItem(menuEditor.m.id, itemRow.index, "label", text)
+                                            }
+                                            OrderButton { glyph: "\u{f005d}"; hint: "Move earlier"; enabled: itemRow.index > 0; onClicked: rofioma.moveMenuItem(menuEditor.m.id, itemRow.index, itemRow.index - 1) }
+                                            OrderButton { glyph: "\u{f0045}"; hint: "Move later"; enabled: itemRow.index < (menuEditor.m.items || []).length - 1; onClicked: rofioma.moveMenuItem(menuEditor.m.id, itemRow.index, itemRow.index + 1) }
+                                            OrderButton { glyph: "\u{f0156}"; hint: "Remove"; danger: true; onClicked: rofioma.removeMenuItem(menuEditor.m.id, itemRow.index) }
+                                        }
+                                        CompactField {
+                                            Layout.fillWidth: true
+                                            text: itemRow.modelData.command
+                                            placeholderText: "Command to run"
+                                            font.family: "monospace"
+                                            font.pixelSize: 12
+                                            onEditingFinished: if (text !== itemRow.modelData.command) rofioma.setMenuItem(menuEditor.m.id, itemRow.index, "command", text)
+                                        }
                                     }
-                                    TextField {
-                                        Layout.preferredWidth: 130
-                                        text: itemRow.modelData.label
-                                        onEditingFinished: if (text !== itemRow.modelData.label) rofioma.setMenuItem(menuEditor.m.id, itemRow.index, "label", text)
-                                    }
-                                    TextField {
-                                        Layout.fillWidth: true
-                                        text: itemRow.modelData.command
-                                        placeholderText: "Command to run"
-                                        font.family: "monospace"
-                                        font.pixelSize: 11
-                                        onEditingFinished: if (text !== itemRow.modelData.command) rofioma.setMenuItem(menuEditor.m.id, itemRow.index, "command", text)
-                                    }
-                                    ToolButton { text: "\u{f005d}"; font.family: "JetBrainsMono Nerd Font"; enabled: itemRow.index > 0; focusPolicy: Qt.NoFocus; onClicked: rofioma.moveMenuItem(menuEditor.m.id, itemRow.index, itemRow.index - 1) }
-                                    ToolButton { text: "\u{f0045}"; font.family: "JetBrainsMono Nerd Font"; enabled: itemRow.index < (menuEditor.m.items || []).length - 1; focusPolicy: Qt.NoFocus; onClicked: rofioma.moveMenuItem(menuEditor.m.id, itemRow.index, itemRow.index + 1) }
-                                    ToolButton { text: "\u{f0156}"; font.family: "JetBrainsMono Nerd Font"; focusPolicy: Qt.NoFocus; onClicked: rofioma.removeMenuItem(menuEditor.m.id, itemRow.index) }
                                 }
                             }
                             RowLayout {
@@ -522,6 +803,12 @@ Item {
                                     onClicked: { rofioma.removeMenu(menuEditor.m.id); page.menuId = ""; }
                                 }
                             }
+                        }
+
+                        EffectsSection {
+                            visible: page.currentMenu !== null
+                            source: page.currentMenu || ({})
+                            writer: (field, value) => { if (page.currentMenu) rofioma.setMenu(page.currentMenu.id, field, value); }
                         }
                     }
 
@@ -671,18 +958,127 @@ Item {
                             }
                         }
                         Section {
+                            id: bindsSection
                             title: "Your binds (" + rofioma.binds.length + ")"
+                            // The row waiting for its new keys, by its keys.
+                            property string editing: ""
+                            function stop() {
+                                if (editing === "") return;
+                                editing = "";
+                                rofioma.captureKeys(false);
+                            }
+                            function start(keys) {
+                                editing = keys;
+                                rofioma.captureKeys(true);
+                                captureCatcher.forceActiveFocus();
+                            }
+                            function move(from, to) {
+                                bindsSection.problem = rofioma.moveBind(from, to);
+                                stop();
+                            }
+                            property string problem: ""
+                            Component.onDestruction: stop()
+
+                            Label {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                color: theme.textDim
+                                font.pixelSize: 12
+                                text: "Click a bind, then press its new keys. Hyprland's binds pause while it waits, so a key that's taken won't run. "
+                                      + "A moved bind keeps its action; Backspace while it waits puts it back."
+                            }
                             SearchBox { id: bindSearch; Layout.fillWidth: true; placeholderText: "Filter keys or descriptions" }
+                            Label {
+                                visible: bindsSection.problem !== ""
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                color: theme.danger
+                                text: bindsSection.problem
+                            }
+                            // Takes the keys pressed while a row waits.
+                            Item {
+                                id: captureCatcher
+                                Layout.preferredHeight: 0
+                                Layout.preferredWidth: 0
+                                Keys.onPressed: event => {
+                                    event.accepted = true;
+                                    if (bindsSection.editing === "" || page.isModifierKey(event.key)) return;
+                                    const row = rofioma.binds.find(b => b.keys === bindsSection.editing) || {};
+                                    if (event.key === Qt.Key_Escape && !event.modifiers) return bindsSection.stop();
+                                    if (event.key === Qt.Key_Backspace && !event.modifiers)
+                                        return row.movedFrom ? bindsSection.move(bindsSection.editing, "") : bindsSection.stop();
+                                    const combo = page.comboOf(event);
+                                    if (combo === "") { bindsSection.problem = "That key has no name Hyprland binds by."; return; }
+                                    bindsSection.move(bindsSection.editing, combo);
+                                }
+                                onActiveFocusChanged: if (!activeFocus) bindsSection.stop()
+                            }
                             Repeater {
                                 model: rofioma.binds.filter(b => {
                                     const q = bindSearch.text.toLowerCase();
                                     return q === "" || b.keys.toLowerCase().indexOf(q) >= 0 || b.description.toLowerCase().indexOf(q) >= 0;
                                 }).slice(0, 200)
-                                delegate: RowLayout {
+                                delegate: Rectangle {
+                                    id: bindRow
                                     required property var modelData
+                                    readonly property bool waiting: bindsSection.editing === modelData.keys
                                     Layout.fillWidth: true
-                                    Label { Layout.preferredWidth: 200; text: modelData.keys; color: theme.accent; font.family: "monospace"; font.pixelSize: 11; elide: Text.ElideRight }
-                                    Label { Layout.fillWidth: true; text: modelData.description; color: theme.textSoft; elide: Text.ElideRight }
+                                    implicitHeight: 38
+                                    radius: 8
+                                    color: waiting ? Qt.rgba(Qt.color(theme.accent).r, Qt.color(theme.accent).g, Qt.color(theme.accent).b, 0.14)
+                                         : bindHover.hovered ? theme.hover : "transparent"
+                                    border.color: waiting ? theme.accent : "transparent"
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 8
+                                        anchors.rightMargin: 8
+                                        spacing: 12
+                                        Rectangle {
+                                            Layout.preferredWidth: 230
+                                            Layout.preferredHeight: 26
+                                            radius: 6
+                                            color: bindRow.waiting ? theme.accent : theme.inset
+                                            border.color: bindRow.waiting ? theme.accent : theme.border
+                                            Label {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 8
+                                                anchors.rightMargin: 8
+                                                verticalAlignment: Text.AlignVCenter
+                                                text: bindRow.waiting ? "Press the new keys…" : bindRow.modelData.keys
+                                                color: bindRow.waiting ? theme.accentForeground : theme.accent
+                                                font.family: "monospace"
+                                                font.pixelSize: 12
+                                                font.bold: bindRow.waiting
+                                                elide: Text.ElideMiddle
+                                            }
+                                        }
+                                        Label {
+                                            Layout.fillWidth: true
+                                            text: bindRow.waiting ? (bindRow.modelData.movedFrom ? "Esc cancels · Backspace puts it back on " + bindRow.modelData.movedFrom : "Esc cancels")
+                                                                  : bindRow.modelData.description
+                                            color: bindRow.waiting ? theme.text : theme.textSoft
+                                            elide: Text.ElideRight
+                                        }
+                                        Label {
+                                            visible: !bindRow.waiting && bindRow.modelData.movedFrom !== ""
+                                            text: "moved from " + bindRow.modelData.movedFrom
+                                            color: theme.textDim
+                                            font.pixelSize: 11
+                                            font.italic: true
+                                        }
+                                        Label {
+                                            visible: bindHover.hovered && !bindRow.waiting
+                                            text: "\u{f03eb}"
+                                            color: theme.textMuted
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 14
+                                        }
+                                    }
+                                    HoverHandler { id: bindHover; cursorShape: Qt.PointingHandCursor }
+                                    TapHandler { onTapped: bindRow.waiting ? bindsSection.stop() : bindsSection.start(bindRow.modelData.keys) }
+                                    ToolTip.visible: bindHover.hovered && !bindRow.waiting
+                                    ToolTip.delay: 600
+                                    ToolTip.text: "Click, then press its new keys"
                                 }
                             }
                             Button { text: "Read again"; flat: true; focusPolicy: Qt.NoFocus; onClicked: rofioma.refreshBinds() }
@@ -723,6 +1119,8 @@ Item {
                                 checked: (page.cfg.notify || {}).manage === true
                                 onToggled: on => rofioma.set("notify.manage", on)
                             }
+                            // Opens whoever has the notifications: swaync's panel, or the shell's history.
+                            KeyRow { popup: "notifications"; label: "Control centre key"; suggested: "SUPER + ALT + N" }
                             SwitchRow {
                                 label: "Preview the control centre"
                                 hint: "swaync-client -t opens it; it lists the widgets below."
@@ -768,40 +1166,62 @@ Item {
                         }
 
                         Section {
-                            id: widgetsSection
-                            title: "Control centre"
-                            readonly property var chosen: (page.cfg.notify || {}).widgets || []
-                            SliderRow { label: "Width"; from: 300; to: 760; stepSize: 10; decimals: 0; suffix: "px"; value: (page.cfg.notify || {}).centerWidth || 460; onMoved: v => rofioma.set("notify.centerWidth", Math.round(v)) }
-                            Label { Layout.fillWidth: true; text: "Widgets, top to bottom:"; color: theme.textDim; font.pixelSize: 12 }
-                            Repeater {
-                                // The chosen ones in their order, then the rest.
-                                model: widgetsSection.chosen.map(id => rofioma.notifyWidgets.find(w => w.id === id)).filter(w => w)
-                                       .concat(rofioma.notifyWidgets.filter(w => widgetsSection.chosen.indexOf(w.id) < 0))
-                                delegate: RowLayout {
-                                    id: widgetRow
-                                    required property var modelData
-                                    readonly property int at: widgetsSection.chosen.indexOf(modelData.id)
+                            title: "Effects"
+                            Label {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                color: theme.textDim
+                                font.pixelSize: 11
+                                text: "GTK CSS that swaync plays. Send test notifications to see them for real; the stage plays them too."
+                            }
+                            component NotifyPicks: RowLayout {
+                                id: notifyPicks
+                                property string label
+                                property string field
+                                property string fallback
+                                property var options: []
+                                Layout.fillWidth: true
+                                spacing: 8
+                                Label { text: notifyPicks.label; color: theme.textSoft; Layout.preferredWidth: 110; Layout.alignment: Qt.AlignTop; Layout.topMargin: 6 }
+                                Flow {
                                     Layout.fillWidth: true
-                                    function move(step) {
-                                        const list = widgetsSection.chosen.slice();
-                                        const to = at + step;
-                                        if (at < 0 || to < 0 || to >= list.length) return;
-                                        list.splice(to, 0, list.splice(at, 1)[0]);
-                                        rofioma.set("notify.widgets", list);
-                                    }
-                                    Switch {
-                                        checked: widgetRow.at >= 0
-                                        focusPolicy: Qt.NoFocus
-                                        onToggled: {
-                                            const list = widgetsSection.chosen.filter(id => id !== widgetRow.modelData.id);
-                                            if (checked) list.push(widgetRow.modelData.id);
-                                            rofioma.set("notify.widgets", list);
+                                    spacing: 4
+                                    Repeater {
+                                        model: notifyPicks.options
+                                        Chip {
+                                            required property var modelData
+                                            text: modelData.name
+                                            chosen: ((page.cfg.notify || {})[notifyPicks.field] || notifyPicks.fallback) === modelData.id
+                                            onClicked: { rofioma.set("notify." + notifyPicks.field, modelData.id); stageView.replay(); }
                                         }
                                     }
-                                    Label { Layout.fillWidth: true; text: widgetRow.modelData.name; color: widgetRow.at >= 0 ? theme.text : theme.textDim }
-                                    ToolButton { visible: widgetRow.at >= 0; text: "\u{f005d}"; font.family: "JetBrainsMono Nerd Font"; enabled: widgetRow.at > 0; focusPolicy: Qt.NoFocus; onClicked: widgetRow.move(-1) }
-                                    ToolButton { visible: widgetRow.at >= 0; text: "\u{f0045}"; font.family: "JetBrainsMono Nerd Font"; enabled: widgetRow.at < widgetsSection.chosen.length - 1; focusPolicy: Qt.NoFocus; onClicked: widgetRow.move(1) }
                                 }
+                            }
+                            NotifyPicks {
+                                label: "Arrives by"; field: "enter"; fallback: "slide"
+                                options: [{ id: "slide", name: "Slide" }, { id: "fade", name: "Fade" }, { id: "pop", name: "Pop" }, { id: "drop", name: "Drop" }, { id: "flip", name: "Flip" }, { id: "none", name: "None" }]
+                            }
+                            NotifyPicks {
+                                label: "On hover"; field: "hover"; fallback: "lift"
+                                options: [{ id: "lift", name: "Lift" }, { id: "glow", name: "Glow" }, { id: "none", name: "None" }]
+                            }
+                            NotifyPicks {
+                                label: "Critical alarm"; field: "critical"; fallback: "pulse"
+                                options: [{ id: "pulse", name: "Pulse" }, { id: "glow", name: "Glow" }, { id: "shake", name: "Shake" }, { id: "none", name: "None" }]
+                            }
+                            NotifyPicks {
+                                label: "Control centre"; field: "center"; fallback: "slide"
+                                options: [{ id: "slide", name: "Slide" }, { id: "fade", name: "Fade" }, { id: "pop", name: "Pop" }, { id: "none", name: "None" }]
+                            }
+                            SliderRow { label: "Speed"; from: 80; to: 800; stepSize: 10; decimals: 0; suffix: "ms"; value: page.notifyCfg.duration || 200; onMoved: v => rofioma.set("notify.duration", Math.round(v)) }
+                        }
+
+                        Section {
+                            title: "Control centre"
+                            SliderRow { label: "Width"; from: 300; to: 760; stepSize: 10; decimals: 0; suffix: "px"; value: (page.cfg.notify || {}).centerWidth || 460; onMoved: v => rofioma.set("notify.centerWidth", Math.round(v)) }
+                            WidgetBoard {
+                                Layout.fillWidth: true
+                                onReviewPack: pack => { packConfirm.pack = pack; packConfirm.visible = true; }
                             }
                         }
                     }
@@ -809,6 +1229,30 @@ Item {
                     // ======================================== Look
                     ColumnLayout {
                         spacing: 14
+
+                        Section {
+                            title: "Drawn by"
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Label { text: "Popups"; color: theme.textSoft; Layout.preferredWidth: 120 }
+                                Segmented {
+                                    model: [{ id: "shell", name: "OmaCraft popups" }, { id: "rofi", name: "rofi" }]
+                                    current: (page.cfg.look || {}).engine === "rofi" ? "rofi" : "shell"
+                                    onPicked: id => rofioma.set("look.engine", id)
+                                }
+                                Item { Layout.fillWidth: true }
+                            }
+                            Label {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                color: theme.textDim
+                                font.pixelSize: 12
+                                text: (page.cfg.look || {}).engine === "rofi"
+                                      ? "rofi draws the power menu, your menus and the cheatsheet: no animation, and keybinds can only be moved here in OmaCraft."
+                                      : "The ROFIoma popups plugin draws the power menu, your menus and the cheatsheet in the shell, with HyDE's hover on every card. "
+                                        + "If it isn't installed or enabled they open in rofi (or wlogout for the Wlogout style). The emoji and glyph pickers stay in rofi."
+                            }
+                        }
 
                         Section {
                             title: "Colours"
@@ -830,22 +1274,56 @@ Item {
                                 font.pixelSize: 12
                                 text: "The current theme's background, foreground, accent and red. Switch theme and reopen this page to bring the popups along."
                             }
+                            // Any colour at all, from the wheel. Picking one from the
+                            // theme's colours makes the rest your own too, starting as they are.
+                            Label {
+                                Layout.fillWidth: true
+                                text: "Click a colour to open the wheel."
+                                color: theme.textDim
+                                font.pixelSize: 12
+                            }
                             GridLayout {
-                                visible: (page.cfg.look || {}).colors === "custom"
-                                columns: 4
+                                Layout.fillWidth: true
+                                columns: 2
                                 rowSpacing: 8
-                                columnSpacing: 10
+                                columnSpacing: 8
                                 Repeater {
-                                    model: [{ id: "bg", name: "Background" }, { id: "fg", name: "Text" }, { id: "accent", name: "Accent" }, { id: "urgent", name: "Urgent" }]
-                                    RowLayout {
+                                    model: [{ id: "accent", name: "Accent" }, { id: "bg", name: "Background" }, { id: "fg", name: "Text" }, { id: "urgent", name: "Urgent" }]
+                                    Rectangle {
+                                        id: colourTile
                                         required property var modelData
-                                        spacing: 6
-                                        ColorButton {
-                                            value: (((page.cfg.look || {}).custom) || {})[modelData.id] || ""
-                                            title: modelData.name
-                                            onPicked: hex => rofioma.set("look.custom." + modelData.id, hex)
+                                        readonly property string hex: page.pal[modelData.id] || "#000000"
+                                        Layout.fillWidth: true
+                                        implicitHeight: 54
+                                        radius: 9
+                                        color: tileHover.hovered ? theme.hover : theme.inset
+                                        border.color: wheel.opened ? theme.accent : theme.border
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.margins: 8
+                                            spacing: 10
+                                            Rectangle {
+                                                Layout.preferredWidth: 38
+                                                Layout.preferredHeight: 38
+                                                radius: 19
+                                                color: colourTile.hex
+                                                border.color: theme.borderStrong
+                                            }
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 0
+                                                Label { Layout.fillWidth: true; text: colourTile.modelData.name; color: theme.text; font.weight: Font.DemiBold }
+                                                Label { Layout.fillWidth: true; text: colourTile.hex; color: theme.textMuted; font.family: "monospace"; font.pixelSize: 11 }
+                                            }
+                                            Label { text: "\u{f0266}"; color: theme.textMuted; font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 17 }
                                         }
-                                        Label { text: modelData.name; color: theme.textSoft }
+                                        HoverHandler { id: tileHover; cursorShape: Qt.PointingHandCursor }
+                                        TapHandler { onTapped: wheel.openWith(colourTile.hex) }
+                                        ColorPicker {
+                                            id: wheel
+                                            title: colourTile.modelData.name
+                                            onPicked: hex => rofioma.setCustomColor(colourTile.modelData.id, hex)
+                                        }
                                     }
                                 }
                             }
@@ -891,6 +1369,21 @@ Item {
                 }
             }
         }
+    }
+
+    // A widget pack's commands run when its buttons are pressed, so they're
+    // shown before it's let in.
+    Confirm {
+        id: packConfirm
+        property var pack: ({})
+        heading: "Install " + (pack.names || []).join(", ") + "?"
+        body: (pack.commands || []).length
+              ? "These commands will run when you use it:\n\n" + pack.commands.map(c => "  " + c).join("\n")
+              : "It doesn't run any commands."
+        action: "Install"
+        keepText: "Cancel"
+        onAccepted: page.acceptDialog()
+        onRejected: visible = false
     }
 
     // ------------------------------------------------------------ glyph chooser

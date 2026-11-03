@@ -7,3 +7,8 @@
 # Agent worktrees and scratch files
 /.claude/
 *.patch
+/packaging/aur/*.tar.gz
+/packaging/aur/*/
+
+# Installers made by bin/bundle: release assets, not source
+/dist/

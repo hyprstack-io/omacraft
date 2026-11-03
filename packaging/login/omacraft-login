@@ -1,0 +1,149 @@
+#!/bin/bash
+# OmaCraft's one root helper for the login screen. Runs through pkexec; the app
+# itself never runs as root. Everything it's given is treated as hostile:
+#
+#   apply BACKGROUND AVATAR KEY=VALUE...   the look (a file path or - for each)
+#   theme omacraft|omarchy                 which login theme SDDM uses
+#   autologin on|off                       leave Omarchy's autologin alone, or override it
+#   reset                                  remove the look
+#
+# It only ever touches these paths. Going back to Omarchy's login deletes its
+# own override files; Omarchy's are never edited.
+set -euo pipefail
+umask 022
+export PATH=/usr/bin
+export LC_ALL=C.UTF-8
+
+theme_dir=/usr/share/sddm/themes/omacraft
+conf_dir=/etc/sddm.conf.d
+# SDDM reads this folder in name order and the last file wins. These have to
+# sort after everything of Omarchy's, autologin.conf included, so 99- won't do.
+theme_conf=zz-omacraft-theme.conf
+autologin_conf=zz-omacraft-autologin.conf
+max_image=$((32 * 1024 * 1024))
+
+# Every setting a look may carry. Paths are not here: the two pictures are
+# copied in by this script, under names it picks.
+allowed=" blockX blockY align gap panel panelSize panelRadius panelOpacity fieldStyle fieldWidth fieldHeight
+fieldRadius borderWidth borderGradient fieldOpacity dotGlyph placeholder showClock clock24h clockSeconds clockSize
+clockWeight clockOpacity showDate dateFormat dateSize showGreeting greeting greetingSize showAvatar avatarSize
+avatarShape showNote note noteSize fontFamily colorSurface colorBorder colorBorder2 colorText colorClock colorError
+colorDim colorPanel bgMode bgColor bgColor2 bgAngle bgFit blur dim brightness contrast saturation lockIn lockInMs
+unlockOut unlockMs shake drift pulse showSession showPower themeBackground themeForeground themeAccent themeUrgent "
+allowed=${allowed//$'\n'/ }
+
+die() {
+  echo "$1" >&2
+  exit 1
+}
+
+write_atomically() { # target, with the content on stdin
+  local temporary
+  temporary=$(mktemp "$1.XXXXXX")
+  cat >"$temporary"
+  chmod 644 "$temporary"
+  mv -f "$temporary" "$1"
+}
+
+# Read as the user who asked, so this can't be pointed at a file only root can
+# read. No symlink, FIFO or device can stall or widen that: it's their own read.
+copy_image() { # source, destination stem; prints the file name it chose
+  local source=$1 stem=$2 magic extension size
+  [[ $source == /* ]] || die "A picture's path must be absolute."
+  [[ ${PKEXEC_UID:-} =~ ^[0-9]+$ ]] && ((PKEXEC_UID != 0)) || die "Only runs through pkexec, for a normal user."
+  # This runs in a $(...) subshell, so its EXIT is the end of this one copy.
+  incoming=$(mktemp "$theme_dir/.incoming.XXXXXX")
+  trap 'rm -f "${incoming:?}"' EXIT
+  timeout 20 setpriv --reuid="$PKEXEC_UID" --regid="$(id -g "$PKEXEC_UID")" --clear-groups \
+    head -c $((max_image + 1)) -- "$source" >"$incoming" || die "Couldn't read $source."
+  size=$(stat -c %s "$incoming")
+  ((size > 0 && size <= max_image)) || die "$source is empty or over 32 MB."
+  magic=$(od -An -tx1 -N12 "$incoming" | tr -d ' \n')
+  case $magic in
+    ffd8ff*) extension=jpg ;;
+    89504e470d0a1a0a*) extension=png ;;
+    52494646????????57454250) extension=webp ;;
+    *) die "$source isn't a JPEG, PNG or WebP picture." ;;
+  esac
+  chmod 644 "$incoming"
+  rm -f "${theme_dir:?}/${stem:?}.jpg" "${theme_dir:?}/${stem:?}.png" "${theme_dir:?}/${stem:?}.webp"
+  mv -f "$incoming" "$theme_dir/$stem.$extension"
+  echo "$stem.$extension"
+}
+
+check_setting() { # one KEY=VALUE
+  local key=${1%%=*} value=${1#*=}
+  [[ $1 == *=* ]] || die "Not a setting: $1"
+  [[ $allowed == *" $key "* ]] || die "Not a setting: $key"
+  ((${#value} <= 160)) || die "Too long: $key"
+  # Quotes, backslashes, semicolons and newlines would break out of the ini
+  # value; the dot glyphs are the only characters outside plain text.
+  [[ $value =~ ^[[:alnum:]\ \#.,:!?\'_@/()\{\}+*-]*$ || $value =~ ^(●|•|■|✦|█)$ ]] || die "Bad value for $key."
+}
+
+apply() {
+  local background=$1 avatar=$2 setting picture conf="[General]"$'\n'
+  shift 2
+  (($# <= 80)) || die "Too many settings."
+  [[ -f $theme_dir/Main.qml ]] || die "The OmaCraft login theme isn't installed."
+  for setting in "$@"; do
+    check_setting "$setting"
+  done
+  # Everything that can fail comes first, and the file is written whole at the
+  # end: a bad picture leaves the look that was there.
+  for setting in "$@"; do
+    conf+="${setting%%=*}=\"${setting#*=}\""$'\n'
+  done
+  if [[ $background != - ]]; then
+    picture=$(copy_image "$background" background) || exit 1
+    conf+="bgImage=\"$picture\""$'\n'
+  fi
+  if [[ $avatar != - ]]; then
+    picture=$(copy_image "$avatar" avatar) || exit 1
+    conf+="avatar=\"$picture\""$'\n'
+  fi
+  printf '%s' "$conf" | write_atomically "$theme_dir/theme.conf.user"
+}
+
+use_theme() {
+  case $1 in
+    omacraft)
+      [[ -f $theme_dir/Main.qml ]] || die "The OmaCraft login theme isn't installed."
+      printf '[Theme]\nCurrent=omacraft\n' | write_atomically "$conf_dir/$theme_conf"
+      ;;
+    omarchy) rm -f "${conf_dir:?}/${theme_conf:?}" ;;
+    *) die "Unknown theme." ;;
+  esac
+}
+
+autologin() {
+  case $1 in
+    on) rm -f "${conf_dir:?}/${autologin_conf:?}" ;;
+    off) printf '[Autologin]\nUser=\nSession=\n' | write_atomically "$conf_dir/$autologin_conf" ;;
+    *) die "It's on or off." ;;
+  esac
+}
+
+reset_look() {
+  rm -f "${theme_dir:?}/theme.conf.user" \
+    "${theme_dir:?}/background.jpg" "${theme_dir:?}/background.png" "${theme_dir:?}/background.webp" \
+    "${theme_dir:?}/avatar.jpg" "${theme_dir:?}/avatar.png" "${theme_dir:?}/avatar.webp"
+}
+
+case ${1:-} in
+  apply)
+    (($# >= 3)) || die "Usage: apply BACKGROUND AVATAR KEY=VALUE..."
+    shift
+    apply "$@"
+    ;;
+  theme)
+    (($# == 2)) || die "Usage: theme omacraft|omarchy"
+    use_theme "$2"
+    ;;
+  autologin)
+    (($# == 2)) || die "Usage: autologin on|off"
+    autologin "$2"
+    ;;
+  reset) reset_look ;;
+  *) die "Usage: omacraft-login apply|theme|autologin|reset" ;;
+esac

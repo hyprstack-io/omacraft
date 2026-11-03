@@ -135,7 +135,7 @@ BarWidget {
 
   function openEditor() {
     menuOpen = false
-    Quickshell.execDetached(["sh", "-c", "command -v omacraft >/dev/null && exec omacraft bar folders || exec ~/Work/omacraft/build/omacraft bar folders"])
+    Quickshell.execDetached(["omacraft", "bar", "folders"])
   }
 
   implicitWidth: vertical ? barSize : button.width + (vertical ? 0 : revealed)

@@ -8,6 +8,7 @@ class OmacraftTests : public QObject {
     Q_OBJECT
 
 private slots:
+    void findsAlienwareKeys();
     void initTestCase();
     void themeFallsBack();
     void themeReadsAccent();
@@ -29,6 +30,7 @@ private slots:
     void animationPresetsCarryTheirMotion();
     void dockStartsFromItsDefaults();
     void dockSavesSettingsWhileStopped();
+    void dockTakesBottomEdgeAndAutoHide();
     void dockItemsMoveAndKeepOnlyTheirFields();
     void dockAgentsGoToTheConfigFile();
     void dockHidesAgentTabs();
@@ -73,8 +75,43 @@ private slots:
     void screensaverScriptsParse();
     void rofiomaWritesEveryPopup();
     void rofiomaScriptsParse();
+    void rofiomaWritesWlogout();
+    void rofiomaHandsPopupsToTheOverlay();
+    void rofiomaMovesBinds();
+    void rofiomaReadsBinds();
     void rofiomaKeepsMenusTidy();
     void rofiomaBindsKeysThroughHyprlandLua();
     void rofiomaHandsNotificationsToSwaync();
     void rofiomaFindsSymbols();
+    void rofiomaBuildsTheControlCentre();
+    void rofiomaInstallsWidgets();
+    void rofiomaRejectsBadWidgets();
+    void rofiomaWritesNotificationEffects();
+    void rofiomaKeepsPowerEffects();
+    void rofiomaPicksOneCustomColor();
+    void marketReadsPlugins();
+    void marketReadsThemes();
+    void marketNamesThemesAsOmarchyDoes();
+    void marketRefusesUnsafeRepositories();
+    void marketKnowsThemeStates();
+    void marketBrowsesPages();
+    void widgetBoardDragsWidgets();
+    void colorWheelSetsOneColor();
+    void marketPageOpensACard();
+    void popupCardTakesEveryEffect();
+    void aboutShowsCreditsAndTheRealLicence();
+    void lockSwapNeverLeavesTheShellWithoutALock();
+    void lockSwapFallsBackToOmarchysLock();
+    void lockSettingsSurviveAnything();
+    void lockLogonKeepsLooksAndReadsSddm();
+    void loginArgumentsCarryNoPaths();
+    void loginNeedsAPicture();
+    void loginHelperRefusesHostileInput();
+    void loginHelperOverridesAndReverts();
+    void lockPageDragsTheBlockAndPicksLooks();
+    void cursorIconsReadsAndTintsXCursors();
+    void cursorIconsFindsTheNearestColourVariant();
+    void cursorIconsImportsOnlyWhatIsSafe();
+    void cursorIconsAppliesFollowsAndUndoes();
+    void titleFontPickerOnlyChangesTheTitle();
 };
