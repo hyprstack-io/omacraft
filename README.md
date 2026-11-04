@@ -197,6 +197,8 @@ The login screen is applied, not live, since SDDM's files take your password. `/
 With automatic login on, which is Omarchy's default on an encrypted disk, the login screen only shows after you log out. The Login tab says so, and turning it off means a second password at boot.
 
 ## Shortcuts
+Keybinding shortcuts also available directly within any terminal. 
+| `Run` : `omacraft-keys`  | and press enter |
 
 | Key | Action |
 | --- | --- |
@@ -343,7 +345,7 @@ view only draws on a real one.
 
 ## License and credits
 
-OmaCraft and its plugins are © 2026 skll, under the MIT license in
+OmaCraft and its plugins are © 2026 HyprStack.io | under the MIT license in
 [`LICENSE`](LICENSE); Dotfile Generator's manifest states Apache-2.0. The theme watcher and portal file picker are adapted from
 [Omacut](https://github.com/omacom/omacut) (MIT, David Heinemeier Hansson), and
 the whole app follows how [Omarchy](https://github.com/omacom/omarchy)'s own
