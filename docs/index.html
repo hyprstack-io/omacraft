@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OmaCraft · Omarchy UI/UX Tweakz Suite</title>
+<meta name="description" content="OmaCraft: one app for the Omarchy shell plugins. Try its wallpaper theming, window transitions, Burn My Windows effects and boot splash designer in the browser.">
+<meta name="theme-color" content="#121212">
+<meta property="og:title" content="OmaCraft · Omarchy UI/UX Tweakz Suite">
+<meta property="og:description" content="Try OmaCraft's theming, transitions, Burn My Windows effects and ASCII boot splash designer right in the browser.">
+<link rel="icon" href="assets/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="assets/css/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="wallpaper" aria-hidden="true"><div class="wp-layer"></div><div class="wp-layer"></div><div class="wp-fade"></div></div>
+
+<header class="top">
+  <div class="top-in">
+    <a class="logo" href="#code" aria-label="OmaCraft home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" class="logo-bg"/><path class="logo-ink" d="M8 22.5V10l4.2 4.6L16 9.5l3.8 5.1L24 10v12.5h-3.3v-6.4L16 21.4l-4.7-5.3v6.4z"/></svg>
+    </a>
+    <nav class="crumbs" aria-label="Repository">
+      <a class="owner" data-repo-link="owner" href="#">hyprstack-io</a><span class="sep">/</span><a href="#code"><b>omacraft</b></a>
+    </nav>
+    <div class="grow"></div>
+    <button class="search" id="search-btn" type="button" aria-label="Search the page (/)">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.6"/><path d="m10.5 10.5 3.5 3.5"/></svg>
+      <span>Type <kbd>/</kbd> to search</span>
+    </button>
+    <button class="icon-btn" id="theme-btn" type="button" title="Next theme (T)" aria-label="Next theme">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8a6.2 6.2 0 1 0 0 12.4c.9 0 1.3-.6 1.3-1.2 0-.8-.6-1-.6-1.7 0-.6.5-1 1.1-1h1.6a2.9 2.9 0 0 0 2.8-2.9C14.2 4.2 11.4 1.8 8 1.8Z"/><circle cx="4.9" cy="7.4" r=".9" class="dot"/><circle cx="7.2" cy="4.8" r=".9" class="dot"/><circle cx="10.4" cy="5.2" r=".9" class="dot"/></svg>
+    </button>
+    <button class="icon-btn" id="help-btn" type="button" title="Shortcuts (?)" aria-label="Keyboard shortcuts">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="4" width="13" height="8.5" rx="1.6"/><path d="M4 7h.01M6.5 7h.01M9 7h.01M11.5 7h.01M5 9.8h6"/></svg>
+    </button>
+    <a class="btn ghost hide-sm" data-repo-link="repo" href="#" rel="noopener">View the source
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3H3.5v9.5H13V10M9 3h4v4M13 3 7.5 8.5"/></svg></a>
+  </div>
+</header>
+
+<div class="repo-head">
+  <div class="wrap">
+    <div class="repo-title">
+      <svg viewBox="0 0 16 16" class="ic" aria-hidden="true"><path d="M3 2.5h8.5a1 1 0 0 1 1 1V13H4a1 1 0 0 1-1-1V2.5ZM3 11.5a1 1 0 0 1 1-1h8.5M6 13v2l1-.7 1 .7v-2"/></svg>
+      <a data-repo-link="owner" href="#">hyprstack-io</a><span class="sep">/</span><a href="#code"><b>omacraft</b></a>
+      <span class="label">Public</span>
+      <div class="grow"></div>
+      <div class="repo-actions">
+        <a class="btn sm" data-repo-link="watch" href="#" rel="noopener"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z"/><circle cx="8" cy="8" r="2"/></svg>Watch</a>
+        <a class="btn sm" data-repo-link="fork" href="#" rel="noopener"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="4.5" cy="3.5" r="1.5"/><circle cx="11.5" cy="3.5" r="1.5"/><circle cx="8" cy="12.5" r="1.5"/><path d="M4.5 5v1a2 2 0 0 0 2 2h3a2 2 0 0 0 2-2V5M8 8v3"/></svg>Fork</a>
+        <a class="btn sm" data-repo-link="star" href="#" rel="noopener"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m8 1.8 1.9 3.9 4.3.6-3.1 3 .7 4.3L8 11.6l-3.8 2 .7-4.3-3.1-3 4.3-.6z"/></svg>Star</a>
+      </div>
+    </div>
+    <nav class="tabs" id="tabs" role="tablist" aria-label="Sections">
+      <a role="tab" href="#code" data-tab="code"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5.5 4-4 4 4 4M10.5 4l4 4-4 4"/></svg>Code</a>
+      <a role="tab" href="#wallpapers" data-tab="wallpapers"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="m1.5 11 3.8-3.8 3.2 3.2 2-2 4 4"/><circle cx="11" cy="5.8" r="1.2"/></svg>Wallpapers<span class="count" data-count="walls"></span></a>
+      <a role="tab" href="#transitions" data-tab="transitions"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 13C5 13 6 3 9.5 3S14.5 8 14.5 8"/><circle cx="9.5" cy="3" r="1.3"/></svg>Window Transitions<span class="count" data-count="presets"></span></a>
+      <a role="tab" href="#burn" data-tab="burn"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14.5c2.8 0 4.5-1.8 4.5-4.3 0-3-2.6-4.3-3.1-7.7-1.9 1.2-2.9 3-2.6 5-1-.4-1.6-1.3-1.7-2.3-1.2 1.2-1.6 2.8-1.6 5 0 2.5 1.7 4.3 4.5 4.3Z"/></svg>Burn My Windows<span class="count" data-count="effects"></span></a>
+      <a role="tab" href="#splash" data-tab="splash"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="m4 6 2 2-2 2M7.5 10.5h4"/></svg>Boot Splash<span class="count" data-count="fonts"></span></a>
+      <a role="tab" href="#install" data-tab="install"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5v9M4.5 7 8 10.5 11.5 7M2 12v1.5h12V12"/></svg>Install</a>
+      <span class="tab-ink" aria-hidden="true"></span>
+    </nav>
+  </div>
+</div>
+
+<main id="main" class="wrap">
+  <!-- ═════════════ Code ═════════════ -->
+  <section class="page" id="page-code" data-page="code" aria-label="Code">
+    <div class="layout">
+      <div class="main-col">
+        <div class="code-bar">
+          <button class="btn sm" type="button" id="branch-btn" aria-haspopup="true"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="5.5" r="1.5"/><path d="M4.5 5v6M11.5 7c0 2.5-3.5 2-6.2 4"/></svg><b>main</b><svg class="caret" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></button>
+          <span class="meta hide-sm"><b>1</b> Branch <span class="dotsep">·</span> <b id="tag-count">1</b> Tag</span>
+          <div class="grow"></div>
+          <button class="btn sm hide-sm" type="button" data-act="palette">Go to file <kbd>/</kbd></button>
+          <div class="dd">
+            <button class="btn sm primary" type="button" id="code-btn" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5.5 4-4 4 4 4M10.5 4l4 4-4 4"/></svg>Code<svg class="caret" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></button>
+            <div class="dd-pop" id="code-pop" role="menu" hidden>
+              <div class="dd-title">Install</div>
+              <label class="dd-row">AUR<span class="copy-field"><code>yay -S omacraft</code><button type="button" class="icon-btn sm" data-copy="yay -S omacraft" aria-label="Copy"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg></button></span></label>
+              <label class="dd-row">Clone<span class="copy-field"><code id="clone-url"></code><button type="button" class="icon-btn sm" data-copy-from="clone-url" aria-label="Copy"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg></button></span></label>
+              <a class="dd-link" data-repo-link="releases" href="#" rel="noopener">One-file installer (<code>.run</code>) on Releases</a>
+              <a class="dd-link" data-repo-link="zip" href="#" rel="noopener">Download ZIP</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="box files" id="files">
+          <div class="box-head commit">
+            <span class="avatar" aria-hidden="true">sk</span>
+            <b id="commit-author">skll</b>
+            <a class="commit-msg" id="commit-msg" href="#" rel="noopener"></a>
+            <div class="grow"></div>
+            <a class="commit-meta" id="commit-hash" href="#" rel="noopener"></a>
+            <span class="commit-meta hide-sm" id="commit-date"></span>
+            <a class="commit-meta strong" data-repo-link="commits" href="#" rel="noopener"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></svg><span id="commit-count"></span></a>
+          </div>
+          <div id="file-rows"></div>
+        </div>
+
+        <div class="box readme" id="readme">
+          <div class="box-head readme-head">
+            <a class="rtab on" href="#readme"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 4c-1.3-1-3.3-1.5-6-1.5v9.5c2.7 0 4.7.5 6 1.5 1.3-1 3.3-1.5 6-1.5V2.5C11.3 2.5 9.3 3 8 4Zm0 0v9.5"/></svg>README</a>
+            <a class="rtab" data-repo-link="license" href="#" rel="noopener"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v12M3 14h10M3.5 5h9M3.5 5 1.5 10a2 2 0 0 0 4 0zM12.5 5l-2 5a2 2 0 0 0 4 0z"/></svg>MIT license</a>
+          </div>
+
+          <div class="hero" id="hero">
+            <div class="hero-stage" id="title-stage"><canvas id="title-canvas" role="img" aria-label="OMACRAFT, drawn in ASCII block letters"></canvas></div>
+            <div class="hero-ctrl">
+              <span class="fx-name" id="fx-name" aria-live="polite"></span>
+              <button class="pill" type="button" id="fx-pill" aria-haspopup="true" title="Pick the intro effect (E)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3M3.4 3.4l2.1 2.1M10.5 10.5l2.1 2.1M12.6 3.4l-2.1 2.1M5.5 10.5l-2.1 2.1"/></svg><span id="fx-pill-label">Effect</span><svg class="caret" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></button>
+              <button class="pill toggle" type="button" id="auto-pill" aria-pressed="true" title="Autoplay (A)"><svg viewBox="0 0 16 16" class="pause" aria-hidden="true"><path d="M5.5 3.5v9M10.5 3.5v9"/></svg><svg viewBox="0 0 16 16" class="play" aria-hidden="true"><path d="m5 3 8 5-8 5z"/></svg><span>Autoplay on</span></button>
+              <button class="pill" type="button" id="font-pill" aria-haspopup="dialog" aria-expanded="false" title="Pick the font (F)"><b class="aa" aria-hidden="true">Aa</b><span id="font-pill-label">balistcx</span><svg class="caret" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></button>
+              <button class="pill icon" type="button" id="replay" title="Play again (Space)" aria-label="Play again"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8A5.5 5.5 0 1 1 11.9 4.1M12 1.5v3h-3"/></svg></button>
+            </div>
+            <p class="tagline"><span class="chev">›</span> <span id="tagline-text"></span><span class="caret-blink" aria-hidden="true"></span></p>
+            <div class="stats" id="stats"></div>
+          </div>
+
+          <div class="modules">
+            <div class="section-label">Modules <span>· the ones marked <em>Try it</em> run on this page</span></div>
+            <div class="module-grid" id="module-grid"></div>
+          </div>
+
+          <article class="markdown" id="readme-md"></article>
+        </div>
+      </div>
+
+      <aside class="side" aria-label="About">
+        <section class="side-box">
+          <h2>About</h2>
+          <p class="about">One app for the Omarchy shell plugins: wallpaper theming, window transitions, Burn My Windows, the main bar, the dock, the launcher, ROFIoma, boot splash, lock screens and more.</p>
+          <a class="side-link accent" href="#wallpapers"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5 9.5 6.5M7 4.5l1.2-1.2a2.8 2.8 0 0 1 4 4L11 8.5M9 11.5l-1.2 1.2a2.8 2.8 0 0 1-4-4L5 7.5"/></svg>Try it on this page</a>
+          <div class="topics">
+            <span>omarchy</span><span>hyprland</span><span>quickshell</span><span>qt6</span><span>arch-linux</span><span>aur</span><span>ricing</span><span>ascii-art</span><span>thedraw</span><span>figlet</span>
+          </div>
+          <a class="side-link" href="#readme"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 4c-1.3-1-3.3-1.5-6-1.5v9.5c2.7 0 4.7.5 6 1.5 1.3-1 3.3-1.5 6-1.5V2.5C11.3 2.5 9.3 3 8 4Zm0 0v9.5"/></svg>Readme</a>
+          <a class="side-link" data-repo-link="license" href="#" rel="noopener"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v12M3 14h10M3.5 5h9M3.5 5 1.5 10a2 2 0 0 0 4 0zM12.5 5l-2 5a2 2 0 0 0 4 0z"/></svg>MIT license</a>
+          <a class="side-link" data-repo-link="notices" href="#" rel="noopener"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h6l3 3v10h-9zM9.5 1.5v3h3M5.5 8h5M5.5 10.5h5"/></svg>Third-party notices</a>
+        </section>
+        <section class="side-box">
+          <h2>Releases <span class="count" id="rel-count">1</span></h2>
+          <a class="release" data-repo-link="release" href="#" rel="noopener">
+            <svg viewBox="0 0 16 16" class="tag" aria-hidden="true"><path d="M1.5 2.5v5l7 7 6-6-7-7h-5Z"/><circle cx="5" cy="5" r="1"/></svg>
+            <span><b id="rel-tag">v0.3.0</b> <span class="label green">Latest</span><br><small id="rel-date"></small></span>
+          </a>
+        </section>
+        <section class="side-box">
+          <h2>Packages</h2>
+          <a class="side-link" href="https://aur.archlinux.org/packages/omacraft" rel="noopener"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5 14 5v6l-6 3.5L2 11V5zM2 5l6 3.5L14 5M8 8.5v6"/></svg>omacraft <small>· AUR</small></a>
+        </section>
+        <section class="side-box">
+          <h2>Languages</h2>
+          <div class="lang-bar" id="lang-bar"></div>
+          <ul class="langs" id="langs"></ul>
+        </section>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ═════════════ Wallpapers ═════════════ -->
+  <section class="page" id="page-wallpapers" data-page="wallpapers" aria-label="Wallpapers" hidden>
+    <div class="page-head">
+      <h1>Wallpapers</h1>
+      <p>Pick a wallpaper and this whole page takes its colours, the way <code>hyprskin</code> rebuilds Omarchy's theme from yours. Or pick an Omarchy theme. In OmaCraft the same choice reaches the bar, the dock, the borders, Burn and the boot splash.</p>
+    </div>
+    <div class="split">
+      <div class="panel">
+        <div class="panel-title">Wallpapers <span class="muted" id="wall-count"></span>
+          <div class="grow"></div>
+          <label class="btn sm"><input type="file" id="wall-upload" accept="image/*" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 11V2.5M4.5 6 8 2.5 11.5 6M2 11.5v2h12v-2"/></svg>Your own <kbd>U</kbd></label>
+        </div>
+        <div class="wall-grid" id="wall-grid"></div>
+        <p class="hint">Your own picture never leaves this browser: its colours are read here, and it's kept in this browser's storage.</p>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Colours</div>
+        <label class="switch-row"><span><b>Colours from the wallpaper</b><small>Off: the Omarchy theme picked below</small></span><input type="checkbox" class="switch" id="wall-colours"></label>
+        <div class="field" data-when="wall"><span class="field-label">Scheme</span><div class="seg" id="scheme-seg" role="radiogroup" aria-label="Scheme"></div><small class="field-note" id="scheme-note"></small></div>
+        <div class="field" data-when="wall"><span class="field-label">Contrast <output id="contrast-out"></output></span><input type="range" id="contrast" min="0" max="100" step="1"></div>
+        <div class="field" data-when="wall"><span class="field-label">Accent <small>· colours found in the wallpaper</small></span><div class="swatches" id="clusters"></div></div>
+        <div class="field"><span class="field-label">Omarchy themes</span><div class="theme-chips" id="preset-chips"></div></div>
+        <div class="field"><span class="field-label">The theme</span><div class="palette-row" id="palette-row"></div></div>
+        <label class="switch-row"><span><b>Wallpaper behind the page</b><small>Faintly, under the header</small></span><input type="checkbox" class="switch" id="show-wall"></label>
+        <div class="code-box">
+          <div class="code-head"><span>~/.config/omarchy/current/theme/colors.toml</span><div class="grow"></div>
+            <button class="btn xs" type="button" id="toml-copy">Copy</button><button class="btn xs" type="button" id="toml-dl">Download</button></div>
+          <pre class="code" id="toml"></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═════════════ Window Transitions ═════════════ -->
+  <section class="page" id="page-transitions" data-page="transitions" aria-label="Window Transitions" hidden>
+    <div class="page-head">
+      <h1>Window Transitions</h1>
+      <p>The <code>omacraft.animations</code> presets, each with Hyprland's own durations, curves and styles. Hover a preset to watch it on the stage and click to use it. This page's own windows and tab switches follow it too. The Lua below is what <code>omarchy-animations</code> writes.</p>
+    </div>
+    <div class="split wide-left">
+      <div class="panel">
+        <div class="panel-title">Presets <span class="muted" id="preset-count"></span><div class="grow"></div>
+          <label class="switch-row inline"><span>Animations</span><input type="checkbox" class="switch" id="anim-on"></label></div>
+        <div class="preset-grid" id="preset-grid"></div>
+      </div>
+      <div class="panel sticky">
+        <div class="panel-title">Stage <span class="muted" id="stage-preset"></span></div>
+        <div class="desk" id="desk">
+          <div class="desk-bar"><span class="ws-dots" id="ws-dots"><i class="on">1</i><i>2</i></span><span class="desk-clock" id="desk-clock"></span></div>
+          <div class="desk-ws" id="ws-a"></div>
+          <div class="desk-ws" id="ws-b" hidden></div>
+        </div>
+        <div class="stage-ctrl">
+          <button class="btn sm primary" type="button" id="t-play"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5 3 8 5-8 5z"/></svg>Play <kbd>P</kbd></button>
+          <button class="btn sm" type="button" id="t-open">Open window</button>
+          <button class="btn sm" type="button" id="t-close">Close one</button>
+          <button class="btn sm" type="button" id="t-ws">Switch workspace</button>
+        </div>
+        <div class="field"><span class="field-label">Speed <output id="speed-out"></output></span><input type="range" id="speed" min="0.25" max="3" step="0.25"></div>
+        <div class="field two">
+          <label><span class="field-label">Windows</span><select id="win-style"></select></label>
+          <label><span class="field-label">Workspaces</span><select id="ws-style"></select></label>
+        </div>
+        <div class="code-box">
+          <div class="code-head"><span>~/.config/hypr/animations.lua</span><div class="grow"></div><button class="btn xs" type="button" id="lua-copy">Copy</button></div>
+          <pre class="code" id="lua"></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═════════════ Burn My Windows ═════════════ -->
+  <section class="page" id="page-burn" data-page="burn" aria-label="Burn My Windows" hidden>
+    <div class="page-head">
+      <h1>Burn My Windows</h1>
+      <p>Window open and close effects after the GNOME extension. Click an effect to burn the window on the stage. It closes, then comes back the same way. Tick effects into the closing and opening lists: this page plays them when you switch tabs.</p>
+    </div>
+    <div class="split wide-left">
+      <div class="panel">
+        <div class="panel-title">
+          <div class="seg" id="burn-edit" role="radiogroup" aria-label="List to edit"><button type="button" role="radio" data-v="close">Closing <span class="n" id="n-close"></span></button><button type="button" role="radio" data-v="open">Opening <span class="n" id="n-open"></span></button></div>
+          <div class="grow"></div>
+          <button class="btn sm" type="button" id="burn-random">Random <kbd>R</kbd></button>
+        </div>
+        <div class="burn-grid" id="burn-grid"></div>
+      </div>
+      <div class="panel sticky">
+        <div class="panel-title">Stage <span class="muted" id="burn-picked"></span></div>
+        <div class="burn-stage" id="burn-stage">
+          <div class="term" id="burn-win">
+            <div class="term-head"><i></i><i></i><i></i><span>skll@omarchy: ~</span></div>
+            <pre class="term-body" id="term-body"></pre>
+          </div>
+        </div>
+        <div class="stage-ctrl">
+          <button class="btn sm primary" type="button" id="burn-play"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5 3 8 5-8 5z"/></svg>Play <kbd>P</kbd></button>
+          <button class="btn sm" type="button" id="burn-page">Burn this page</button>
+        </div>
+        <div class="field"><span class="field-label">Speed <output id="bspeed-out"></output></span><input type="range" id="bspeed" min="0.25" max="2.5" step="0.05"></div>
+        <div class="field"><span class="field-label">Intensity <output id="bint-out"></output></span><input type="range" id="bint" min="0.2" max="1.6" step="0.05"></div>
+        <div class="field"><span class="field-label">Colour</span>
+          <div class="row"><div class="seg" id="bcolor" role="radiogroup" aria-label="Colour"><button type="button" role="radio" data-v="effect">Effect's own</button><button type="button" role="radio" data-v="theme">Theme</button><button type="button" role="radio" data-v="custom">Custom</button></div>
+          <input type="color" id="bcustom" aria-label="Custom colour"></div></div>
+        <div class="field"><span class="field-label">Switching tabs on this page</span>
+          <div class="seg" id="switch-style" role="radiogroup" aria-label="Tab switch"><button type="button" role="radio" data-v="burn">Burn</button><button type="button" role="radio" data-v="workspace">Workspace</button><button type="button" role="radio" data-v="instant">Instant</button></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═════════════ Boot Splash ═════════════ -->
+  <section class="page" id="page-splash" data-page="splash" aria-label="Boot Splash" hidden>
+    <div class="page-head">
+      <h1>Boot Splash</h1>
+      <p>omascii's designer: any word in any FIGlet or TheDraw font, coloured, shadowed and boxed, revealed by the intro effects omascii plays through ttfx at boot. Then take the <code>omascii</code> command and run it on your machine.</p>
+    </div>
+    <div class="panel">
+      <div class="splash-stage" id="splash-stage"><canvas id="splash-canvas" role="img" aria-label="The boot splash preview"></canvas>
+        <div class="splash-fx" id="splash-fx" aria-live="polite"></div></div>
+      <div class="splash-ctrl">
+        <label class="field grow"><span class="field-label">Text</span><input type="text" id="s-text" maxlength="40" spellcheck="false" autocomplete="off"></label>
+        <div class="field"><span class="field-label">Font</span><button class="pill wide" type="button" id="s-font" aria-haspopup="dialog" aria-expanded="false"><b class="aa" aria-hidden="true">Aa</b><span id="s-font-label"></span><svg class="caret" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></button></div>
+        <label class="field"><span class="field-label">Intro</span><select id="s-effect"></select></label>
+        <div class="field"><span class="field-label">&nbsp;</span><button class="btn primary" type="button" id="s-play"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5 3 8 5-8 5z"/></svg>Play <kbd>Ctrl P</kbd></button></div>
+      </div>
+      <div class="splash-ctrl">
+        <div class="field"><span class="field-label">Colour</span><div class="seg" id="s-ink" role="radiogroup" aria-label="Colour"></div></div>
+        <label class="field"><span class="field-label">Shadow</span><select id="s-shadow"><option value="none">None</option><option value="light">Light</option><option value="medium">Medium</option><option value="dark">Dark</option><option value="long">Long</option></select></label>
+        <label class="field"><span class="field-label">Border</span><select id="s-border"><option value="none">None</option><option value="single">Single</option><option value="rounded">Rounded</option><option value="double">Double</option><option value="heavy">Heavy</option><option value="block">Block</option></select></label>
+      </div>
+      <div class="code-box">
+        <div class="code-head"><span>On your machine</span><div class="grow"></div>
+          <button class="btn xs" type="button" id="s-copy-cmd">Copy command</button>
+          <button class="btn xs" type="button" id="s-copy-text">Copy art</button>
+          <button class="btn xs" type="button" id="s-copy-ansi">Copy ANSI</button>
+          <button class="btn xs" type="button" id="s-png">PNG</button></div>
+        <pre class="code" id="s-cmd"></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═════════════ Install ═════════════ -->
+  <section class="page" id="page-install" data-page="install" aria-label="Install" hidden>
+    <div class="page-head">
+      <h1>Install</h1>
+      <p>OmaCraft is made for <b>Omarchy 4</b>: Arch Linux, Hyprland 0.53 or newer with Lua config, and the Quickshell-based Omarchy shell. pacman brings everything else.</p>
+    </div>
+    <div class="install-grid">
+      <div class="panel install-card"><div class="step">1</div><h2>From the AUR</h2><p>Builds on your machine, so it works on x86_64 and aarch64.</p>
+        <div class="copy-block"><pre class="code">yay -S omacraft</pre><button class="btn xs" type="button" data-copy="yay -S omacraft">Copy</button></div></div>
+      <div class="panel install-card"><div class="step">2</div><h2>One-file installer</h2><p>Download the <code>.run</code> from Releases, then run it as yourself. It checks the machine, installs with pacman, and adds AlienFlare on an Alienware x15.</p>
+        <div class="copy-block"><pre class="code" id="run-cmd"></pre><button class="btn xs" type="button" data-copy-from="run-cmd">Copy</button></div>
+        <a class="btn sm" data-repo-link="releases" href="#" rel="noopener">Open Releases</a></div>
+      <div class="panel install-card"><div class="step">3</div><h2>From source</h2><p>Clone the tag and build the package yourself.</p>
+        <div class="copy-block"><pre class="code" id="src-cmd"></pre><button class="btn xs" type="button" data-copy-from="src-cmd">Copy</button></div></div>
+      <div class="panel install-card"><div class="step"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5"/></svg></div><h2>Then check</h2><p>Changes nothing. Its output is what a bug report needs.</p>
+        <div class="copy-block"><pre class="code">omacraft-doctor</pre><button class="btn xs" type="button" data-copy="omacraft-doctor">Copy</button></div></div>
+    </div>
+    <div class="panel">
+      <table class="tbl">
+        <thead><tr><th>You have</th><th>What works</th></tr></thead>
+        <tbody>
+          <tr><td>Omarchy 4</td><td>Everything</td></tr>
+          <tr><td>Omarchy 3 or older</td><td>Not supported: it has no Quickshell shell, so update first</td></tr>
+          <tr><td>Arch with Hyprland and Quickshell, no Omarchy</td><td>The window opens and the doctor says what's missing, but plugins run inside <code>omarchy-shell</code></td></tr>
+          <tr><td>An Alienware x15 R1/R2</td><td>Plus the per-key keyboard lights (AlienFlare)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <span class="logo-sm" aria-hidden="true"><svg viewBox="0 0 32 32"><rect width="32" height="32" rx="8" class="logo-bg"/><path class="logo-ink" d="M8 22.5V10l4.2 4.6L16 9.5l3.8 5.1L24 10v12.5h-3.3v-6.4L16 21.4l-4.7-5.3v6.4z"/></svg></span>
+    <span>© 2026 skll · MIT</span>
+    <span class="muted">OmaCraft's page, laid out like a repository. Everything here runs in your browser and nothing is sent anywhere.</span>
+    <div class="grow"></div>
+    <a data-repo-link="repo" href="#" rel="noopener">Source</a><a data-repo-link="notices" href="#" rel="noopener">Credits</a><a href="#install">Install</a>
+  </div>
+</footer>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<div class="menu-pop" id="fx-menu" role="menu" hidden></div>
+
+<div class="overlay" id="help" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <div class="sheet-head"><h2 id="help-title">Keyboard shortcuts</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg></button></div>
+    <div class="keys" id="keys"></div>
+  </div>
+</div>
+
+<div class="overlay" id="palette" hidden>
+  <div class="sheet palette" role="dialog" aria-modal="true" aria-label="Search">
+    <div class="pal-head"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.6"/><path d="m10.5 10.5 3.5 3.5"/></svg>
+      <input type="search" id="pal-input" placeholder="Search pages, presets, effects, fonts, themes, files…" spellcheck="false" autocomplete="off" aria-label="Search"></div>
+    <div class="pal-list" id="pal-list" role="listbox"></div>
+  </div>
+</div>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/repo.js"></script>
+<script src="assets/js/flf-index.js"></script>
+<script src="assets/js/core.js"></script>
+<script src="assets/js/theme.js"></script>
+<script src="assets/js/tdf.js"></script>
+<script src="assets/js/ascii.js"></script>
+<script src="assets/js/motion.js"></script>
+<script src="assets/js/burn.js"></script>
+<script type="module">
+  import figlet from "./assets/vendor/figlet/figlet.mjs";
+  figlet.defaults({ fontPath: "assets/fonts/flf" });
+  window.OMA_FIGLET = figlet;
+  dispatchEvent(new Event("figlet-ready"));
+</script>
+<script src="assets/js/fonts.js"></script>
+<script src="assets/js/ttfx.js"></script>
+<script src="assets/js/site.js"></script>
+</body>
+</html>

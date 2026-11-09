@@ -1,3 +1,9 @@
+<!-- site:skip -->
+<p align="center"><a href="https://hyprstack-io.github.io/omacraft/"><img src="docs/assets/readme-title.svg" alt="OMACRAFT" width="100%"></a></p>
+<p align="center"><b>Omarchy UI/UX Tweakz Suite</b><br>
+<a href="https://hyprstack-io.github.io/omacraft/"><b>Try it in your browser</b></a>: wallpaper theming, all 47 window transitions, the 35 Burn My Windows effects, and the boot splash designer with every FIGlet and TheDraw font</p>
+<!-- /site:skip -->
+
 # OmaCraft
 
 One app for the skll Omarchy plugins. It installs, enables and places each
@@ -41,7 +47,7 @@ Or build a release yourself:
 
 ```sh
 sudo pacman -S --needed base-devel git
-git clone --branch v0.3.0 https://github.com/SK33M/omacraft.git
+git clone --branch v0.3.0 https://github.com/hyprstack-io/omacraft.git
 cd omacraft
 bin/install
 ```
@@ -49,7 +55,7 @@ bin/install
 Either way pacman brings in everything it needs to run: Qt 6 and its web view,
 Quickshell, Hyprland, Python with Pillow, Node.js and the smaller tools the
 pages call. OmaCraft then shows up in the app launcher. Each
-[release](https://github.com/SK33M/omacraft/releases) also has a built package
+[release](https://github.com/hyprstack-io/omacraft/releases) also has a built package
 for x86_64, for `sudo pacman -U omacraft-*.pkg.tar.zst`.
 
 Then check the machine. This changes nothing, and its output is what a bug
@@ -307,6 +313,50 @@ which `hyprland.lua` loads. It also opens with `omacraft pick [tab]` or
 | `Ctrl R` | Read the tab again |
 | `Esc` | Clear the typing, then close |
 
+### HyprVYZR
+
+`omacraft.hyprvyzr` (source in `~/hyprstack.io/hyprvyze/plugin`) puts Kasm
+Workspaces on the desktop. A workspace can come from three places:
+
+- a Kasm server elsewhere, reached through its Developer API;
+- a Kasm server installed on this machine (*This machine* installs one in a
+  terminal, checking the download's sha256 first);
+- Kasm's images run straight in Docker, with no server at all.
+
+The HyprVYZR page signs in to servers. The API key goes to the keyring and
+never into OmaCraft's settings.
+
+Every workspace shows in a carousel, which is the wallpaper picker's code with
+workspaces in place of wallpapers. Its tabs are *All*, *Remote*, *Local*,
+*Native* and *Running*, and each tab can have its own key in
+`~/.config/hypr/omacraft_hyprvyzr.lua` (`SUPER ALT V` suggested for *All*).
+The carousel also opens from the bar folder and the side dock.
+
+A session opens in its own window (`omacraft kasm-view`, a separate process).
+That window can float as a popup or tile, and can minimise to the bar folder,
+where a badge counts what's waiting. *Look & dashboard* rebuilds Kasm's own
+dashboards in the current Omarchy theme, on the server over SSH or here with
+sudo.
+
+| Key | In the carousel |
+| --- | --- |
+| `←` `→`, `Tab`, wheel | Browse |
+| `↑` `↓`, `Ctrl 1`–`5` | Switch tabs |
+| typing | Filter |
+| `Enter`, click the front card | Start it as a popup; on *Running*, bring it back |
+| `Shift Enter` | Start it tiled |
+| `Ctrl X` | End the running session in front |
+| `Ctrl R` | Ask the servers again |
+| `Esc` | Clear the typing, then close |
+
+| Key | In a session window |
+| --- | --- |
+| `Ctrl Shift M` | Minimise to the bar |
+| `Ctrl Shift T` | Tile, or pop out again |
+| `Ctrl Shift F` | Fullscreen |
+| `Ctrl Shift R` | Reload |
+| `Ctrl Shift W` | End the session (asks first) |
+
 Closing or minimising OmaCraft folds it into a small tab on the screen's
 edge (bottom centre at first). Drag the tab anywhere round the edge and it
 stays there, across runs (`~/.config/omacraft/edge-tab.json`); click it, or
@@ -342,6 +392,25 @@ settles (or after `OMACRAFT_SCREENSHOT_DELAY` ms) and quits. With
 lists the Alienflare page on any machine, and `omacraft lights` opens it
 without that. The Dotfile Generator web
 view only draws on a real one.
+
+### The project page
+
+`docs/` is the GitHub Pages site (Settings → Pages → *Deploy from a branch*,
+`main`, `/docs`): this repository laid out the way GitHub shows it, in
+OmaCraft's look, with the Wallpapers, Window Transitions, Burn My Windows and
+Boot Splash pages running in the browser. It's static, with no build step for
+the site itself. After committing, refresh the files, commit list, languages
+and README it shows, and the README's animated title:
+
+```sh
+node docs/tools/build.mjs         # docs/assets/js/repo.js and the FIGlet font list
+node docs/tools/readme-title.mjs  # docs/assets/readme-title.svg
+```
+
+The theming, transition and Burn engines and the TheDraw fonts come from the
+hyprstack.io OmaCraft site; the intro effects are reimplemented in
+`docs/assets/js/ttfx.js` under omascii's effect names. `docs/` is left out of
+release tarballs (`.gitattributes`), so the AUR package doesn't download it.
 
 ## License and credits
 

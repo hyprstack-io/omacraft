@@ -30,6 +30,7 @@
 #include "cursoricons.h"
 #include "edgetab.h"
 #include "hyprcraft.h"
+#include "hyprvyzr.h"
 #include "isobuilder.h"
 #include "lights.h"
 #include "marketplace.h"
@@ -98,6 +99,48 @@ int main(int argc, char *argv[]) {
     if (argc > 1 && QString(argv[1]) == "pick") {
         QCoreApplication app(argc, argv);
         return QProcess::execute("omarchy-shell", WallPicker::summonArguments(argc > 2 ? argv[2] : "")) == 0 ? 0 : 1;
+    }
+
+    // `omacraft kasm-view <spec>` is one HyprVYZR session's window: its own
+    // process (so each session closes on its own), never handed to the
+    // running OmaCraft, with nothing but the theme and the web view.
+    if (argc > 2 && QString(argv[1]) == "kasm-view") {
+        QtWebEngineQuick::initialize();
+        QGuiApplication app(argc, argv);
+        app.setApplicationName("omacraft-hyprvyzr");
+        app.setApplicationDisplayName("HyprVYZR");
+        // Its own window class, so Hyprland rules and the bar can tell
+        // sessions apart from OmaCraft.
+        app.setDesktopFileName("hyprvyzr");
+        app.setWindowIcon(QIcon::fromTheme("omacraft"));
+        QQuickStyle::setStyle("Material");
+        Theme theme;
+        KasmView view(QString::fromLocal8Bit(argv[2]));
+        // One profile for every session, kept with HyprVYZR's data: a Kasm
+        // dashboard sign-in survives, the everyday browser never sees it.
+        QQuickWebEngineProfile profile("hyprvyzr");
+        profile.setOffTheRecord(false);
+        const QString data = QDir::homePath() + "/.local/share/hyprvyzr/web";
+        profile.setPersistentStoragePath(data + "/storage");
+        profile.setCachePath(QDir::homePath() + "/.cache/hyprvyzr/web");
+        QQmlApplicationEngine engine;
+        engine.rootContext()->setContextProperty("theme", &theme);
+        engine.rootContext()->setContextProperty("session", &view);
+        engine.rootContext()->setContextProperty("kasmProfile", &profile);
+        engine.load(QUrl("qrc:/KasmView.qml"));
+        if (engine.rootObjects().isEmpty())
+            return 1;
+        const QString screenshot = qEnvironmentVariable("OMACRAFT_SCREENSHOT");
+        if (!screenshot.isEmpty()) {
+            auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+            QTimer::singleShot(qEnvironmentVariableIntValue("OMACRAFT_SCREENSHOT_DELAY") > 0
+                                   ? qEnvironmentVariableIntValue("OMACRAFT_SCREENSHOT_DELAY") : 3000,
+                               &app, [window, screenshot] {
+                window->grabWindow().save(screenshot);
+                QCoreApplication::quit();
+            });
+        }
+        return app.exec();
     }
 
     // The web view needs both of these before the application exists.
@@ -195,6 +238,12 @@ int main(int argc, char *argv[]) {
     Wallpaper wallpaper([&plugins] { return plugins.pluginDir("omacraft.studio"); }, &picker);
     // The picker key: the shell overlay that browses the same wallpapers.
     WallPicker wallPicker({}, true, [&plugins] { return plugins.pluginDir(WallPicker::kPluginId); });
+    // HyprVYZR: Kasm workspaces, through the plugin's hyprvyzr command.
+    Hyprvyzr hyprvyzr([&plugins] {
+        const QString dir = plugins.pluginDir(Hyprvyzr::kPluginId);
+        return dir.isEmpty() ? plugins.sourcePath(Hyprvyzr::kPluginId) : dir;
+    }, &dock);
+    QObject::connect(&plugins, &Plugins::changed, &hyprvyzr, &Hyprvyzr::changed);
     // Alienflare edits AlienFlare's scene; the alienflare service lights the keys.
     Lights lights;
     // ROFIoma: rofi popups and swaync's notifications.
@@ -263,6 +312,7 @@ int main(int argc, char *argv[]) {
     context->setContextProperty("iso", &iso);
     context->setContextProperty("wallpaper", &wallpaper);
     context->setContextProperty("wallPicker", &wallPicker);
+    context->setContextProperty("hyprvyzr", &hyprvyzr);
     context->setContextProperty("folders", &folders);
     context->setContextProperty("themeSync", &themeSync);
     context->setContextProperty("lights", &lights);
@@ -281,9 +331,8 @@ int main(int argc, char *argv[]) {
     context->setContextProperty("aboutNotices", builtIn(":/about/THIRD-PARTY-NOTICES.md"));
 
     // `omacraft <page>` opens on that page, for keybindings and the bar.
-    const QStringList pages{"plugins", "wallpaper", "animations", "effects", "dock", "bar", "launcher", "rofioma", "ascii", "saver", "lock", "cursors", "hyprcraft", "iso", "lights", "market", "themes"};
-    const QString start = app.arguments().value(1);
-    context->setContextProperty("startPage", qMax(0, pages.indexOf(start)));
+    // Main.qml finds the page by its id, and falls back to the first.
+    context->setContextProperty("startPage", app.arguments().value(1));
     // `omacraft wallpaper colors` also opens a page's own tab.
     context->setContextProperty("startTab", app.arguments().value(2));
 

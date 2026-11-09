@@ -1,0 +1,2 @@
+# The project page (GitHub Pages) stays out of release tarballs and the AUR download.
+docs/ export-ignore

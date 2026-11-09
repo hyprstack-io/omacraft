@@ -16,6 +16,10 @@
         <file alias="LockDesign.qml">LockDesign.qml</file>
         <file alias="LockStage.qml">LockStage.qml</file>
         <file alias="IdleTimeline.qml">IdleTimeline.qml</file>
+        <file alias="HyprvyzrTitle.qml">../plugins/hyprvyzr/HyprvyzrTitle.qml</file>
+        <file alias="HyprvyzrArt.js">../plugins/hyprvyzr/HyprvyzrArt.js</file>
+        <file alias="HyprvyzrPage.qml">HyprvyzrPage.qml</file>
+        <file alias="KasmView.qml">KasmView.qml</file>
         <file alias="RofiFx.js">../plugins/rofioma/RofiFx.js</file>
         <file alias="FxBackdrop.qml">../plugins/rofioma/FxBackdrop.qml</file>
         <file alias="WidgetBoard.qml">WidgetBoard.qml</file>

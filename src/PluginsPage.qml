@@ -355,9 +355,9 @@ Item {
                             spacing: 10
                             Repeater {
                                 model: [
-                                    { page: "iso", name: "OmaBuilds", glyph: "\u{f0a4f}", what: "Arch ISOs with archiso, written to USB" },
+                                    { page: "iso", name: "ISOma Builder", glyph: "\u{f0a4f}", what: "Arch ISOs with archiso, written to USB" },
                                     { page: "saver", name: "Screensaver", glyph: "\u{f1104}", what: "The Omarchy screensaver's art and effects" },
-                                    { page: "lights", name: "Alienflare", glyph: "\u{f030c}", what: "Per-key lighting for the Alienware x15" }
+                                    { page: "lights", name: "Keyboard Lighting", glyph: "\u{f030c}", what: "Per-key lighting for the Alienware x15" }
                                 ].filter(item => item.page !== "lights" || alienwareKeys)
                                 delegate: Rectangle {
                                     id: builtIn

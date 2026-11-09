@@ -55,6 +55,11 @@ private slots:
     void burnReadsItsEffects();
     void wallPickerNormalizesKeys();
     void wallPickerBindsThroughHyprlandLua();
+    void hyprvyzrKeysRoundTrip();
+    void hyprvyzrBindsAndRefusesClashes();
+    void hyprvyzrPutsItsFolderOnTheBarInPlace();
+    void kasmViewReadsAPrivateSpecOnce();
+    void kasmViewRefusesASharedSpec();
     void burnWritesInPlaceAndKeepsOtherKeys();
     void foldersReadTheirBarEntries();
     void foldersScanInstalledApps();

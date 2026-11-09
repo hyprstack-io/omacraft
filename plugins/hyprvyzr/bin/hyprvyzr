@@ -1,0 +1,876 @@
+#!/usr/bin/env python3
+"""hyprvyzr: Kasm Workspaces on the Omarchy desktop.
+
+Runs workspaces three ways and shows each one in its own window:
+
+  remote   a Kasm Workspaces server in the cloud or on another machine
+  local    a Kasm Workspaces server installed on this machine
+  native   a Kasm workspace image run straight in Docker, no server at all
+
+Remote and local servers are reached through Kasm's Developer API
+(/api/public/*) with an API key made in Kasm (Admin > Settings > Developers).
+The key is kept in the desktop keyring (secret-tool), or, without one, in a
+0600 file. It is never put on a command line, in a log or in the plugin's
+settings.
+
+  hyprvyzr servers [--json]
+  hyprvyzr server add --name N --url https://host[:port] --user USERNAME
+                      [--kind remote|local] [--insecure] [--ssh user@host]
+                      < {"api_key": "...", "api_key_secret": "..."}
+  hyprvyzr server remove ID
+  hyprvyzr server test ID [--json]
+  hyprvyzr workspaces [--json] [--refresh]
+  hyprvyzr launch KEY                     KEY from `workspaces`: <server>:<image_id> or native:<name>
+  hyprvyzr sessions [--json]
+  hyprvyzr show|hide|toggle|float|tile|end ID|all
+  hyprvyzr carousel [TAB]                 open the carousel overlay
+  hyprvyzr native catalog|pull IMAGE|remove IMAGE [--json]
+  hyprvyzr local status [--json] | install | open
+  hyprvyzr theme build | apply SERVER
+  hyprvyzr dashboard SERVER               the Kasm dashboard in a HyprVYZR window
+
+Settings: ~/.config/hyprvyzr/hyprvyzr.json. Sessions: ~/.local/state/hyprvyzr.
+"""
+
+import argparse
+import contextlib
+import fcntl
+import json
+import os
+import re
+import secrets
+import shutil
+import socket
+import ssl
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
+from pathlib import Path
+
+HOME = Path.home()
+CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config")) / "hyprvyzr"
+STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "hyprvyzr"
+DATA_DIR = Path(os.environ.get("XDG_DATA_HOME", HOME / ".local/share")) / "hyprvyzr"
+CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "hyprvyzr"
+RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / "hyprvyzr"
+CONFIG = CONFIG_DIR / "hyprvyzr.json"
+SESSIONS = STATE_DIR / "sessions.json"
+SECRETS_FILE = DATA_DIR / "secrets.json"
+HERE = Path(__file__).resolve().parent.parent
+PLUGIN_ID = "omacraft.hyprvyzr"
+STASH = "special:hyprvyzr"
+
+KASM_VERSION = "1.19.0"
+KASM_BUNDLE = f"https://kasm-static-content.s3.amazonaws.com/kasm_release_{KASM_VERSION}.tar.gz"
+# From Kasm's single-server install page (docs.kasm.com), 1.19.0.
+KASM_BUNDLE_SHA256 = "7b801cb0579a7867df46b6da873fe8dd631db07d4c05349e5bd1aea27130c37d"
+
+# Kasm's own workspace images, for running natively. name, label, glyph, what.
+NATIVE_CATALOG = [
+    ("chrome", "Chrome", "\U000F02AF", "Google Chrome"),
+    ("firefox", "Firefox", "\U000F0239", "Mozilla Firefox"),
+    ("chromium", "Chromium", "\U000F02AF", "The open-source Chromium browser"),
+    ("brave", "Brave", "\U000F059F", "The Brave browser"),
+    ("tor-browser", "Tor Browser", "\U000F05D9", "Browse over Tor, thrown away afterwards"),
+    ("terminal", "Terminal", "\U000F018D", "A disposable Linux terminal"),
+    ("vs-code", "VS Code", "\U000F0A1E", "Visual Studio Code"),
+    ("desktop", "Ubuntu Desktop", "\U000F0548", "A whole Ubuntu desktop"),
+    ("gimp", "GIMP", "\U000F03EF", "The GNU Image Manipulation Program"),
+    ("only-office", "OnlyOffice", "\U000F0C1B", "Documents, sheets and slides"),
+    ("signal", "Signal", "\U000F0369", "Signal messenger"),
+    ("discord", "Discord", "\U000F066F", "Discord"),
+]
+
+DEFAULT_CONFIG = {
+    "servers": [],
+    # native: the image tag, how much shared memory each one gets, and
+    # whether native workspaces show at all.
+    "native": {"enabled": True, "tag": KASM_VERSION, "shm": "512m"},
+    # window: "native" (OmaCraft's own window) or "browser" (a Chromium app
+    # window with its own profile, for machines without OmaCraft).
+    "window": "native",
+    "size": [1440, 900],
+    "local": {"port": 8443},
+}
+
+
+class Fail(Exception):
+    pass
+
+
+# ------------------------------------------------------------------ helpers
+
+def read_json(path, default):
+    try:
+        return json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        return default
+
+
+def write_json(path, data, mode=0o600):
+    """Atomically, through a temp file beside the target, kept private."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    os.chmod(path.parent, 0o700)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+    with os.fdopen(fd, "w") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
+@contextlib.contextmanager
+def locked(name):
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    with open(STATE_DIR / f".{name}.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+
+def load_config():
+    cfg = read_json(CONFIG, {})
+    out = json.loads(json.dumps(DEFAULT_CONFIG))
+    for key, value in cfg.items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key].update(value)
+        else:
+            out[key] = value
+    return out
+
+
+def save_config(cfg):
+    write_json(CONFIG, cfg)
+
+
+def notify(title, body="", urgent=False):
+    if shutil.which("notify-send"):
+        args = ["notify-send", "-a", "HyprVYZR", "-i", "computer"]
+        if urgent:
+            args += ["-u", "critical"]
+        subprocess.run(args + [title, body], check=False)
+
+
+def out(data, as_json, text=None):
+    if as_json:
+        print(json.dumps(data, ensure_ascii=False))
+    elif text is not None:
+        print(text)
+
+
+URL_RE = re.compile(r"^https://([A-Za-z0-9.-]+|\[[0-9A-Fa-f:]+\])(:\d{1,5})?$")
+ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
+SSH_RE = re.compile(r"^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+$")
+IMAGE_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,60}$")
+
+
+def slug(text):
+    s = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:40]
+    return s or "server"
+
+
+def is_loopback(url):
+    host = urllib.parse.urlsplit(url).hostname or ""
+    return host in ("localhost", "127.0.0.1", "::1")
+
+
+# ------------------------------------------------------------------ secrets
+
+def keyring():
+    # Tests set HYPRVYZR_NO_KEYRING so they never touch the real keyring.
+    return bool(shutil.which("secret-tool")) and not os.environ.get("HYPRVYZR_NO_KEYRING")
+
+
+def secret_get(server_id):
+    if keyring():
+        r = subprocess.run(["secret-tool", "lookup", "service", "hyprvyzr", "server", server_id],
+                           capture_output=True, text=True, check=False)
+        if r.returncode == 0 and r.stdout.strip():
+            with contextlib.suppress(ValueError):
+                return json.loads(r.stdout)
+    return read_json(SECRETS_FILE, {}).get(server_id)
+
+
+def secret_set(server_id, name, value):
+    blob = json.dumps(value)
+    if keyring():
+        r = subprocess.run(["secret-tool", "store", "--label", f"HyprVYZR: {name}",
+                            "service", "hyprvyzr", "server", server_id],
+                           input=blob, text=True, capture_output=True, check=False)
+        if r.returncode == 0:
+            return "keyring"
+    # No keyring answering: a private file only this user can read.
+    with locked("secrets"):
+        store = read_json(SECRETS_FILE, {})
+        store[server_id] = value
+        write_json(SECRETS_FILE, store)
+    return "file"
+
+
+def secret_delete(server_id):
+    if keyring():
+        subprocess.run(["secret-tool", "clear", "service", "hyprvyzr", "server", server_id],
+                       capture_output=True, check=False)
+    with locked("secrets"):
+        store = read_json(SECRETS_FILE, {})
+        if store.pop(server_id, None) is not None:
+            write_json(SECRETS_FILE, store)
+
+
+# ------------------------------------------------------------------ Kasm API
+
+def server_by_id(cfg, server_id):
+    for s in cfg["servers"]:
+        if s["id"] == server_id:
+            return s
+    raise Fail(f"No server called {server_id}. `hyprvyzr servers` lists them.")
+
+
+def tls_context(server):
+    ctx = ssl.create_default_context()
+    # A self-signed certificate is accepted only for a server on this machine,
+    # and only when it was added with --insecure (Kasm's installer makes one).
+    if server.get("insecure") and is_loopback(server["url"]):
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
+def kasm(server, method, body=None, timeout=15):
+    creds = secret_get(server["id"])
+    if not creds or not creds.get("api_key"):
+        raise Fail(f"{server['name']} has no API key saved. Add it again in OmaCraft › HyprVYZR.")
+    payload = dict(body or {})
+    payload["api_key"] = creds["api_key"]
+    payload["api_key_secret"] = creds.get("api_key_secret", "")
+    req = urllib.request.Request(
+        f"{server['url']}/api/public/{method}", data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json", "User-Agent": "hyprvyzr"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout, context=tls_context(server)) as r:
+            data = json.loads(r.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        try:
+            msg = json.loads(e.read()).get("error_message") or str(e)
+        except ValueError:
+            msg = str(e)
+        raise Fail(f"{server['name']}: {msg}") from None
+    except urllib.error.URLError as e:
+        reason = e.reason
+        if isinstance(reason, ssl.SSLCertVerificationError):
+            raise Fail(f"{server['name']}'s certificate isn't trusted ({reason.verify_message}).") from None
+        raise Fail(f"Can't reach {server['name']} ({reason}).") from None
+    except (socket.timeout, TimeoutError):
+        raise Fail(f"{server['name']} didn't answer in {timeout} s.") from None
+    except ValueError:
+        raise Fail(f"{server['name']} didn't answer like a Kasm server.") from None
+    if isinstance(data, dict) and data.get("error_message"):
+        raise Fail(f"{server['name']}: {data['error_message']}")
+    return data
+
+
+def kasm_user_id(server):
+    user = kasm(server, "get_user", {"target_user": {"username": server["user"]}}).get("user") or {}
+    if not user.get("user_id"):
+        raise Fail(f"{server['name']} has no user {server['user']}.")
+    return user["user_id"]
+
+
+def fetch_thumb(server, src):
+    """Kasm's thumbnail for an image, cached; '' when there's none."""
+    if not src or src.startswith("data:"):
+        return ""
+    url = src if src.startswith("https://") else f"{server['url']}/{src.lstrip('/')}"
+    if not url.startswith(server["url"] + "/"):
+        return ""
+    name = re.sub(r"[^A-Za-z0-9._-]", "_", f"{server['id']}-{src.rsplit('/', 1)[-1]}")[:120]
+    path = CACHE_DIR / "thumbs" / name
+    if path.exists() and time.time() - path.stat().st_mtime < 7 * 86400:
+        return str(path)
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "hyprvyzr"}),
+                                    timeout=8, context=tls_context(server)) as r:
+            data = r.read(4 * 1024 * 1024)
+        if not (data.startswith(b"\x89PNG") or data.startswith(b"\xff\xd8") or b"<svg" in data[:512]
+                or data[:4] == b"RIFF"):
+            return ""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+        return str(path)
+    except (OSError, urllib.error.URLError, ValueError):
+        return str(path) if path.exists() else ""
+
+
+# ------------------------------------------------------------------ Docker
+
+def docker(*args, check=True, capture=True):
+    if not shutil.which("docker"):
+        raise Fail("Docker isn't installed. Install it with `omarchy pkg add docker`.")
+    r = subprocess.run(["docker", *args], capture_output=capture, text=True, check=False)
+    if check and r.returncode != 0:
+        msg = (r.stderr or "").strip().splitlines()
+        hint = " (is your user in the docker group, and is the service running?)" \
+            if "permission denied" in (r.stderr or "").lower() or "cannot connect" in (r.stderr or "").lower() else ""
+        raise Fail("docker " + args[0] + ": " + (msg[-1] if msg else "failed") + hint)
+    return r
+
+
+def native_images():
+    """Installed kasmweb/* images, as {name: tag}."""
+    if not shutil.which("docker"):
+        return {}
+    r = subprocess.run(["docker", "images", "--format", "{{.Repository}}\t{{.Tag}}"],
+                       capture_output=True, text=True, check=False)
+    found = {}
+    for line in r.stdout.splitlines():
+        repo, _, tag = line.partition("\t")
+        if repo.startswith("kasmweb/") and tag != "<none>":
+            found.setdefault(repo.split("/", 1)[1], tag)
+    return found
+
+
+def free_port():
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def wait_port(port, timeout=60):
+    end = time.time() + timeout
+    while time.time() < end:
+        with contextlib.suppress(OSError), socket.create_connection(("127.0.0.1", port), 1):
+            return True
+        time.sleep(0.5)
+    return False
+
+
+# ------------------------------------------------------------------ workspaces
+
+def catalog_entry(name):
+    for n, label, glyph, what in NATIVE_CATALOG:
+        if n == name:
+            return label, glyph, what
+    return name.replace("-", " ").title(), "\U000F0BF7", f"kasmweb/{name}"
+
+
+def list_workspaces(cfg, refresh=False):
+    cache = CACHE_DIR / "workspaces.json"
+    cached = read_json(cache, {})
+    entries, errors = [], []
+    for server in cfg["servers"]:
+        sid = server["id"]
+        try:
+            if not refresh and sid in cached and time.time() - cached[sid]["at"] < 600:
+                images = cached[sid]["images"]
+            else:
+                images = []
+                for img in kasm(server, "get_images", timeout=10).get("images", []):
+                    if img.get("enabled") is False or img.get("available") is False:
+                        continue
+                    images.append({"image_id": img.get("image_id", ""),
+                                   "name": img.get("friendly_name") or img.get("name", ""),
+                                   "description": img.get("description", ""),
+                                   "image": img.get("name", ""),
+                                   "thumb": fetch_thumb(server, img.get("image_src", ""))})
+                cached[sid] = {"at": time.time(), "images": images}
+        except Fail as e:
+            errors.append(str(e))
+            images = cached.get(sid, {}).get("images", [])
+        for img in images:
+            entries.append({"key": f"{sid}:{img['image_id']}", "kind": server.get("kind", "remote"),
+                            "server": sid, "serverName": server["name"], "name": img["name"],
+                            "description": img["description"], "image": img["image"],
+                            "thumb": img["thumb"], "glyph": "", "installed": True})
+    if cfg["native"].get("enabled", True):
+        have = native_images()
+        names = [n for n, *_ in NATIVE_CATALOG] + sorted(set(have) - {n for n, *_ in NATIVE_CATALOG})
+        for name in names:
+            label, glyph, what = catalog_entry(name)
+            entries.append({"key": f"native:{name}", "kind": "native", "server": "native",
+                            "serverName": "This machine", "name": label, "description": what,
+                            "image": f"kasmweb/{name}:{have.get(name, cfg['native']['tag'])}",
+                            "thumb": "", "glyph": glyph, "installed": name in have})
+    with contextlib.suppress(OSError):
+        write_json(cache, cached)
+    return {"workspaces": entries, "errors": errors}
+
+
+# ------------------------------------------------------------------ sessions
+
+def load_sessions():
+    return read_json(SESSIONS, [])
+
+
+def save_sessions(items):
+    write_json(SESSIONS, items)
+
+
+def clients():
+    if not shutil.which("hyprctl"):
+        return []
+    r = subprocess.run(["hyprctl", "clients", "-j"], capture_output=True, text=True, check=False)
+    try:
+        return json.loads(r.stdout or "[]")
+    except ValueError:
+        return []
+
+
+def window_of(session, snapshot):
+    for c in snapshot:
+        if session.get("pid") and c.get("pid") == session["pid"]:
+            return c
+    return None
+
+
+def alive(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except (OSError, TypeError):
+        return False
+
+
+def current_sessions():
+    snapshot = clients()
+    with locked("sessions"):
+        items = [s for s in load_sessions() if alive(s.get("pid"))]
+        save_sessions(items)
+    for s in items:
+        w = window_of(s, snapshot)
+        s["address"] = w["address"] if w else ""
+        s["hidden"] = bool(w) and w.get("workspace", {}).get("name") == STASH
+        s["floating"] = bool(w and w.get("floating"))
+    return items
+
+
+def lua_quote(text):
+    return json.dumps(str(text))  # a JSON string is a valid Lua string here (no \u escapes in addresses)
+
+
+def hypr(lua):
+    if shutil.which("hyprctl"):
+        subprocess.run(["hyprctl", "eval", lua], capture_output=True, check=False)
+
+
+def active_workspace():
+    r = subprocess.run(["hyprctl", "activeworkspace", "-j"], capture_output=True, text=True, check=False)
+    with contextlib.suppress(ValueError):
+        return json.loads(r.stdout).get("id", 1)
+    return 1
+
+
+def dispatch(*parts):
+    hypr("".join(f"hl.dispatch({p});" for p in parts))
+
+
+def win(address):
+    return f"window = {lua_quote('address:' + address)}"
+
+
+def place_popup(address, cfg):
+    w, h = cfg.get("size", [1440, 900])
+    dispatch(f"hl.dsp.window.float({{ {win(address)}, action = \"enable\" }})",
+             f"hl.dsp.window.resize({{ {win(address)}, x = {int(w)}, y = {int(h)} }})")
+    dispatch(f"hl.dsp.window.center({{ {win(address)} }})")
+
+
+def session_action(action, target):
+    cfg = load_config()
+    items = current_sessions()
+    chosen = items if target == "all" else [s for s in items if s["id"] == target]
+    if not chosen and target != "all":
+        raise Fail(f"No session {target}.")
+    ws = active_workspace() if action in ("show", "toggle", "tile") else None
+    for s in chosen:
+        a = s.get("address")
+        if action == "end":
+            end_session(s, cfg)
+            continue
+        if not a:
+            continue
+        if action == "hide" or (action == "toggle" and not s["hidden"]):
+            dispatch(f"hl.dsp.window.move({{ {win(a)}, workspace = {lua_quote(STASH)}, follow = false }})")
+        elif action in ("show", "toggle"):
+            dispatch(f"hl.dsp.window.move({{ {win(a)}, workspace = {lua_quote(str(ws))}, follow = false }})",
+                     f"hl.dsp.focus({{ {win(a)} }})")
+        elif action == "float":
+            place_popup(a, cfg)
+        elif action == "tile":
+            dispatch(f"hl.dsp.window.move({{ {win(a)}, workspace = {lua_quote(str(ws))}, follow = false }})",
+                     f"hl.dsp.window.float({{ {win(a)}, action = \"disable\" }})",
+                     f"hl.dsp.focus({{ {win(a)} }})")
+
+
+def end_session(s, cfg):
+    try:
+        if s.get("kind") == "native" and s.get("container"):
+            docker("rm", "-f", s["container"], check=False)
+        elif s.get("kasm_id"):
+            with contextlib.suppress(Fail):
+                kasm(server_by_id(cfg, s["server"]), "destroy_kasm",
+                     {"kasm_id": s["kasm_id"], "user_id": s.get("user_id", "")})
+    finally:
+        if s.get("address"):
+            dispatch(f"hl.dsp.window.close({{ {win(s['address'])} }})")
+        with contextlib.suppress(OSError):
+            os.kill(s["pid"], 15)
+        with locked("sessions"):
+            save_sessions([x for x in load_sessions() if x["id"] != s["id"]])
+
+
+def open_window(cfg, session, url, auth=None, insecure_local=False):
+    """Opens the session's window and records it."""
+    session["started"] = int(time.time())
+    if cfg.get("window") == "native" and shutil.which("omacraft"):
+        RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+        os.chmod(RUNTIME_DIR, 0o700)
+        spec = RUNTIME_DIR / f"{session['id']}.json"
+        # The window reads the link (it carries the session's token) and any
+        # password from this private file, then deletes it, so neither ever
+        # shows in a process list.
+        write_json(spec, {"id": session["id"], "title": session["name"], "server": session["serverName"],
+                          "kind": session["kind"], "url": url, "auth": auth or None,
+                          "insecureLocal": insecure_local, "cli": str(Path(__file__).resolve())})
+        proc = subprocess.Popen(["omacraft", "kasm-view", str(spec)], start_new_session=True,
+                                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else:
+        profile = DATA_DIR / "chromium"
+        profile.mkdir(parents=True, exist_ok=True)
+        os.chmod(profile, 0o700)
+        if auth:
+            parts = urllib.parse.urlsplit(url)
+            url = urllib.parse.urlunsplit(parts._replace(
+                netloc=f"{urllib.parse.quote(auth['user'])}:{urllib.parse.quote(auth['password'])}@{parts.netloc}"))
+        launcher = shutil.which("omarchy-launch-webapp")
+        argv = [launcher, url, f"--user-data-dir={profile}"] if launcher else \
+            ["chromium", f"--app={url}", f"--user-data-dir={profile}"]
+        if insecure_local:
+            argv.append("--ignore-certificate-errors")
+        proc = subprocess.Popen(argv, start_new_session=True, stdin=subprocess.DEVNULL,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    session["pid"] = proc.pid
+    with locked("sessions"):
+        items = [s for s in load_sessions() if alive(s.get("pid"))]
+        items.append(session)
+        save_sessions(items)
+    # Popups float in the middle of the screen; `tile` docks one into the layout.
+    if cfg.get("window") == "native":
+        for _ in range(80):
+            w = window_of(session, clients())
+            if w:
+                place_popup(w["address"], cfg)
+                break
+            time.sleep(0.15)
+    return session
+
+
+def launch(key):
+    cfg = load_config()
+    sid, _, image = key.partition(":")
+    if not image:
+        raise Fail(f"{key} isn't a workspace key; `hyprvyzr workspaces` lists them.")
+    session = {"id": uuid.uuid4().hex[:10], "key": key, "server": sid}
+    if sid == "native":
+        if not IMAGE_RE.match(image):
+            raise Fail(f"{image} isn't a Kasm image name.")
+        label, _, _ = catalog_entry(image)
+        have = native_images()
+        ref = f"kasmweb/{image}:{have.get(image, cfg['native']['tag'])}"
+        if image not in have:
+            notify(f"Downloading {label}", f"{ref} isn't on this machine yet; the first start takes a while.")
+            docker("pull", ref)
+        port, password = free_port(), secrets.token_urlsafe(18)
+        name = f"hyprvyzr-{session['id']}"
+        # Only on 127.0.0.1, gone when it stops, and with a password made for
+        # this one run, handed over in the environment rather than on the
+        # command line.
+        env = dict(os.environ, VNC_PW=password)
+        r = subprocess.run(["docker", "run", "-d", "--rm", "--name", name,
+                            f"--shm-size={cfg['native'].get('shm', '512m')}",
+                            "-p", f"127.0.0.1:{port}:6901", "-e", "VNC_PW", ref],
+                           env=env, capture_output=True, text=True, check=False)
+        if r.returncode != 0:
+            raise Fail("docker run: " + ((r.stderr or "").strip().splitlines() or ["failed"])[-1])
+        if not wait_port(port, 90):
+            docker("rm", "-f", name, check=False)
+            raise Fail(f"{label} didn't start in 90 s.")
+        time.sleep(1.5)
+        session.update(kind="native", name=label, serverName="This machine", container=name, port=port)
+        open_window(cfg, session, f"https://127.0.0.1:{port}/",
+                    auth={"user": "kasm_user", "password": password}, insecure_local=True)
+        return session
+
+    server = server_by_id(cfg, sid)
+    entry = next((w for w in list_workspaces(cfg)["workspaces"] if w["key"] == key), None)
+    name = entry["name"] if entry else image
+    notify(f"Starting {name}", f"on {server['name']}")
+    user_id = kasm_user_id(server)
+    started = kasm(server, "request_kasm", {"user_id": user_id, "image_id": image,
+                                            "client_timezone": time.strftime("%Z")}, timeout=60)
+    kasm_id = started.get("kasm_id")
+    if not kasm_id:
+        raise Fail(f"{server['name']} didn't start a session.")
+    # Kasm says to wait for "running" before joining; the status call also
+    # hands back a fresh link.
+    url_path = started.get("kasm_url", "")
+    for _ in range(120):
+        st = kasm(server, "get_kasm_status", {"user_id": user_id, "kasm_id": kasm_id}, timeout=20)
+        if (st.get("kasm") or {}).get("operational_status", "").lower() == "running":
+            url_path = st.get("kasm_url") or url_path
+            break
+        time.sleep(1)
+    else:
+        raise Fail(f"{name} on {server['name']} didn't get to running in two minutes.")
+    if not url_path.startswith("/#/"):
+        raise Fail(f"{server['name']} handed back an unexpected link.")
+    session.update(kind=server.get("kind", "remote"), name=name, serverName=server["name"],
+                   kasm_id=kasm_id, user_id=user_id)
+    open_window(cfg, session, server["url"] + url_path,
+                insecure_local=bool(server.get("insecure") and is_loopback(server["url"])))
+    return session
+
+
+# ------------------------------------------------------------------ local server
+
+def local_status(cfg):
+    port = int(cfg["local"].get("port", 8443))
+    running = False
+    if shutil.which("docker"):
+        r = subprocess.run(["docker", "ps", "--format", "{{.Names}}"], capture_output=True, text=True, check=False)
+        running = "kasm_proxy" in r.stdout.split()
+    installed = Path("/opt/kasm/current").exists()
+    os_id = ""
+    with contextlib.suppress(OSError):
+        m = re.search(r"^ID=(.*)$", Path("/etc/os-release").read_text(), re.M)
+        os_id = m.group(1).strip('"') if m else ""
+    return {"installed": installed, "running": running, "port": port, "url": f"https://localhost:{port}",
+            "docker": bool(shutil.which("docker")), "os": os_id,
+            "supportedOs": os_id in ("ubuntu", "debian", "ol", "rhel", "almalinux", "rocky", "raspbian"),
+            "registered": any(is_loopback(s["url"]) for s in cfg["servers"]),
+            "memoryGb": round(os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 2**30, 1),
+            "freeDiskGb": round(shutil.disk_usage("/").free / 2**30, 1)}
+
+
+def local_install(cfg):
+    """Run in a terminal: shows every step, asks, then uses sudo for Kasm's installer."""
+    st = local_status(cfg)
+    port = st["port"]
+    print("\033[1mHyprVYZR: install Kasm Workspaces on this machine\033[0m\n")
+    print(f"  Kasm {KASM_VERSION}, single server, listening on https://localhost:{port}")
+    print(f"  memory {st['memoryGb']} GB (Kasm wants 4+), free disk {st['freeDiskGb']} GB (Kasm wants 75+)")
+    if not st["supportedOs"]:
+        print(f"\n\033[33m  Kasm supports Ubuntu, Debian, RHEL and their relatives. This is '{st['os'] or '?'}'.\n"
+              "  The installer may refuse or fail part way. Native workspaces (Docker, no server)\n"
+              "  work here either way.\033[0m")
+    print("\nWhat happens:")
+    print(f"  1. download {KASM_BUNDLE}")
+    print(f"  2. check its sha256 against {KASM_BUNDLE_SHA256[:16]}…")
+    print(f"  3. sudo bash kasm_release/install.sh --accept-eula --proxy-port {port} with new passwords")
+    print("  4. save admin@kasm.local's and user@kasm.local's passwords in your keyring")
+    print("  5. add the server to HyprVYZR (you then make an API key in its admin panel)\n")
+    if input("Go ahead? [y/N] ").strip().lower() not in ("y", "yes"):
+        print("Nothing was changed.")
+        return 1
+    work = CACHE_DIR / "kasm-install"
+    work.mkdir(parents=True, exist_ok=True)
+    bundle = work / Path(KASM_BUNDLE).name
+    if subprocess.run(["curl", "--fail", "-L", "-o", str(bundle), KASM_BUNDLE]).returncode != 0:
+        print("The download failed.")
+        return 1
+    digest = subprocess.run(["sha256sum", str(bundle)], capture_output=True, text=True).stdout.split()[0]
+    if digest != KASM_BUNDLE_SHA256:
+        print(f"\033[31mThe checksum doesn't match ({digest}). Not installing.\033[0m")
+        bundle.unlink(missing_ok=True)
+        return 1
+    print("Checksum matches.")
+    subprocess.run(["tar", "-xf", str(bundle), "-C", str(work)], check=True)
+    admin_pw, user_pw = secrets.token_urlsafe(16), secrets.token_urlsafe(16)
+    secret_set("local-admin", "local Kasm admin", {"username": "admin@kasm.local", "password": admin_pw})
+    secret_set("local-user", "local Kasm user", {"username": "user@kasm.local", "password": user_pw})
+    r = subprocess.run(["sudo", "bash", str(work / "kasm_release/install.sh"), "--accept-eula",
+                        "--proxy-port", str(port), "--admin-password", admin_pw, "--user-password", user_pw])
+    if r.returncode != 0:
+        print("\nKasm's installer stopped. Its output above says why.")
+        return 1
+    print(f"\n\033[1mKasm is running at https://localhost:{port}\033[0m")
+    print("Sign in as admin@kasm.local (the password is in your keyring: `hyprvyzr local password`).")
+    print("Then Admin › Settings › Developers › Add API Key, give it the permissions")
+    print("Images View, Users View, Users Auth Session and User, and add it in OmaCraft › HyprVYZR.")
+    if not st["registered"]:
+        cfg["servers"].append({"id": "local", "name": "This machine", "url": f"https://localhost:{port}",
+                               "kind": "local", "user": "user@kasm.local", "insecure": True})
+        save_config(cfg)
+    input("\nPress Enter to close.")
+    return 0
+
+
+# ------------------------------------------------------------------ theme
+
+def theme_apply(cfg, server_id):
+    theme = HERE / "kasm-theme"
+    subprocess.run([sys.executable, str(theme / "build.py")], check=True)
+    server = server_by_id(cfg, server_id)
+    if is_loopback(server["url"]):
+        return subprocess.run(["bash", str(theme / "install.sh"), "--local"]).returncode
+    target = server.get("ssh") or f"root@{urllib.parse.urlsplit(server['url']).hostname}"
+    if not SSH_RE.match(target):
+        raise Fail(f"{target} isn't user@host.")
+    return subprocess.run(["bash", str(theme / "install.sh"), target]).returncode
+
+
+# ------------------------------------------------------------------ CLI
+
+def main(argv):
+    p = argparse.ArgumentParser(prog="hyprvyzr", description="Kasm Workspaces on the Omarchy desktop.")
+    p.add_argument("--json", action="store_true")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    sub.add_parser("servers")
+    sp = sub.add_parser("server")
+    sp_sub = sp.add_subparsers(dest="action", required=True)
+    add = sp_sub.add_parser("add")
+    add.add_argument("--name", required=True)
+    add.add_argument("--url", required=True)
+    add.add_argument("--user", required=True)
+    add.add_argument("--kind", choices=["remote", "local"], default="remote")
+    add.add_argument("--insecure", action="store_true")
+    add.add_argument("--ssh", default="")
+    add.add_argument("--id", default="")
+    sp_sub.add_parser("remove").add_argument("id")
+    sp_sub.add_parser("test").add_argument("id")
+
+    w = sub.add_parser("workspaces")
+    w.add_argument("--refresh", action="store_true")
+    sub.add_parser("launch").add_argument("key")
+    sub.add_parser("sessions")
+    for action in ("show", "hide", "toggle", "float", "tile", "end"):
+        sub.add_parser(action).add_argument("id")
+    sub.add_parser("carousel").add_argument("tab", nargs="?", default="")
+    n = sub.add_parser("native")
+    n.add_argument("action", choices=["catalog", "pull", "remove"])
+    n.add_argument("image", nargs="?", default="")
+    lo = sub.add_parser("local")
+    lo.add_argument("action", choices=["status", "install", "open", "password"])
+    th = sub.add_parser("theme")
+    th.add_argument("action", choices=["build", "apply"])
+    th.add_argument("server", nargs="?", default="")
+    sub.add_parser("dashboard").add_argument("server")
+
+    # --json may come anywhere.
+    as_json = "--json" in argv
+    args = p.parse_args([a for a in argv if a != "--json"])
+    cfg = load_config()
+
+    if args.cmd == "servers":
+        servers = [dict(s, hasKey=bool(secret_get(s["id"]))) for s in cfg["servers"]]
+        out(servers, as_json, "\n".join(f"{s['id']:<16} {s['kind']:<7} {s['url']}  as {s['user']}" for s in servers)
+            or "No servers yet.")
+    elif args.cmd == "server" and args.action == "add":
+        url = args.url.strip().rstrip("/")
+        if not URL_RE.match(url):
+            raise Fail("The address must be https://host or https://host:port, with nothing after it.")
+        if args.insecure and not is_loopback(url):
+            raise Fail("A self-signed certificate is only accepted for a server on this machine.")
+        if args.ssh and not SSH_RE.match(args.ssh):
+            raise Fail("SSH target must be user@host.")
+        creds = json.loads(sys.stdin.read() or "{}")
+        if not creds.get("api_key") or not creds.get("api_key_secret"):
+            raise Fail("Both the API key and its secret are needed.")
+        sid = args.id or slug(args.name)
+        if not ID_RE.match(sid) or sid == "native":
+            raise Fail("That name doesn't make a usable id; try letters and digits.")
+        server = {"id": sid, "name": args.name.strip()[:60], "url": url, "kind": args.kind,
+                  "user": args.user.strip(), "insecure": bool(args.insecure)}
+        if args.ssh:
+            server["ssh"] = args.ssh
+        where = secret_set(sid, server["name"], {"api_key": creds["api_key"],
+                                                 "api_key_secret": creds["api_key_secret"]})
+        cfg["servers"] = [s for s in cfg["servers"] if s["id"] != sid] + [server]
+        save_config(cfg)
+        (CACHE_DIR / "workspaces.json").unlink(missing_ok=True)
+        out({"id": sid, "secretStore": where}, as_json, f"Added {server['name']} ({sid}); key kept in the {where}.")
+    elif args.cmd == "server" and args.action == "remove":
+        server_by_id(cfg, args.id)
+        cfg["servers"] = [s for s in cfg["servers"] if s["id"] != args.id]
+        save_config(cfg)
+        secret_delete(args.id)
+        out({"removed": args.id}, as_json, f"Removed {args.id}.")
+    elif args.cmd == "server" and args.action == "test":
+        server = server_by_id(cfg, args.id)
+        images = kasm(server, "get_images", timeout=10).get("images", [])
+        user_id = kasm_user_id(server)
+        out({"ok": True, "images": len(images), "userId": user_id}, as_json,
+            f"{server['name']}: {len(images)} workspaces, signed in as {server['user']}.")
+    elif args.cmd == "workspaces":
+        data = list_workspaces(cfg, args.refresh)
+        out(data, as_json, "\n".join(f"{w['key']:<44} {w['name']}" + ("" if w["installed"] else "  (not downloaded)")
+                                     for w in data["workspaces"]) + "".join("\n! " + e for e in data["errors"]))
+    elif args.cmd == "launch":
+        s = launch(args.key)
+        out(s, as_json, f"{s['name']} started ({s['id']}).")
+    elif args.cmd == "sessions":
+        items = current_sessions()
+        out(items, as_json, "\n".join(f"{s['id']}  {s['name']:<20} {s['serverName']:<16} "
+                                      + ("minimised" if s["hidden"] else "open") for s in items) or "No sessions.")
+    elif args.cmd in ("show", "hide", "toggle", "float", "tile", "end"):
+        session_action(args.cmd, args.id)
+    elif args.cmd == "carousel":
+        payload = json.dumps({"tab": args.tab, "toggle": True})
+        return subprocess.run(["omarchy-shell", "shell", "toggle", PLUGIN_ID, payload]).returncode
+    elif args.cmd == "native":
+        if args.action == "catalog":
+            have = native_images()
+            items = [{"name": n, "label": l, "description": d, "installed": n in have, "tag": have.get(n, "")}
+                     for n, l, _, d in NATIVE_CATALOG]
+            out(items, as_json, "\n".join(f"{i['name']:<14} {'✓' if i['installed'] else ' '} {i['label']}" for i in items))
+        else:
+            if not IMAGE_RE.match(args.image):
+                raise Fail("Name a Kasm image, e.g. chrome.")
+            ref = f"kasmweb/{args.image}:{native_images().get(args.image, cfg['native']['tag'])}"
+            r = docker("pull" if args.action == "pull" else "rmi", ref, check=False, capture=False)
+            return r.returncode
+    elif args.cmd == "local":
+        if args.action == "status":
+            st = local_status(cfg)
+            out(st, as_json, json.dumps(st, indent=2))
+        elif args.action == "install":
+            return local_install(cfg)
+        elif args.action == "password":
+            for k in ("local-admin", "local-user"):
+                v = secret_get(k)
+                if v:
+                    print(f"{v['username']}: {v['password']}")
+        else:
+            st = local_status(cfg)
+            session = {"id": uuid.uuid4().hex[:10], "key": "local:dashboard", "server": "local", "kind": "local",
+                       "name": "Kasm dashboard", "serverName": "This machine"}
+            open_window(cfg, session, st["url"] + "/", insecure_local=True)
+    elif args.cmd == "theme":
+        if args.action == "build":
+            return subprocess.run([sys.executable, str(HERE / "kasm-theme/build.py")]).returncode
+        return theme_apply(cfg, args.server)
+    elif args.cmd == "dashboard":
+        server = server_by_id(cfg, args.server)
+        session = {"id": uuid.uuid4().hex[:10], "key": f"{server['id']}:dashboard", "server": server["id"],
+                   "kind": server.get("kind", "remote"), "name": "Kasm dashboard", "serverName": server["name"]}
+        open_window(cfg, session, server["url"] + "/",
+                    insecure_local=bool(server.get("insecure") and is_loopback(server["url"])))
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except Fail as e:
+        print(f"hyprvyzr: {e}", file=sys.stderr)
+        if "--json" not in sys.argv and not sys.stderr.isatty():
+            notify("HyprVYZR", str(e), urgent=True)
+        sys.exit(1)
+    except KeyboardInterrupt:
+        sys.exit(130)

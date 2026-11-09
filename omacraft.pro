@@ -22,6 +22,7 @@ HEADERS += \
     src/filepicker.h \
     src/hardware.h \
     src/hyprcraft.h \
+    src/hyprvyzr.h \
     src/isobuilder.h \
     src/launcher.h \
     src/locklogon.h \
@@ -61,6 +62,7 @@ SOURCES += \
     src/folders.cpp \
     src/hardware.cpp \
     src/hyprcraft.cpp \
+    src/hyprvyzr.cpp \
     src/isobuilder.cpp \
     src/launcher.cpp \
     src/locklogon.cpp \

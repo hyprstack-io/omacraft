@@ -97,6 +97,10 @@ QList<Plugins::Definition> Plugins::definitions() {
          "Omarchy's background switcher with OmaCraft's wallpapers: theme backgrounds, Wallhaven search, the "
          "library and favourites as tabs of slanted previews, opened from a key without OmaCraft's window.",
          "wallpaper", "~/Work/omacraft/plugins/wallpicker", "\u{f08b9}"},
+        {"omacraft.hyprvyzr", "HyprVYZR",
+         "Kasm Workspaces on the desktop: your remote and local Kasm servers' workspaces and Kasm's images run "
+         "natively in Docker, in a carousel like the wallpaper picker's, each in a popup that minimises to the bar.",
+         "hyprvyzr", "~/hyprstack.io/hyprvyze/plugin", "\u{f0379}"},
         {"omacraft.rofioma", "ROFIoma popups",
          "Draws ROFIoma's power menu, your menus and the keybind cheatsheet in the shell, with HyDE's wlogout "
          "hover: cards swell, round off and bounce under the pointer. Click a keybind to move it.",

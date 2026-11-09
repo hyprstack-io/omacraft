@@ -20,27 +20,30 @@ ApplicationWindow {
     Material.background: theme.window
     Material.foreground: theme.text
 
+    // The sidebar, top to bottom. A page's section heads it with a rule and
+    // a caption when it differs from the page above.
     readonly property var pages: [
-        { id: "plugins", name: "Plugin Suite", glyph: "\u{f0ac6}", plugin: "", file: "PluginsPage.qml" },
-        { id: "wallpaper", name: "Wallpapers", glyph: "\u{f08b9}", plugin: "omacraft.studio", file: "WallpaperPage.qml" },
-        { id: "animations", name: "Window Transitions", glyph: "\u{f0d6d}", plugin: "omacraft.animations", file: "AnimationsPage.qml" },
-        { id: "effects", name: "Burn My Windows", glyph: "\u{f0238}", plugin: "omacraft.burn", file: "BurnPage.qml" },
-        { id: "dock", name: "Side Dock", glyph: "\u{f06a9}", plugin: "omacraft.agentdock", file: "DockPage.qml" },
-        { id: "bar", name: "Main Bar", glyph: "\u{f0570}", plugin: "omabar16", file: "BarPage.qml" },
-        { id: "launcher", name: "Launcher", glyph: "\u{f003b}", plugin: "omacraft.studio", file: "LauncherPage.qml" },
-        { id: "rofioma", name: "ROFIoma", glyph: "\u{f1401}", plugin: "", file: "RofiomaPage.qml" },
-        { id: "ascii", name: "Boot Splash", glyph: "\u{f0b9e}", plugin: "omacraft.omascii", file: "AsciiPage.qml" },
-        { id: "saver", name: "Screensaver", glyph: "\u{f1104}", plugin: "", file: "ScreensaverPage.qml" },
-        { id: "lock", name: "Lock & Logon", glyph: "\u{f033e}", plugin: "omacraft.lock", file: "LockLogonPage.qml" },
-        { id: "cursors", name: "Cursors & Icons", glyph: "\u{f01bf}", plugin: "", file: "CursorsIconsPage.qml" },
-        { id: "hyprcraft", name: "Dotfile Generator", glyph: "\u{f0b0b}", plugin: "omacraft.hyprcraft", file: "HyprCraftPage.qml" },
-        { id: "iso", name: "OmaBuilds", glyph: "\u{f0a4f}", plugin: "", file: "IsoPage.qml" },
+        { id: "plugins", section: "Master Toggles", name: "Plugin Suite", glyph: "\u{f0ac6}", plugin: "", file: "PluginsPage.qml" },
+        { id: "wallpaper", section: "Master Toggles", name: "Wallpaper Palette", glyph: "\u{f08b9}", plugin: "omacraft.studio", file: "WallpaperPage.qml" },
+        { id: "bar", section: "Bars + Docks", name: "Main Bar", glyph: "\u{f0570}", plugin: "omabar16", file: "BarPage.qml" },
+        { id: "dock", section: "Bars + Docks", name: "Side Dock", glyph: "\u{f06a9}", plugin: "omacraft.agentdock", file: "DockPage.qml" },
+        { id: "launcher", section: "Windows + Workspaces", name: "App Launcher", glyph: "\u{f003b}", plugin: "omacraft.studio", file: "LauncherPage.qml" },
+        { id: "rofioma", section: "Windows + Workspaces", name: "ROFIoma", glyph: "\u{f1401}", plugin: "", file: "RofiomaPage.qml" },
+        { id: "animations", section: "Windows + Workspaces", name: "Windows/Borders", glyph: "\u{f0d6d}", plugin: "omacraft.animations", file: "AnimationsPage.qml" },
+        { id: "effects", section: "Windows + Workspaces", name: "Burn My Windows FX", glyph: "\u{f0238}", plugin: "omacraft.burn", file: "BurnPage.qml" },
+        { id: "ascii", section: "Lock Screens", name: "Boot Splash", glyph: "\u{f0b9e}", plugin: "omacraft.omascii", file: "AsciiPage.qml" },
+        { id: "saver", section: "Lock Screens", name: "Screensaver", glyph: "\u{f1104}", plugin: "", file: "ScreensaverPage.qml" },
+        { id: "lock", section: "Lock Screens", name: "Lock/Login", glyph: "\u{f033e}", plugin: "omacraft.lock", file: "LockLogonPage.qml" },
+        { id: "cursors", section: "Misc UI", name: "Cursors/Icons", glyph: "\u{f01bf}", plugin: "", file: "CursorsIconsPage.qml" },
         // Off the list without an Alienware keyboard; `omacraft lights` still opens it.
-        { id: "lights", name: "Alienflare", glyph: "\u{f030c}", plugin: "", file: "LightsPage.qml", hidden: !alienwareKeys },
-        { id: "market", name: "Plugin Marketplace", glyph: "\u{f0003}", plugin: "", file: "PluginMarketPage.qml" },
-        { id: "themes", name: "Theme Marketplace", glyph: "\u{f03d8}", plugin: "", file: "ThemeMarketPage.qml" }
+        { id: "lights", section: "Misc UI", name: "Keyboard Lighting", glyph: "\u{f030c}", plugin: "", file: "LightsPage.qml", hidden: !alienwareKeys },
+        { id: "hyprcraft", section: "Distro Developer", name: "Dotfile Generator", glyph: "\u{f0b0b}", plugin: "omacraft.hyprcraft", file: "HyprCraftPage.qml" },
+        { id: "iso", section: "Distro Developer", name: "ISOma Builder", glyph: "\u{f0a4f}", plugin: "", file: "IsoPage.qml" },
+        { id: "hyprvyzr", section: "Kasm Workspaces", name: "HyprVyzr", glyph: "\u{f0379}", plugin: "omacraft.hyprvyzr", file: "HyprvyzrPage.qml" },
+        { id: "themes", section: "Omarchy Marketplace", name: "Omarchy Themes", glyph: "\u{f03d8}", plugin: "", file: "ThemeMarketPage.qml" },
+        { id: "market", section: "Omarchy Marketplace", name: "Omarchy Plugins", glyph: "\u{f0003}", plugin: "", file: "PluginMarketPage.qml" }
     ]
-    property int current: startPage
+    property int current: Math.max(0, pages.findIndex(p => p.id === startPage))
     property var visited: ({})
 
     property bool helpVisible: false
@@ -277,7 +280,7 @@ ApplicationWindow {
         Rectangle {
             id: sidebar
             Layout.fillHeight: true
-            Layout.preferredWidth: win.navCollapsed ? 60 : 244
+            Layout.preferredWidth: win.navCollapsed ? 60 : 260
             Behavior on Layout.preferredWidth { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
             color: theme.sidebar
             clip: true
@@ -328,17 +331,55 @@ ApplicationWindow {
                     highlightFollowsCurrentItem: false
                     onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
                     model: win.pages
-                    delegate: Rectangle {
-                        id: nav
+                    delegate: Column {
+                        id: entry
                         required property var modelData
                         required property int index
+                        // The first page of a section carries its rule and caption.
+                        readonly property bool opensSection: index === 0 || win.pages[index - 1].section !== modelData.section
+
+                        visible: !modelData.hidden
+                        width: ListView.view.width
+                        height: visible ? implicitHeight : 0
+
+                        Item {
+                            visible: entry.opensSection
+                            width: entry.width
+                            height: entry.index === 0 ? (win.navCollapsed ? 0 : 22)
+                                                      : (win.navCollapsed ? 13 : 32)
+                            Rectangle {
+                                visible: entry.index > 0
+                                x: win.navCollapsed ? 8 : 10
+                                y: win.navCollapsed ? 6 : 8
+                                width: parent.width - 2 * x
+                                height: 1
+                                color: theme.border
+                            }
+                            Label {
+                                visible: !win.navCollapsed
+                                x: 10
+                                anchors.bottom: parent.bottom
+                                anchors.bottomMargin: 4
+                                width: parent.width - 20
+                                text: entry.modelData.section.toUpperCase()
+                                color: theme.textFaint
+                                font.pixelSize: 10
+                                font.weight: Font.DemiBold
+                                font.letterSpacing: 1
+                                elide: Text.ElideRight
+                            }
+                        }
+
+                    Rectangle {
+                        id: nav
+                        readonly property var modelData: entry.modelData
+                        readonly property int index: entry.index
                         readonly property bool chosen: win.current === index
                         readonly property string pluginState: win.pageState(modelData)
                         readonly property color tone: Qt.color(theme.accent)
 
-                        visible: !modelData.hidden
-                        width: ListView.view.width
-                        height: visible ? 36 : 0
+                        width: entry.width
+                        height: 36
                         radius: 8
                         color: chosen ? Qt.rgba(tone.r, tone.g, tone.b, 0.13) : navHover.hovered ? theme.hover : "transparent"
 
@@ -390,6 +431,7 @@ ApplicationWindow {
                         ToolTip.visible: win.navCollapsed && navHover.hovered
                         ToolTip.delay: 300
                         ToolTip.text: nav.modelData.name + (nav.index < 9 ? "  (" + (nav.index + 1) + ")" : "")
+                    }
                     }
                 }
 

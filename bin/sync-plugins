@@ -20,6 +20,7 @@ omascii     $HOME/Projects/omascii
 animations  $HOME/.config/omarchy/plugins/omacraft.animations
 hyprcraft   $HOME/Projects/HyprCraft/omarchy-plugin
 omabar16    $HOME/.config/omarchy/plugins/omabar16
+hyprvyzr    $HOME/hyprstack.io/hyprvyze/plugin
 "
 
 status=0

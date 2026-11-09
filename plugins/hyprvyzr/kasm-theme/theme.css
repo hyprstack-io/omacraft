@@ -1,0 +1,340 @@
+/* ── part 2: HyprVYZR, the hand-written layer ─────────────────────────────
+   Kasm's variables set to Duckbones, then the HyprStack look: JetBrains
+   Mono, square windows with a 2px accent gradient border that turns while
+   focused, a dark backdrop with soft glows. Every rule is scoped to
+   html.hyprvyze (set by duckbones.js), so without the script Kasm is just
+   recoloured. */
+
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap");
+
+@property --hv-angle { syntax: "<angle>"; inherits: true; initial-value: 45deg; }
+@keyframes hv-turn { from { --hv-angle: 0deg; } to { --hv-angle: 360deg; } }
+@keyframes hv-in { from { opacity: 0; transform: translateY(6px) scale(.985); } to { opacity: 1; transform: none; } }
+
+html.hyprvyze, html.hyprvyze body, html.hyprvyze .dark, html.hyprvyze .tw-dark, html.hyprvyze .light {
+  color-scheme: dark;
+
+  /* Duckbones */
+  --hv-bg: #0E101A;
+  --hv-bg-deep: #090A11;
+  --hv-bg-raise: #151826;
+  --hv-surface: #1B1E2E;
+  --hv-line: #2B2F46;
+  --hv-line-2: #3A3F5C;
+  --hv-sel: #37382D;
+  --hv-fg: #EBEFC0;
+  --hv-fg-dim: #B3B692;
+  --hv-muted: #8B8E7A;
+  --hv-leaf: #5DCD97;
+  --hv-leaf-hi: #58DB9E;
+  --hv-water: #00A3CB;
+  --hv-water-hi: #00B4E0;
+  --hv-wood: #E39500;
+  --hv-wood-hi: #F6A100;
+  --hv-rose: #E03600;
+  --hv-rose-hi: #FF4821;
+  --hv-blossom: #795CCC;
+  --hv-blossom-hi: #B3A1E6;
+  --hv-ink: #0E101A;
+  --hv-accent: var(--hv-leaf);
+  --hv-accent-2: var(--hv-blossom-hi);
+  --hv-grad: linear-gradient(var(--hv-angle), var(--hv-accent), var(--hv-water-hi) 50%, var(--hv-accent-2));
+  --hv-inactive: color-mix(in srgb, var(--hv-muted) 32%, transparent);
+  --hv-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --hv-backdrop:
+    radial-gradient(60vmax 60vmax at 12% 18%, color-mix(in srgb, var(--hv-leaf) 17%, transparent), transparent 62%),
+    radial-gradient(55vmax 55vmax at 88% 84%, color-mix(in srgb, var(--hv-blossom) 18%, transparent), transparent 60%),
+    radial-gradient(40vmax 40vmax at 70% 10%, color-mix(in srgb, var(--hv-water) 9%, transparent), transparent 60%),
+    linear-gradient(color-mix(in srgb, var(--hv-line) 16%, transparent) 1px, transparent 1px) 0 0 / 32px 32px,
+    linear-gradient(90deg, color-mix(in srgb, var(--hv-line) 16%, transparent) 1px, transparent 1px) 0 0 / 32px 32px,
+    var(--hv-bg-deep);
+
+  /* Kasm's own variables */
+  --kasm-navy: #151826;
+  --kasm-navy-rgb: 21, 24, 38;
+  --color-alpha: #151826;
+  --color-bravo: 235, 239, 192;
+  --color-charlie: #5DCD97;
+  --color-delta: #B3B692;
+  --color-echo: #151826;
+  --color-launch: 179, 182, 146;
+  --sidebar-icon-color: #5DCD97;
+  --header-bar-color: #090A11;
+  --bg: linear-gradient(90deg, #0E101A, #090A11);
+  --bg-trans: linear-gradient(90deg, #0E101Acc, #090A11cc);
+  --main-background: #090A11;
+  --sidebar-bg: rgba(14, 16, 26, .92);
+  --footer-bg: #090A11;
+  --text-color: #EBEFC0;
+  --text-color-muted: rgba(235, 239, 192, .78);
+  --text-color-muted-more: #8B8E7A;
+  --text-sidebar-nav: #B3B692;
+  --text-color-impact: #F4F7D9;
+  --text-color-negative: #0E101A;
+  --active-tab-text: #0E101A;
+  --active-tab-bg: #5DCD97;
+  --inactive-tab-text: #B3B692;
+  --primary-button-color: #5DCD97;
+  --secondary-button-color: #00A3CB;
+  --primary-button-text: #0E101A;
+  --secondary-button-text: #0E101A;
+  --navlink-hover: #5DCD97;
+  --navlink-active: #1B1E2E;
+  --card-bg: #151826;
+  --table-header-bg: #1B1E2E;
+  --table-pagination-bg: #1B1E2E;
+  --row-hover: #2B2F4670;
+  --border-color: #2B2F46;
+  --border2-color: #3A3F5C;
+  --input-bg: #090A11;
+  --filter-arrows: #8B8E7A;
+  --dropdown-arrows: #5DCD97;
+  --right-section: #0E101A;
+  --tile-color: #151826;
+  --tile-color-hover: #1B1E2E;
+  --modal-bg: rgba(14, 16, 26, .97);
+  --controlpanel-bg: rgba(14, 16, 26, .97);
+  --table-color: #1B1E2Eb3;
+  --table-color-solid: #1B1E2E;
+  --table-color-rgb: rgb(27, 30, 46);
+}
+
+/* ── base ── */
+html.hyprvyze body {
+  background: var(--hv-backdrop) fixed;
+  color: var(--hv-fg);
+  font-family: var(--hv-mono);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+html.hyprvyze body :is(h1, h2, h3, h4, h5, h6, button, input, select, textarea, .btn, label, table) { font-family: var(--hv-mono); }
+html.hyprvyze ::selection { background: var(--hv-sel); color: var(--hv-fg); }
+html.hyprvyze a { color: var(--hv-leaf); }
+html.hyprvyze a:hover { color: var(--hv-leaf-hi); }
+html.hyprvyze * { scrollbar-width: thin; scrollbar-color: var(--hv-line-2) transparent; }
+html.hyprvyze ::-webkit-scrollbar { width: 8px; height: 8px; }
+html.hyprvyze ::-webkit-scrollbar-thumb { background: var(--hv-line-2); }
+html.hyprvyze ::-webkit-scrollbar-track { background: transparent; }
+html.hyprvyze :focus-visible { outline: 2px solid var(--hv-leaf) !important; outline-offset: 2px; }
+
+/* Kasm's stock backgrounds give way to the backdrop; one set in Kasm's
+   branding (any other URL) is kept. */
+html.hyprvyze [style*="img/login_splash"], html.hyprvyze [style*="img/backgrounds/background"],
+html.hyprvyze .app-body, html.hyprvyze .main, html.hyprvyze .panelbackground {
+  background: var(--hv-backdrop) !important;
+}
+html.hyprvyze [style*="img/backgrounds/background"] { background-attachment: fixed !important; }
+
+/* ── header bar: a Hyprland top bar ── */
+html.hyprvyze .app-header.navbar, html.hyprvyze .app-header .navbar-brand {
+  background: color-mix(in srgb, var(--hv-bg-deep) 88%, transparent) !important;
+  backdrop-filter: blur(14px) saturate(1.15);
+  border-bottom: 0 !important;
+}
+html.hyprvyze .app-header.navbar { box-shadow: 0 1px 0 var(--hv-line); }
+html.hyprvyze .app-header.navbar::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--hv-accent) 20%, var(--hv-water-hi) 50%, var(--hv-accent-2) 80%, transparent);
+  opacity: .7; pointer-events: none;
+}
+html.hyprvyze .app-header.navbar :is(.app-btn, .active) { border-radius: 0 !important; font-weight: 700; letter-spacing: .02em; }
+html.hyprvyze .app-header.navbar .active { background: var(--hv-surface) !important; color: var(--hv-leaf) !important; box-shadow: inset 0 -2px 0 var(--hv-leaf); }
+html.hyprvyze .app-header.navbar .app-btn:hover { color: var(--hv-leaf) !important; }
+
+/* ── side panels: categories, running sessions ── */
+html.hyprvyze .sidebar, html.hyprvyze .sidebar-nav, html.hyprvyze .activesessions, html.hyprvyze .aside-menu {
+  background: color-mix(in srgb, var(--hv-bg) 86%, transparent) !important;
+  backdrop-filter: blur(14px) saturate(1.15);
+  border-color: var(--hv-line) !important;
+}
+html.hyprvyze .sidebar .nav-link, html.hyprvyze .sidebar-nav .nav-link { border-radius: 0 !important; border-left: 2px solid transparent; }
+html.hyprvyze .sidebar .nav-link:hover { background: var(--hv-surface) !important; color: var(--hv-leaf) !important; }
+html.hyprvyze .sidebar .nav-link.active { background: var(--hv-surface) !important; color: var(--hv-fg) !important; border-left-color: var(--hv-leaf); }
+
+/* ── the app grid: each workspace a Hyprland window ── */
+html.hyprvyze .panelContainerBody > div { animation: hv-in .32s cubic-bezier(.2, .8, .2, 1) both; }
+html.hyprvyze .panelContainerBody .tw-gap-1 { gap: 12px !important; }
+html.hyprvyze body .tile {
+  position: relative;
+  border: 2px solid transparent !important;
+  border-radius: 0 !important;
+  background:
+    linear-gradient(color-mix(in srgb, var(--hv-bg-raise) 90%, transparent), color-mix(in srgb, var(--hv-bg-raise) 90%, transparent)) padding-box,
+    linear-gradient(var(--hv-inactive), var(--hv-inactive)) border-box !important;
+  backdrop-filter: blur(14px) saturate(1.15);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, .38) !important;
+  transition: transform .18s cubic-bezier(.2, .8, .2, 1), box-shadow .18s ease !important;
+}
+html.hyprvyze body .tile:is(:hover, :focus-within) {
+  background:
+    linear-gradient(var(--hv-surface), var(--hv-surface)) padding-box,
+    var(--hv-grad) border-box !important;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, .5), 0 0 0 1px color-mix(in srgb, var(--hv-leaf) 18%, transparent) !important;
+  transform: translateY(-2px);
+  animation: hv-turn 6s linear infinite;
+}
+html.hyprvyze body .tile.disabled { filter: grayscale(.6); }
+html.hyprvyze .tile .kasmcard-img img { filter: drop-shadow(0 4px 10px rgba(0, 0, 0, .45)); transition: transform .18s cubic-bezier(.2, .8, .2, 1); }
+html.hyprvyze .tile:hover .kasmcard-img img { transform: scale(1.06); }
+html.hyprvyze .tile .kasmcard-detail h5 {
+  margin: 0 0 4px; color: var(--hv-fg) !important;
+  font: 700 13.5px/1.3 var(--hv-mono); letter-spacing: -.01em;
+}
+html.hyprvyze .tile .kasmcard-detail p {
+  margin: 0; color: var(--hv-leaf) !important;
+  font: 500 10.5px/1.4 var(--hv-mono); text-transform: uppercase; letter-spacing: .1em;
+}
+html.hyprvyze .tile .kasmcard-detail p::before { content: "\25B8  "; color: var(--hv-muted); }
+/* Kasm turns the hovered tile's text to --text-color-negative (its hover
+   background was a blue gradient); here it stays light on the dark window. */
+html.hyprvyze body .tile:not(.disabled):hover .settingPad h5 { color: var(--hv-leaf-hi) !important; }
+html.hyprvyze body .tile:not(.disabled):hover .settingPad p { color: var(--hv-fg-dim) !important; }
+html.hyprvyze .warning-icon { color: var(--hv-wood-hi) !important; }
+
+/* Running sessions and their previews. */
+html.hyprvyze :is(.live-kasm-single, .join-shared-kasm-card, .resume-session) {
+  border-radius: 0 !important;
+  border: 1px solid var(--hv-line) !important;
+  background: color-mix(in srgb, var(--hv-bg-raise) 92%, transparent) !important;
+}
+html.hyprvyze .live-kasm-single:hover { border-color: var(--hv-leaf) !important; }
+html.hyprvyze .live-kasm-single-title { color: var(--hv-fg) !important; font-weight: 700; }
+
+/* ── windows: cards, modals, dropdowns ── */
+html.hyprvyze :is(.card, .modal-content, .dropdown-menu, .popover, .toast, .panelContainer, .settingsPanel) {
+  border-radius: 0 !important;
+  border-color: var(--hv-line) !important;
+}
+html.hyprvyze :is(.modal-content, .tw-fixed .modal-inner) { animation: hv-in .24s cubic-bezier(.2, .8, .2, 1) both; }
+html.hyprvyze .modal-content {
+  border: 2px solid transparent !important;
+  background: linear-gradient(var(--hv-bg), var(--hv-bg)) padding-box, var(--hv-grad) border-box !important;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .6) !important;
+}
+html.hyprvyze .dropdown-menu { background: var(--hv-bg) !important; box-shadow: 0 16px 40px rgba(0, 0, 0, .55) !important; }
+html.hyprvyze .dropdown-item { border-radius: 0 !important; }
+html.hyprvyze .dropdown-item:hover { background: var(--hv-surface) !important; color: var(--hv-leaf) !important; }
+html.hyprvyze .tw-rounded, html.hyprvyze .tw-rounded-md, html.hyprvyze .tw-rounded-lg, html.hyprvyze .tw-rounded-xl { border-radius: 0 !important; }
+
+/* ── controls ── */
+html.hyprvyze :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea, .form-control) {
+  background-color: var(--hv-bg-deep) !important;
+  color: var(--hv-fg) !important;
+  border: 1px solid var(--hv-line-2) !important;
+  border-radius: 0 !important;
+  caret-color: var(--hv-leaf);
+}
+html.hyprvyze :is(input, select, textarea, .form-control):focus {
+  border-color: var(--hv-leaf) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--hv-leaf) 22%, transparent) !important;
+  outline: none !important;
+}
+html.hyprvyze ::placeholder { color: var(--hv-muted) !important; opacity: 1; }
+html.hyprvyze input[type="checkbox"], html.hyprvyze input[type="radio"] { accent-color: var(--hv-leaf); }
+
+/* Primary actions in the accent with dark ink; Kasm's blue buttons are its
+   primary ones. */
+html.hyprvyze :is(.btn-primary, .launch-app-btn, button.tw-bg-blue-500, button.tw-bg-blue-600, a.tw-bg-blue-500, [type="submit"].tw-bg-blue-500) {
+  background: var(--hv-leaf) !important;
+  border-color: var(--hv-leaf) !important;
+  color: var(--hv-ink) !important;
+  font-weight: 800; letter-spacing: .02em;
+  border-radius: 0 !important;
+}
+html.hyprvyze :is(.btn-primary, .launch-app-btn, button.tw-bg-blue-500, button.tw-bg-blue-600, a.tw-bg-blue-500) :is(svg, span) { color: var(--hv-ink) !important; }
+html.hyprvyze :is(.btn-primary, .launch-app-btn, button.tw-bg-blue-500, button.tw-bg-blue-600, a.tw-bg-blue-500):hover {
+  background: var(--hv-leaf-hi) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--hv-leaf) 25%, transparent), 0 8px 24px color-mix(in srgb, var(--hv-leaf) 22%, transparent) !important;
+}
+html.hyprvyze :is(.btn-secondary, .btn-outline-primary, .btn-outline-secondary, .cancelbutton) {
+  background: transparent !important;
+  border: 1px solid var(--hv-line-2) !important;
+  color: var(--hv-fg) !important;
+  border-radius: 0 !important;
+}
+html.hyprvyze :is(.btn-secondary, .btn-outline-primary, .btn-outline-secondary, .cancelbutton):hover { border-color: var(--hv-leaf) !important; color: var(--hv-leaf) !important; }
+html.hyprvyze :is(.btn-danger, .tw-bg-red-500, .tw-bg-red-600) { background: var(--hv-rose) !important; border-color: var(--hv-rose) !important; color: var(--hv-fg) !important; }
+html.hyprvyze .btn { border-radius: 0 !important; }
+html.hyprvyze .text-danger, html.hyprvyze .tw-text-red-700 { color: var(--hv-rose-hi) !important; }
+html.hyprvyze .text-success { color: var(--hv-leaf) !important; }
+html.hyprvyze .text-warning { color: var(--hv-wood-hi) !important; }
+
+/* Tabs and badges */
+html.hyprvyze .nav-tabs .nav-link { border-radius: 0 !important; }
+html.hyprvyze .nav-tabs .nav-link.active { background: var(--hv-leaf) !important; color: var(--hv-ink) !important; border-color: var(--hv-leaf) !important; }
+html.hyprvyze .badge { border-radius: 0 !important; font-family: var(--hv-mono); }
+
+/* Tables */
+html.hyprvyze table thead th { color: var(--hv-muted) !important; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+
+/* ── login: a window on the backdrop, with the HyprVYZR wordmark ── */
+html.hyprvyze .card-group > .tw-h-screen:first-child {
+  background: color-mix(in srgb, var(--hv-bg) 84%, transparent) !important;
+  border-right: 0 !important;
+  box-shadow: 1px 0 0 var(--hv-line);
+}
+html.hyprvyze .card-group > .tw-h-screen:first-child::after {
+  content: ""; position: absolute; top: 0; right: -1px; bottom: 0; width: 2px;
+  background: var(--hv-grad); animation: hv-turn 8s linear infinite; opacity: .85;
+}
+html.hyprvyze .login-card-top { animation: hv-in .4s cubic-bezier(.2, .8, .2, 1) both; }
+html.hyprvyze .login-card-top h1 { font: 800 22px/1.2 var(--hv-mono) !important; letter-spacing: -.01em; }
+html.hyprvyze .login-card-top h1 strong { color: var(--hv-fg); }
+html.hyprvyze .login-card-top h1::before {
+  content: "hyprvyzr  \2215  omacraft"; display: block; margin-bottom: 10px;
+  color: var(--hv-leaf); font: 700 11px/1 var(--hv-mono); letter-spacing: .14em; text-transform: uppercase;
+}
+html.hyprvyze .login-card-top label { color: var(--hv-fg-dim) !important; font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; }
+html.hyprvyze .login-card-top input { height: 46px; }
+html.hyprvyze .login-card-top .tw-text-\[var\(--text-color\)\] { color: var(--hv-muted) !important; }
+html.hyprvyze .login-card-top button[type="submit"] span.tw-bg-black\/10 { background: rgba(14, 16, 26, .14) !important; }
+
+html.hyprvyze .logo-center { padding: 0 !important; text-align: center; width: min(720px, 78%); }
+html.hyprvyze .logo-center > img { display: none !important; }
+html.hyprvyze .logo-center::before {
+  /* The wordmark (dist/wordmark.svg, drawn from wordmark.txt) masks the
+     turning accent gradient. */
+  content: ""; display: block; width: 100%; margin: 0 auto; aspect-ratio: 670 / 120;
+  background: var(--hv-grad);
+  -webkit-mask: url("/hyprvyze/wordmark.svg") center / contain no-repeat; mask: url("/hyprvyze/wordmark.svg") center / contain no-repeat;
+  animation: hv-turn 10s linear infinite;
+  filter: drop-shadow(0 6px 24px color-mix(in srgb, var(--hv-leaf) 30%, transparent));
+}
+html.hyprvyze .card-group { flex-wrap: nowrap !important; }
+html.hyprvyze .card-group > .tw-flex-1 { min-width: 0; }
+html.hyprvyze .logo-bottom-txt h5 { font-size: 0 !important; margin-top: 18px; }
+html.hyprvyze .logo-bottom-txt h5::before {
+  content: "Kasm Workspaces  \00B7  remote  \00B7  local  \00B7  native";
+  font: 500 12.5px/1.6 var(--hv-mono); color: var(--hv-fg-dim); letter-spacing: .04em;
+}
+
+/* ── notifications: dark windows with a coloured edge (Kasm's filled
+   colours put cream text under 4.5:1) ── */
+html.hyprvyze .notification-container .notification {
+  --hv-n: var(--hv-water-hi);
+  background: color-mix(in srgb, var(--hv-bg) 94%, transparent) !important;
+  backdrop-filter: blur(14px) saturate(1.15);
+  color: var(--hv-fg) !important;
+  border: 1px solid color-mix(in srgb, var(--hv-n) 55%, transparent) !important;
+  border-left: 3px solid var(--hv-n) !important;
+  border-radius: 0 !important;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, .55) !important;
+  font-family: var(--hv-mono);
+}
+html.hyprvyze .notification-container .notification-error { --hv-n: var(--hv-rose-hi); }
+html.hyprvyze .notification-container .notification-warning { --hv-n: var(--hv-wood-hi); }
+html.hyprvyze .notification-container .notification-success { --hv-n: var(--hv-leaf); }
+html.hyprvyze .notification-container .notification::before { color: var(--hv-n) !important; }
+html.hyprvyze .notification-container .notification :is(h4, .title) { color: var(--hv-n) !important; font-weight: 700; }
+html.hyprvyze .notification-container .notification :is(p, div) { color: var(--hv-fg-dim); }
+
+/* ── loading and session screens ── */
+html.hyprvyze .login_box { background-color: var(--hv-bg-deep) !important; }
+html.hyprvyze .loaderBg { background: var(--hv-backdrop) !important; }
+html.hyprvyze .progress, html.hyprvyze .progress-bar { border-radius: 0 !important; }
+html.hyprvyze .progress-bar { background: linear-gradient(90deg, var(--hv-leaf), var(--hv-water-hi)) !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  html.hyprvyze *, html.hyprvyze *::before, html.hyprvyze *::after { animation: none !important; transition: none !important; }
+  html.hyprvyze body .tile:hover { transform: none; }
+}

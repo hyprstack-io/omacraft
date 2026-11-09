@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "id": "omacraft.hyprvyzr",
+  "name": "HyprVYZR",
+  "version": "1.0.0",
+  "author": "skll",
+  "license": "MIT",
+  "description": "Kasm Workspaces on the desktop: every workspace on your remote Kasm servers, the one on this machine and Kasm's images run natively in Docker, in a carousel like OmaCraft's wallpaper picker. Each session opens in its own popup window that minimises to a folder on the bar. OmaCraft's HyprVYZR page adds servers, installs a local one, sets the key and places the launchers.",
+  "kinds": [
+    "overlay",
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "Carousel.qml",
+    "barWidget": "BarFolder.qml"
+  },
+  "barWidget": {
+    "displayName": "HyprVYZR",
+    "description": "A folder of Kasm workspaces; minimised sessions wait here",
+    "category": "Launchers",
+    "aliases": [
+      "kasm",
+      "workspaces",
+      "hyprvyzr",
+      "remote"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "schema": [
+      { "key": "pinned", "type": "list", "label": "Workspaces", "defaultValue": [], "description": "Workspace keys to show (hyprvyzr workspaces lists them); empty shows the first ones." },
+      { "key": "max", "type": "number", "label": "At most", "defaultValue": 8, "description": "How many workspaces the drawer shows when none are pinned." },
+      { "key": "open", "type": "enum", "label": "Opens on", "options": ["click", "hover"], "defaultValue": "click", "description": "click: the icon opens and closes it. hover: it opens while the pointer is over it." },
+      { "key": "side", "type": "enum", "label": "Opens towards", "options": ["auto", "before", "after"], "defaultValue": "auto", "description": "auto: towards the middle of the bar." }
+    ]
+  }
+}

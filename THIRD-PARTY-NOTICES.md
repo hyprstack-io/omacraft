@@ -24,6 +24,10 @@ copied, and the project is credited because OmaCraft owes it the idea.
 | [Lucide](https://lucide.dev) (lucide-react) | Lucide Contributors | ISC | Icons bundled in Dotfile Generator's built web app | `plugins/hyprcraft/app` |
 | [Oklab](https://bottosson.github.io/posts/oklab/) | Björn Ottosson | Public domain / MIT | The sRGB-to-Oklab matrices, for picking the icon colour variant nearest the theme's | `src/cursoricons.cpp` |
 | [Motion](https://motion.dev), [JSZip](https://stuk.github.io/jszip/) | Matt Perry; Stuart Knightley and contributors | MIT; MIT (dual MIT/GPL-3.0, used under MIT) | Animation and zip export, bundled in Dotfile Generator's built web app | `plugins/hyprcraft/app` |
+| [figlet.js](https://github.com/patorjk/figlet.js) and its FIGlet fonts, again | As above | As above | The project page's FIGlet fonts, a copy of omascii's | `docs/assets/vendor/figlet` (with its `LICENSE.txt`), `docs/assets/fonts/flf` |
+| [tdfiglet](https://github.com/tat3r/tdfiglet) font collection | Their original TheDraw authors | As distributed there | The project page's TheDraw fonts, so the title and Boot Splash can be tried with them in the browser | `docs/assets/fonts/pack`, `docs/assets/js/data.js` |
+
+The project page (`docs/`, not part of the package) also loads JetBrains Mono and Inter from Google Fonts (both SIL OFL 1.1). Its intro effects follow [terminaltexteffects](https://github.com/ChrisBuilds/terminaltexteffects) (MIT, Chris Builds) and ttfx by name and idea (*inspiration*); they were written for the page, and no code was copied. GitHub's repository layout is followed in its arrangement only: no GitHub code, logo or icons are used.
 
 ## Used while running, not included
 
