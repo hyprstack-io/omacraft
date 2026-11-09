@@ -352,6 +352,13 @@ Item {
                 }
             }
 
+            SwitchRow {
+                label: "The SELECT WALLPAPER title"
+                hint: "Lands over the tabs in tiles that decrypt into place, then catches the light now and then."
+                checked: wallPicker.showTitle
+                onToggled: on => wallPicker.setShowTitle(on)
+            }
+
             // The card in front of the carousel: each tile plays its effect
             // with the picker's own CardBorder.qml.
             RowLayout {

@@ -21,6 +21,7 @@ class WallPicker : public QObject {
     Q_PROPERTY(QVariantList cardEffects READ cardEffects CONSTANT)
     Q_PROPERTY(QString cardEffect READ cardEffect NOTIFY changed)
     Q_PROPERTY(double cardSpeed READ cardSpeed NOTIFY changed)
+    Q_PROPERTY(bool showTitle READ showTitle NOTIFY changed)
     Q_PROPERTY(QString cardBorderUrl READ cardBorderUrl NOTIFY changed)
 
 public:
@@ -44,6 +45,8 @@ public:
     static QVariantList cardEffects();
     QString cardEffect() const { return m_cardEffect; }
     double cardSpeed() const { return m_cardSpeed; }
+    // The animated SELECT WALLPAPER over the tabs.
+    bool showTitle() const { return m_showTitle; }
     // The plugin's CardBorder.qml, which the page's previews load; empty
     // when the plugin isn't anywhere.
     QString cardBorderUrl() const;
@@ -65,6 +68,7 @@ public:
     Q_INVOKABLE void setCardEffect(const QString &id);
     // 0.25 to 3 times the effect's own pace.
     Q_INVOKABLE void setCardSpeed(double speed);
+    Q_INVOKABLE void setShowTitle(bool on);
 
 signals:
     void changed();
@@ -77,6 +81,7 @@ private:
     std::function<QString()> m_pluginDir;
     QString m_cardEffect = "trace";
     double m_cardSpeed = 1.0;
+    bool m_showTitle = true;
 
     QString m_home;
     bool m_runCommands;

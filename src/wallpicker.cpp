@@ -74,6 +74,13 @@ void WallPicker::setCardSpeed(double speed) {
     saveSettings();
 }
 
+void WallPicker::setShowTitle(bool on) {
+    if (on == m_showTitle)
+        return;
+    m_showTitle = on;
+    saveSettings();
+}
+
 void WallPicker::saveSettings() {
     // In place, not through a rename: the picker's FileView would lose the
     // file it watches. Keys this doesn't know are kept.
@@ -85,6 +92,7 @@ void WallPicker::saveSettings() {
     }
     settings.insert("cardEffect", m_cardEffect);
     settings.insert("cardSpeed", m_cardSpeed);
+    settings.insert("showTitle", m_showTitle);
     QDir().mkpath(QFileInfo(settingsPath()).absolutePath());
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         setError("Can't write " + settingsPath() + ": " + file.errorString());
@@ -153,6 +161,7 @@ void WallPicker::reload() {
     m_cardEffect = settings.value("cardEffect").toString("trace");
     const double speed = settings.value("cardSpeed").toDouble(1.0);
     m_cardSpeed = speed > 0 ? qBound(0.25, speed, 3.0) : 1.0;
+    m_showTitle = settings.value("showTitle").toBool(true);
     emit changed();
 }
 

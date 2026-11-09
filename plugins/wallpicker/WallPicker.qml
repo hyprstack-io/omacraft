@@ -107,6 +107,8 @@ Item {
   }
   readonly property string cardEffect: String(pickerSettings.cardEffect || "trace")
   readonly property real cardSpeed: Number(pickerSettings.cardSpeed) > 0 ? Number(pickerSettings.cardSpeed) : 1
+  // The animated SELECT WALLPAPER above the tabs; "showTitle": false hides it.
+  readonly property bool showTitle: pickerSettings.showTitle !== false
 
   FileView {
     id: settingsFile
@@ -125,7 +127,8 @@ Item {
   property int sliceHeight: 432
   property int sliceSpacing: -30
   property int skewOffset: 28
-  readonly property int topChromeHeight: Style.space(64)
+  readonly property int titleHeight: showTitle ? 80 : 0
+  readonly property int topChromeHeight: titleHeight + Style.space(64)
   readonly property int bottomChromeHeight: 116
   readonly property int previewRadius: Math.max(1, Math.min(16, Math.ceil((panel.width - expandedWidth) / (2 * (sliceWidth + sliceSpacing))) + 1))
   onPreviewRadiusChanged: updateVisibleItems()
@@ -560,11 +563,27 @@ Item {
 
       MouseArea { anchors.fill: parent; onClicked: {} }
 
+      // ------------------------------------------------------------ title
+
+      WallPickerTitle {
+        visible: root.showTitle
+        anchors.top: parent.top
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: Math.min(parent.width, 220 * 4)
+        height: root.titleHeight - Style.space(8)
+        maxCell: 4
+        running: root.opened
+        ink: root.foreground
+        accent: root.traceColor1
+        accent2: root.traceColor2
+      }
+
       // ------------------------------------------------------------ tabs
 
       Row {
         id: tabRow
         anchors.top: parent.top
+        anchors.topMargin: root.titleHeight
         anchors.horizontalCenter: parent.horizontalCenter
         spacing: Style.space(10)
 
