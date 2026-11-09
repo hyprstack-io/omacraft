@@ -25,9 +25,9 @@ ApplicationWindow {
     readonly property var pages: [
         { id: "plugins", section: "Master Toggles", name: "Plugin Suite", glyph: "\u{f0ac6}", plugin: "", file: "PluginsPage.qml" },
         { id: "wallpaper", section: "Master Toggles", name: "Wallpaper Palette", glyph: "\u{f08b9}", plugin: "omacraft.studio", file: "WallpaperPage.qml" },
-        { id: "bar", section: "Bars + Docks", name: "Main Bar", glyph: "\u{f0570}", plugin: "omabar16", file: "BarPage.qml" },
-        { id: "dock", section: "Bars + Docks", name: "Side Dock", glyph: "\u{f06a9}", plugin: "omacraft.agentdock", file: "DockPage.qml" },
-        { id: "launcher", section: "Windows + Workspaces", name: "App Launcher", glyph: "\u{f003b}", plugin: "omacraft.studio", file: "LauncherPage.qml" },
+        { id: "bar", section: "Bars + Docks + Launchers", name: "Main Bar", glyph: "\u{f0570}", plugin: "omabar16", file: "BarPage.qml" },
+        { id: "dock", section: "Bars + Docks + Launchers", name: "Side Dock", glyph: "\u{f06a9}", plugin: "omacraft.agentdock", file: "DockPage.qml" },
+        { id: "launcher", section: "Bars + Docks + Launchers", name: "App Launcher", glyph: "\u{f003b}", plugin: "omacraft.studio", file: "LauncherPage.qml" },
         { id: "rofioma", section: "Windows + Workspaces", name: "ROFIoma", glyph: "\u{f1401}", plugin: "", file: "RofiomaPage.qml" },
         { id: "animations", section: "Windows + Workspaces", name: "Windows/Borders", glyph: "\u{f0d6d}", plugin: "omacraft.animations", file: "AnimationsPage.qml" },
         { id: "effects", section: "Windows + Workspaces", name: "Burn My Windows FX", glyph: "\u{f0238}", plugin: "omacraft.burn", file: "BurnPage.qml" },
