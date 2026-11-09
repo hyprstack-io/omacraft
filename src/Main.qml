@@ -24,22 +24,22 @@ ApplicationWindow {
     // a caption when it differs from the page above.
     readonly property var pages: [
         { id: "plugins", section: "Master Toggles", name: "Plugin Suite", glyph: "\u{f0ac6}", plugin: "", file: "PluginsPage.qml" },
-        { id: "wallpaper", section: "Master Toggles", name: "Wallpaper Palette", glyph: "\u{f08b9}", plugin: "omacraft.studio", file: "WallpaperPage.qml" },
-        { id: "bar", section: "Bars + Docks + Launchers", name: "Main Bar", glyph: "\u{f0570}", plugin: "omabar16", file: "BarPage.qml" },
-        { id: "dock", section: "Bars + Docks + Launchers", name: "Side Dock", glyph: "\u{f06a9}", plugin: "omacraft.agentdock", file: "DockPage.qml" },
+        { id: "wallpaper", section: "Master Toggles", name: "Wallpaper Palette", glyph: "\u{eb5c}", plugin: "omacraft.studio", file: "WallpaperPage.qml" },
+        { id: "bar", section: "Bars + Docks + Launchers", name: "Main Bar", glyph: "\u{eb6a}", plugin: "omabar16", file: "BarPage.qml" },
+        { id: "dock", section: "Bars + Docks + Launchers", name: "Side Dock", glyph: "\u{eaed}", plugin: "omacraft.agentdock", file: "DockPage.qml" },
         { id: "launcher", section: "Bars + Docks + Launchers", name: "App Launcher", glyph: "\u{f003b}", plugin: "omacraft.studio", file: "LauncherPage.qml" },
         { id: "rofioma", section: "Windows + Workspaces", name: "ROFIoma", glyph: "\u{f1401}", plugin: "", file: "RofiomaPage.qml" },
-        { id: "animations", section: "Windows + Workspaces", name: "Windows/Borders", glyph: "\u{f0d6d}", plugin: "omacraft.animations", file: "AnimationsPage.qml" },
+        { id: "animations", section: "Windows + Workspaces", name: "Windows/Borders", glyph: "\u{ead7}", plugin: "omacraft.animations", file: "AnimationsPage.qml" },
         { id: "effects", section: "Windows + Workspaces", name: "Burn My Windows FX", glyph: "\u{f0238}", plugin: "omacraft.burn", file: "BurnPage.qml" },
-        { id: "ascii", section: "Lock Screens", name: "Boot Splash", glyph: "\u{f0b9e}", plugin: "omacraft.omascii", file: "AsciiPage.qml" },
+        { id: "ascii", section: "Lock Screens", name: "Boot Splash", glyph: "\u{23fb}", plugin: "omacraft.omascii", file: "AsciiPage.qml" },
         { id: "saver", section: "Lock Screens", name: "Screensaver", glyph: "\u{f1104}", plugin: "", file: "ScreensaverPage.qml" },
         { id: "lock", section: "Lock Screens", name: "Lock/Login", glyph: "\u{f033e}", plugin: "omacraft.lock", file: "LockLogonPage.qml" },
         { id: "cursors", section: "Misc UI", name: "Cursors/Icons", glyph: "\u{f01bf}", plugin: "", file: "CursorsIconsPage.qml" },
         // Off the list without an Alienware keyboard; `omacraft lights` still opens it.
         { id: "lights", section: "Misc UI", name: "Keyboard Lighting", glyph: "\u{f030c}", plugin: "", file: "LightsPage.qml", hidden: !alienwareKeys },
-        { id: "hyprcraft", section: "Distro Developer", name: "Dotfile Generator", glyph: "\u{f0b0b}", plugin: "omacraft.hyprcraft", file: "HyprCraftPage.qml" },
-        { id: "iso", section: "Distro Developer", name: "ISOma Builder", glyph: "\u{f0a4f}", plugin: "", file: "IsoPage.qml" },
-        { id: "hyprvyzr", section: "Kasm Workspaces", name: "HyprVyzr", glyph: "\u{f0379}", plugin: "omacraft.hyprvyzr", file: "HyprvyzrPage.qml" },
+        { id: "hyprcraft", section: "Distro Developer", name: "Dotfile Generator", glyph: "\u{f359}", plugin: "omacraft.hyprcraft", file: "HyprCraftPage.qml" },
+        { id: "iso", section: "Distro Developer", name: "ISOma Builder", glyph: "\u{ede9}", plugin: "", file: "IsoPage.qml" },
+        { id: "hyprvyzr", section: "Kasm Workspaces", name: "HyprVyzr", glyph: "\u{e7b0}", plugin: "omacraft.hyprvyzr", file: "HyprvyzrPage.qml" },
         { id: "themes", section: "Omarchy Marketplace", name: "Omarchy Themes", glyph: "\u{f03d8}", plugin: "", file: "ThemeMarketPage.qml" },
         { id: "market", section: "Omarchy Marketplace", name: "Omarchy Plugins", glyph: "\u{f0003}", plugin: "", file: "PluginMarketPage.qml" }
     ]
