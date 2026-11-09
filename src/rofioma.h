@@ -96,6 +96,7 @@ public:
     static QJsonObject defaults();
     // Every file the design generates, by path relative to home.
     QHash<QString, QByteArray> render() const;
+    void refreshPickers();
     // The pieces of render(), for tests.
     static QString colorsRasi(const QVariantMap &palette, const QJsonObject &look);
     static QString powerRasi(const QJsonObject &power, const QJsonObject &look);
@@ -152,6 +153,7 @@ public:
     Q_INVOKABLE void captureKeys(bool on);
     // An id made from a name: lower case, letters, digits and dashes.
     static QString slug(const QString &name);
+    static QString nerdFontName(const QString &name, const QString &set);
 
     Q_INVOKABLE void reload();
     // Emoji or Nerd Font glyphs ({symbol, name, set, code}) whose name, set or

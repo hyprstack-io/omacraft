@@ -920,6 +920,57 @@ Item {
                                     }
                                     HoverHandler { id: cellHover; cursorShape: Qt.PointingHandCursor; onHoveredChanged: if (hovered) mapper.hovered = symbolCell.modelData }
                                     TapHandler { onTapped: rofioma.copy(symbolCell.modelData.symbol) }
+
+                                    // The symbol large, with every code it goes by.
+                                    ToolTip {
+                                        visible: cellHover.hovered
+                                        delay: 250
+                                        padding: 12
+                                        background: Rectangle {
+                                            color: theme.raised
+                                            radius: 9
+                                            border.color: theme.borderStrong
+                                        }
+                                        contentItem: RowLayout {
+                                            spacing: 14
+                                            Label {
+                                                Layout.preferredWidth: 56
+                                                Layout.preferredHeight: 56
+                                                horizontalAlignment: Text.AlignHCenter
+                                                verticalAlignment: Text.AlignVCenter
+                                                text: symbolCell.modelData.symbol
+                                                color: theme.text
+                                                font.family: mapper.kind === "glyphs" ? "JetBrainsMono Nerd Font" : "Noto Color Emoji"
+                                                font.pixelSize: 40
+                                            }
+                                            ColumnLayout {
+                                                spacing: 3
+                                                Label {
+                                                    text: symbolCell.modelData.name
+                                                    color: theme.text
+                                                    font.weight: Font.DemiBold
+                                                }
+                                                Label {
+                                                    text: symbolCell.modelData.codes
+                                                    color: theme.accent
+                                                    font.family: "monospace"
+                                                    font.pixelSize: 12
+                                                }
+                                                Label {
+                                                    visible: !!symbolCell.modelData.nf
+                                                    text: symbolCell.modelData.nf || ""
+                                                    color: theme.textSoft
+                                                    font.family: "monospace"
+                                                    font.pixelSize: 12
+                                                }
+                                                Label {
+                                                    text: symbolCell.modelData.set + " · click to copy the symbol"
+                                                    color: theme.textFaint
+                                                    font.pixelSize: 11
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                             RowLayout {
@@ -930,7 +981,7 @@ Item {
                                     color: theme.textMuted
                                     font.family: "monospace"
                                     font.pixelSize: 11
-                                    text: mapper.hovered ? "U+" + mapper.hovered.code + "   " + mapper.hovered.name + "   · " + mapper.hovered.set
+                                    text: mapper.hovered ? mapper.hovered.codes + (mapper.hovered.nf ? "   " + mapper.hovered.nf : "") + "   " + mapper.hovered.name + "   · " + mapper.hovered.set
                                                          : mapper.results.length + (mapper.results.length >= 600 ? "+" : "") + " found. Click one to copy it."
                                 }
                             }

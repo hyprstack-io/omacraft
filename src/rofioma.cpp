@@ -173,6 +173,27 @@ Rofioma::Rofioma(const QString &home, bool runCommands, QObject *parent)
     : QObject(parent), m_home(home.isEmpty() ? QDir::homePath() : home), m_runCommands(runCommands) {
     load();
     findTools();
+    refreshPickers();
+}
+
+// The emoji and glyph pickers are rewritten when an update changes how they're
+// drawn, so a fix reaches them without a setting having to change first.
+void Rofioma::refreshPickers() {
+    if (!QFileInfo::exists(outputDir() + "/symbols.sh"))
+        return;
+    const auto files = render();
+    for (const QString &name : {QStringLiteral("symbols.rasi"), QStringLiteral("symbols.sh")}) {
+        const QString key = QDir(m_home).relativeFilePath(outputDir() + "/" + name);
+        if (!files.contains(key))
+            continue;
+        const QString path = outputDir() + "/" + name;
+        QFile existing(path);
+        if (existing.open(QIODevice::ReadOnly) && existing.readAll() == files.value(key))
+            continue;
+        existing.close();
+        if (Proc::writeAtomically(path, files.value(key)) && name.endsWith(".sh"))
+            QFile::setPermissions(path, QFile::permissions(path) | QFile::ExeOwner | QFile::ExeUser);
+    }
 }
 
 // ---------------------------------------------------------------- catalog
@@ -663,6 +684,22 @@ const QList<QStringList> &Rofioma::symbolRows(const QString &kind) const {
     return m_symbols[name];
 }
 
+// A glyph's Nerd Font class name, as in nf-md-dock_left: its set's prefix
+// and its name with underscores. Checked against Nerd Fonts' glyphnames.json
+// for every row of glyphs.tsv.
+QString Rofioma::nerdFontName(const QString &name, const QString &set) {
+    static const QHash<QString, QString> prefixes{
+        {"Codicons", "cod"}, {"Custom", "custom"}, {"Devicons", "dev"}, {"extra", "extra"},
+        {"Font Awesome", "fa"}, {"Font Awesome Extension", "fae"}, {"IEC Power", "iec"},
+        {"Indent", "indent"}, {"Font Logos", "linux"}, {"Material Design", "md"}, {"Octicons", "oct"},
+        {"Powerline", "pl"}, {"Powerline Extra", "ple"}, {"Pomicons", "pom"}, {"Seti UI", "seti"},
+        {"Weather", "weather"}};
+    const QString prefix = prefixes.value(set);
+    if (prefix.isEmpty())
+        return {};
+    return "nf-" + prefix + "-" + QString(name).replace(' ', '_');
+}
+
 QVariantList Rofioma::searchSymbols(const QString &kind, const QString &query, const QString &set, int limit) const {
     const QStringList words = query.toLower().split(' ', Qt::SkipEmptyParts);
     QVariantList out;
@@ -676,7 +713,15 @@ QVariantList Rofioma::searchSymbols(const QString &kind, const QString &query, c
             all = all && haystack.contains(word);
         if (!all)
             continue;
-        out << QVariantMap{{"symbol", row.at(0)}, {"name", row.at(1)}, {"set", row.at(2)}, {"code", code.toUpper()}};
+        QVariantMap item{{"symbol", row.at(0)}, {"name", row.at(1)}, {"set", row.at(2)}, {"code", code.toUpper()}};
+        // Every codepoint, for emoji built from several (flags, skin tones, ZWJ families).
+        QStringList codes;
+        for (char32_t point : row.at(0).toUcs4())
+            codes << "U+" + QString::number(point, 16).toUpper().rightJustified(4, '0');
+        item.insert("codes", codes.join(' '));
+        if (kind == "glyphs")
+            item.insert("nf", nerdFontName(row.at(1), row.at(2)));
+        out << item;
         if (out.size() >= limit)
             break;
     }
@@ -1216,8 +1261,14 @@ QString Rofioma::symbolsRasi(const QJsonObject &symbols, const QJsonObject &look
                    "    spacing: 6px;\n    scrollbar: false;\n}\n")
                .arg(columns).arg(grid ? 5 : 12);
     if (grid) {
+        // rofi sizes a row from the element's own font, not the markup in it,
+        // so the symbol's size is set here (with -eh 2 making room for the
+        // name beneath) rather than scaled up in a span that would overflow
+        // the row and lose its top and bottom.
+        const int size = qMax(22, qRound(look.value("fontSize").toDouble(12) * 1.5));
         out += QString("element {\n    orientation: vertical;\n    padding: 10px 4px;\n    border-radius: %1;\n}\n").arg(px(radius * 0.6));
-        out += "element-text { horizontal-align: 0.5; vertical-align: 0.5; text-color: inherit; }\n";
+        out += QString("element-text { font: %1; horizontal-align: 0.5; vertical-align: 0.5; text-color: inherit; }\n")
+                   .arg(rasiString("JetBrainsMono Nerd Font " + QString::number(size)));
     } else {
         out += QString("element {\n    padding: 6px 12px;\n    border-radius: %1;\n}\n").arg(px(radius * 0.5));
         out += "element-text { vertical-align: 0.5; text-color: inherit; }\n";
@@ -1233,7 +1284,7 @@ QString Rofioma::symbolsScript(const QJsonObject &symbols, const QString &dir) {
     const bool recents = symbols.value("recents").toBool(true);
     // A grid shows the symbol large with its name small beneath; a list
     // shows both on one line. Names are escaped for Pango as they're read.
-    const QString format = grid ? R"(printf "<span font_size=\"220%%\">%s</span>&#10;<span font_size=\"70%%\" alpha=\"60%%\">%s</span>\n", $1, n)"
+    const QString format = grid ? R"(printf "%s&#10;<span font_size=\"42%%\" alpha=\"60%%\">%s</span>\n", $1, n)"
                                 : R"(printf "<span font_size=\"130%%\">%s</span>   %s  <span alpha=\"50%%\">%s</span>\n", $1, n, g)";
     QString deliver;
     if (action == "copy" || action == "both")
@@ -1255,7 +1306,7 @@ QString Rofioma::symbolsScript(const QJsonObject &symbols, const QString &dir) {
                    "prompt=$([ \"$kind\" = glyphs ] && echo ' Glyphs' || echo '󰞅 Emoji')\n"
                    "choice=$(awk -F '\\t' '{ n=$2; g=$3; gsub(/&/, \"\\\\&amp;\", n); gsub(/</, \"\\\\&lt;\", n);\n"
                    "    gsub(/&/, \"\\\\&amp;\", g); gsub(/</, \"\\\\&lt;\", g); %4 }' \"$rows\" \\\n"
-                   "    | rofi -dmenu -i -markup-rows -no-custom -format i -p \"$prompt\" -theme \"$dir/symbols.rasi\")\n"
+                   "    | rofi -dmenu -i -markup-rows -no-custom -format i%7 -p \"$prompt\" -theme \"$dir/symbols.rasi\")\n"
                    "[ -n \"$choice\" ] || exit 0\n"
                    "symbol=$(sed -n \"$((choice + 1))p\" \"$rows\" | cut -f1)\n"
                    "[ -n \"$symbol\" ] || exit 0\n\n"
@@ -1269,7 +1320,7 @@ QString Rofioma::symbolsScript(const QJsonObject &symbols, const QString &dir) {
              format,
              recents ? "{ echo \"$symbol\"; grep -v -x -F \"$symbol\" \"$recent\"; } | head -n 24 > \"$recent.new\" && mv \"$recent.new\" \"$recent\"\n"
                      : "",
-             deliver);
+             deliver, grid ? " -eh 2" : "");
 }
 
 QString Rofioma::keybindsRasi(const QJsonObject &look) {
