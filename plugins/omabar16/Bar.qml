@@ -395,8 +395,16 @@ Item {
     api.barSize = Qt.binding(function() { return root.barSize })
     api.transparent = Qt.binding(function() { return root.transparent })
     api.foregroundAnimationEnabled = Qt.binding(function() { return root.foregroundAnimationEnabled })
-    api.centerSectionRevealHeld = Qt.binding(function() { return root.centerSectionRevealHeld })
-    api._centerHoverRevealSuppressed = Qt.binding(function() { return root.centerHoverRevealSuppressed })
+    // Omarchy's PluginBarApi gains and drops members between releases (the
+    // 2026-11-12 update removed the centre-reveal ones). Assigning a member the
+    // installed type lacks throws, which left plugin widgets with no `bar` and
+    // knocked them off the bar's centre line, so bind only what exists.
+    if ("centerSectionRevealHeld" in api)
+      api.centerSectionRevealHeld = Qt.binding(function() { return root.centerSectionRevealHeld })
+    if ("_centerHoverRevealSuppressed" in api)
+      api._centerHoverRevealSuppressed = Qt.binding(function() { return root.centerHoverRevealSuppressed })
+    if ("_setCenterHoverRevealSuppressed" in api)
+      api._setCenterHoverRevealSuppressed = function(value) { root.centerHoverRevealSuppressed = !!value }
     root.syncPluginBarApiObjects(api)
   }
 
@@ -525,10 +533,7 @@ Item {
         return String(requestedId || "") === String(moduleName || "")
           ? root.moduleWidgets(moduleName) : []
       },
-      _run: function(command) { root.run(command) },
-      _setCenterHoverRevealSuppressed: function(value) {
-        root.centerHoverRevealSuppressed = !!value
-      }
+      _run: function(command) { root.run(command) }
     })
     if (!api) return null
     root.bindPluginBarApi(api)
